@@ -13,7 +13,7 @@ pub fn banker_draws(banker_total: u8, player_third: Option<u8>) -> bool {
     match player_third {
         None => banker_total <= 5,
         Some(pt) => match banker_total {
-            0 | 1 | 2 => true,
+            0..=2 => true,
             3 => pt != 8,
             4 => (2..=7).contains(&pt),
             5 => (4..=7).contains(&pt),
