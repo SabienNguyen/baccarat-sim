@@ -2,6 +2,7 @@
 
 pub mod card;
 pub mod hand;
+pub mod rules;
 
 #[cfg(test)]
 mod smoke {
