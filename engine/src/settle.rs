@@ -10,7 +10,8 @@ pub enum BetSpot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bet {
     pub spot: BetSpot,
-    /// Stake in cents.
+    /// Stake in cents. Callers must pass a non-negative amount; settlement
+    /// assumes a positive stake (a negative amount would invert win/loss).
     pub amount: i64,
 }
 

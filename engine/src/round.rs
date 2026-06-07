@@ -136,4 +136,20 @@ mod tests {
         assert_eq!(r.banker.total(), 6);
         assert_eq!(r.outcome, Outcome::Tie);
     }
+
+    #[test]
+    fn player_stands_then_banker_draws() {
+        // Player: 3,3 = 6 -> stands. Banker: 2,2 = 4, player stood -> banker draws on 0-5.
+        // Banker third: 3 -> banker 7. Player 6 vs banker 7 -> banker wins.
+        let cards = vec![
+            c(Rank::Three), c(Rank::Two), // P1, B1
+            c(Rank::Three), c(Rank::Two), // P2, B2  => player 6, banker 4
+            c(Rank::Three),               // banker third -> 7
+        ];
+        let r = play_round(&mut cards.into_iter());
+        assert_eq!(r.player.cards.len(), 2);
+        assert_eq!(r.banker.cards.len(), 3);
+        assert_eq!(r.banker.total(), 7);
+        assert_eq!(r.outcome, Outcome::BankerWin);
+    }
 }
