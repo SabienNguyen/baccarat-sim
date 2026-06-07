@@ -118,7 +118,31 @@ is ambient and on-demand only.
 
 ## 6. Layout (web)
 
-Confirmed merged direction:
+### Visual style: Balatro-inspired retro (confirmed 2026-06-07)
+
+The web front-end adopts a **Balatro-style retro aesthetic**:
+
+- **Left HUD sidebar** — a vertical beveled panel (like Balatro's blind/score panel) holding
+  bankroll, current bet, round info, table min/max, commission tally, and the Run-Info /
+  Options style buttons. This replaces the bottom rail's role as the primary stats surface;
+  the felt table sits to its right.
+- **Chunky pixel-art look** — pixelated card faces with classic pip art, bold pixel/bitmap
+  display font, thick dark outlines and drop shadows on cards and panels, beveled "plastic"
+  button chips in saturated red/blue/gold.
+- **Painterly swirl felt** — a deep saturated green background with a subtle moving swirl,
+  not a flat felt.
+- **Juicy feedback** — floating value pop-ups on wins (Balatro's "+10" style), squeeze and
+  payout animations with a tactile, game-y feel; glossary terms and the dealer line styled
+  as retro callouts.
+- **Card shoe** — face-down deck shown as a stack in the corner with a remaining count
+  (Balatro's "41/52" style), reinforcing the shoe.
+
+Pixel-art card assets and the bitmap font are sourced/created during Plan 4. The squeeze,
+scoreboard roads, dealer narration, other players, and explain mode from the layout below all
+remain — they are restyled into this retro skin, not removed. The TUI keeps its own
+Unicode aesthetic.
+
+### Spatial layout (confirmed merged direction)
 
 - **Center stage:** the squeeze. Large Player and Banker cards; Banker card mid-squeeze
   with drag-to-reveal corner. The dramatic focus of the screen.
