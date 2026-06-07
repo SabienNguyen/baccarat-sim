@@ -1,5 +1,7 @@
 //! Baccarat (Punto Banco) rules engine — pure logic, no UI.
 
+pub mod card;
+
 #[cfg(test)]
 mod smoke {
     #[test]
