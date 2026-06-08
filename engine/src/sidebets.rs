@@ -347,3 +347,67 @@ mod tiger_tests {
         assert_eq!(tiger_tie_pays(&r, 100), -100);
     }
 }
+
+/// Tiger Pair: 4:1 single pair, 20:1 double pair (different ranks),
+/// 100:1 twin pair (both hands paired on the same rank).
+pub fn tiger_pair_pays(round: &RoundResult, stake: i64) -> i64 {
+    let p = round.player.is_pair();
+    let b = round.banker.is_pair();
+    match (p, b) {
+        (true, true) => {
+            let same_rank = round.player.cards[0].rank == round.banker.cards[0].rank;
+            if same_rank {
+                stake * 100
+            } else {
+                stake * 20
+            }
+        }
+        (true, false) | (false, true) => stake * 4,
+        (false, false) => -stake,
+    }
+}
+
+#[cfg(test)]
+mod tiger_pair_tests {
+    use super::*;
+    use crate::card::{Card, Rank, Suit};
+    use crate::hand::Hand;
+    use crate::round::{Outcome, RoundResult};
+
+    fn c(rank: Rank) -> Card {
+        Card { rank, suit: Suit::Spades }
+    }
+
+    fn rr(player: Vec<Card>, banker: Vec<Card>) -> RoundResult {
+        RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome: Outcome::Tie, // outcome irrelevant to Tiger Pair
+            trace: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn single_pair_pays_four() {
+        let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Two), c(Rank::Three)]);
+        assert_eq!(tiger_pair_pays(&r, 100), 400);
+    }
+
+    #[test]
+    fn double_pair_different_ranks_pays_twenty() {
+        let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Nine), c(Rank::Nine)]);
+        assert_eq!(tiger_pair_pays(&r, 100), 2_000);
+    }
+
+    #[test]
+    fn twin_pair_same_rank_pays_hundred() {
+        let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Seven), c(Rank::Seven)]);
+        assert_eq!(tiger_pair_pays(&r, 100), 10_000);
+    }
+
+    #[test]
+    fn no_pair_loses() {
+        let r = rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Four), c(Rank::Five)]);
+        assert_eq!(tiger_pair_pays(&r, 100), -100);
+    }
+}
