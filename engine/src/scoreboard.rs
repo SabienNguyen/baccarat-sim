@@ -103,19 +103,29 @@ fn build_bead_plate(history: &[RoundRecord]) -> BeadPlate {
 
 fn build_big_road(history: &[RoundRecord]) -> BigRoad {
     let mut columns: Vec<Vec<BigRoadCell>> = Vec::new();
+    let mut pending_ties: u8 = 0; // ties seen before any decision exists yet
 
     for r in history {
         let side = match r.outcome {
             Outcome::PlayerWin => Side::Player,
             Outcome::BankerWin => Side::Banker,
-            Outcome::Tie => continue, // ties handled in a later task
+            Outcome::Tie => {
+                match columns.last_mut() {
+                    Some(col) => col.last_mut().unwrap().ties += 1,
+                    None => pending_ties += 1,
+                }
+                continue;
+            }
         };
+
         let cell = BigRoadCell {
             side,
-            ties: 0,
+            ties: pending_ties, // attach any held leading ties to this first cell
             player_pair: r.player_pair,
             banker_pair: r.banker_pair,
         };
+        pending_ties = 0;
+
         match columns.last() {
             Some(col) if col[0].side == side => columns.last_mut().unwrap().push(cell),
             _ => columns.push(vec![cell]),
@@ -203,5 +213,56 @@ mod big_road_core_tests {
         let s = derive_scoreboard(&history);
         assert_eq!(s.big_road.columns.len(), 1);
         assert_eq!(s.big_road.columns[0].len(), 7);
+    }
+}
+
+#[cfg(test)]
+mod big_road_tie_tests {
+    use super::*;
+
+    fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp }
+    }
+    fn win(outcome: Outcome) -> RoundRecord {
+        rec(outcome, false, false)
+    }
+
+    #[test]
+    fn tie_bumps_counter_on_current_cell_not_a_new_cell() {
+        // B, T, T -> still one column, one cell, ties = 2.
+        let history = vec![win(Outcome::BankerWin), win(Outcome::Tie), win(Outcome::Tie)];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.big_road.columns.len(), 1);
+        assert_eq!(s.big_road.columns[0].len(), 1);
+        assert_eq!(s.big_road.columns[0][0].ties, 2);
+    }
+
+    #[test]
+    fn leading_ties_attach_to_first_real_cell() {
+        // T, T, P -> one cell (Player) carrying ties = 2.
+        let history = vec![win(Outcome::Tie), win(Outcome::Tie), win(Outcome::PlayerWin)];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.big_road.columns.len(), 1);
+        assert_eq!(s.big_road.columns[0][0].side, Side::Player);
+        assert_eq!(s.big_road.columns[0][0].ties, 2);
+    }
+
+    #[test]
+    fn same_side_after_tie_stacks_in_same_column() {
+        // B, T, B -> one column [B(ties=1), B(ties=0)].
+        let history = vec![win(Outcome::BankerWin), win(Outcome::Tie), win(Outcome::BankerWin)];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.big_road.columns.len(), 1);
+        assert_eq!(s.big_road.columns[0].len(), 2);
+        assert_eq!(s.big_road.columns[0][0].ties, 1);
+        assert_eq!(s.big_road.columns[0][1].ties, 0);
+    }
+
+    #[test]
+    fn pair_flags_ride_on_win_cell() {
+        let history = vec![rec(Outcome::BankerWin, false, true)];
+        let s = derive_scoreboard(&history);
+        assert!(s.big_road.columns[0][0].banker_pair);
+        assert!(!s.big_road.columns[0][0].player_pair);
     }
 }
