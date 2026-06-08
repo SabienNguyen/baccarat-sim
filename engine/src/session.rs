@@ -130,6 +130,39 @@ impl Session {
         self.current_snapshot()
     }
 
+    /// Stage a bet during the betting phase.
+    pub fn place_bet(&mut self, kind: BetKind, amount: i64) -> Result<RoundSnapshot, CommandError> {
+        let table_min = self.config.table_min;
+        let table_max = self.config.table_max;
+        let bankroll = self.bankroll;
+
+        let bets = match &mut self.phase {
+            Phase::Betting { bets } => bets,
+        };
+
+        if amount < table_min {
+            return Err(CommandError::BetBelowMinimum { min: table_min, got: amount });
+        }
+        if amount > table_max {
+            return Err(CommandError::BetAboveMaximum { max: table_max, got: amount });
+        }
+        let staked: i64 = bets.iter().map(|b| b.amount).sum();
+        if staked + amount > bankroll {
+            return Err(CommandError::InsufficientBankroll { needed: staked + amount, have: bankroll });
+        }
+
+        bets.push(PlacedBet { kind, amount });
+        Ok(self.current_snapshot())
+    }
+
+    /// Remove all staged bets.
+    pub fn clear_bets(&mut self) -> Result<RoundSnapshot, CommandError> {
+        match &mut self.phase {
+            Phase::Betting { bets } => bets.clear(),
+        }
+        Ok(self.current_snapshot())
+    }
+
     fn current_snapshot(&self) -> RoundSnapshot {
         match &self.phase {
             Phase::Betting { bets } => RoundSnapshot {
@@ -177,5 +210,46 @@ mod tests {
         assert_eq!(snap.outcome, None);
         assert!(snap.payouts.is_none());
         assert!(snap.scoreboard.bead_plate.cells.is_empty());
+    }
+
+    #[test]
+    fn place_valid_bet_stages_it() {
+        let mut s = Session::new(cfg());
+        let snap = s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        assert_eq!(snap.bets.len(), 1);
+        assert_eq!(snap.bets[0].amount, 1_000);
+        assert_eq!(snap.bets[0].kind, BetKind::Main(BetSpot::Player));
+    }
+
+    #[test]
+    fn bet_below_minimum_rejected_and_state_unchanged() {
+        let mut s = Session::new(cfg());
+        let err = s.place_bet(BetKind::Main(BetSpot::Player), 100).unwrap_err();
+        assert_eq!(err, CommandError::BetBelowMinimum { min: 500, got: 100 });
+        assert!(s.snapshot().bets.is_empty());
+    }
+
+    #[test]
+    fn bet_above_maximum_rejected() {
+        let mut s = Session::new(cfg());
+        let err = s.place_bet(BetKind::Main(BetSpot::Banker), 60_000).unwrap_err();
+        assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
+    }
+
+    #[test]
+    fn bets_exceeding_bankroll_rejected() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 50_000).unwrap();
+        s.place_bet(BetKind::Side(SideBet::PlayerPair), 50_000).unwrap();
+        let err = s.place_bet(BetKind::Side(SideBet::BankerPair), 500).unwrap_err();
+        assert_eq!(err, CommandError::InsufficientBankroll { needed: 100_500, have: 100_000 });
+    }
+
+    #[test]
+    fn clear_bets_empties_the_table() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Tie), 1_000).unwrap();
+        let snap = s.clear_bets().unwrap();
+        assert!(snap.bets.is_empty());
     }
 }
