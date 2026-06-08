@@ -89,8 +89,16 @@ pub fn derive_scoreboard(history: &[RoundRecord]) -> ScoreboardSnapshot {
     }
 }
 
-fn build_bead_plate(_history: &[RoundRecord]) -> BeadPlate {
-    BeadPlate { cells: Vec::new() }
+fn build_bead_plate(history: &[RoundRecord]) -> BeadPlate {
+    let cells = history
+        .iter()
+        .map(|r| BeadCell {
+            outcome: r.outcome,
+            player_pair: r.player_pair,
+            banker_pair: r.banker_pair,
+        })
+        .collect();
+    BeadPlate { cells }
 }
 
 fn build_big_road(_history: &[RoundRecord]) -> BigRoad {
@@ -99,6 +107,37 @@ fn build_big_road(_history: &[RoundRecord]) -> BigRoad {
 
 fn derived_road(_big: &BigRoad, _offset: usize) -> DerivedRoad {
     DerivedRoad { columns: Vec::new() }
+}
+
+#[cfg(test)]
+mod bead_plate_tests {
+    use super::*;
+
+    fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp }
+    }
+
+    #[test]
+    fn one_cell_per_round_in_order_including_ties() {
+        let history = vec![
+            rec(Outcome::PlayerWin, false, false),
+            rec(Outcome::Tie, false, false),
+            rec(Outcome::BankerWin, false, false),
+        ];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.bead_plate.cells.len(), 3);
+        assert_eq!(s.bead_plate.cells[0].outcome, Outcome::PlayerWin);
+        assert_eq!(s.bead_plate.cells[1].outcome, Outcome::Tie);
+        assert_eq!(s.bead_plate.cells[2].outcome, Outcome::BankerWin);
+    }
+
+    #[test]
+    fn pair_flags_carry_onto_cells() {
+        let history = vec![rec(Outcome::PlayerWin, true, false)];
+        let s = derive_scoreboard(&history);
+        assert!(s.bead_plate.cells[0].player_pair);
+        assert!(!s.bead_plate.cells[0].banker_pair);
+    }
 }
 
 #[cfg(test)]
