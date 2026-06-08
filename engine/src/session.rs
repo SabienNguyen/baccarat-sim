@@ -105,7 +105,6 @@ pub enum CommandError {
 
 /// Per-card reveal status during the squeeze.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // Peeked and FaceUp constructed in Task 4 (reveal/squeeze)
 enum CardStatus {
     FaceDown,
     Peeked,
@@ -244,6 +243,38 @@ impl Session {
             banker: vec![CardStatus::FaceDown; round.banker.cards.len()],
         };
         self.phase = Phase::Dealing { round, reveal, bets };
+        Ok(self.current_snapshot())
+    }
+
+    /// Squeeze a single card to its suit sliver.
+    pub fn peek(&mut self, hand: Side, index: usize) -> Result<RoundSnapshot, CommandError> {
+        self.set_status(hand, index, CardStatus::Peeked)
+    }
+
+    /// Turn a single card fully face up.
+    pub fn reveal(&mut self, hand: Side, index: usize) -> Result<RoundSnapshot, CommandError> {
+        self.set_status(hand, index, CardStatus::FaceUp)
+    }
+
+    fn set_status(&mut self, hand: Side, index: usize, to: CardStatus) -> Result<RoundSnapshot, CommandError> {
+        match &mut self.phase {
+            Phase::Dealing { reveal, .. } => {
+                let statuses = match hand {
+                    Side::Player => &mut reveal.player,
+                    Side::Banker => &mut reveal.banker,
+                };
+                if index >= statuses.len() {
+                    return Err(CommandError::BadCardIndex { hand, index });
+                }
+                // Peeking must never downgrade an already-revealed card.
+                if !(to == CardStatus::Peeked && statuses[index] == CardStatus::FaceUp) {
+                    statuses[index] = to;
+                }
+            }
+            Phase::Betting { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting })
+            }
+        }
         Ok(self.current_snapshot())
     }
 
@@ -388,5 +419,54 @@ mod tests {
         s.deal_round().unwrap();
         let err = s.place_bet(BetKind::Main(BetSpot::Banker), 1_000).unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
+    }
+
+    #[test]
+    fn peek_shows_only_a_sliver() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let snap = s.peek(Side::Player, 0).unwrap();
+        assert!(matches!(snap.player.cards[0], CardView::Peeked { .. }));
+        assert_eq!(snap.player.total, None);
+    }
+
+    #[test]
+    fn reveal_turns_a_card_face_up() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let snap = s.reveal(Side::Player, 0).unwrap();
+        assert!(matches!(snap.player.cards[0], CardView::FaceUp(_)));
+    }
+
+    #[test]
+    fn total_appears_only_when_all_cards_are_face_up() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        let dealt = s.deal_round().unwrap();
+        let n = dealt.player.cards.len();
+        for i in 0..n - 1 {
+            s.reveal(Side::Player, i).unwrap();
+        }
+        assert_eq!(s.snapshot().player.total, None);
+        let snap = s.reveal(Side::Player, n - 1).unwrap();
+        assert!(snap.player.total.is_some());
+    }
+
+    #[test]
+    fn bad_card_index_is_rejected() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let err = s.reveal(Side::Player, 99).unwrap_err();
+        assert_eq!(err, CommandError::BadCardIndex { hand: Side::Player, index: 99 });
+    }
+
+    #[test]
+    fn peek_in_betting_is_wrong_phase() {
+        let mut s = Session::new(cfg());
+        let err = s.peek(Side::Player, 0).unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
     }
 }
