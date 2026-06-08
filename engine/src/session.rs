@@ -350,9 +350,58 @@ fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
     HandView { cards, total: if all_up { Some(hand.total()) } else { None } }
 }
 
-/// Placeholder until Task 6 implements progressive event derivation.
-fn derive_events(_round: &RoundResult, _reveal: &RevealState) -> Vec<Event> {
-    Vec::new()
+fn derive_events(round: &RoundResult, reveal: &RevealState) -> Vec<Event> {
+    let mut events = Vec::new();
+
+    for (side, hand, status) in [
+        (Side::Player, &round.player, &reveal.player),
+        (Side::Banker, &round.banker, &reveal.banker),
+    ] {
+        let up = |i: usize| matches!(status.get(i), Some(CardStatus::FaceUp));
+
+        if hand.cards.len() >= 2 && up(0) && up(1) && hand.is_pair() {
+            events.push(Event::Pair { side });
+        }
+        if hand.cards.len() == 2 && up(0) && up(1) && hand.is_natural() {
+            events.push(Event::Natural { side, total: hand.total() });
+        }
+        for (i, c) in hand.cards.iter().enumerate() {
+            if up(i) && c.value() == 0 {
+                events.push(Event::Monkey { hand: side, index: i });
+            }
+        }
+        if hand.cards.len() == 3 && up(2) {
+            events.push(Event::ThirdCard { side, reason: third_card_reason(round, side) });
+        }
+    }
+
+    let player_up = !reveal.player.is_empty()
+        && reveal.player.iter().all(|s| matches!(s, CardStatus::FaceUp));
+    let banker_up = !reveal.banker.is_empty()
+        && reveal.banker.iter().all(|s| matches!(s, CardStatus::FaceUp));
+    if player_up && banker_up {
+        events.push(Event::Win {
+            winner: round.outcome,
+            player: round.player.total(),
+            banker: round.banker.total(),
+        });
+    }
+
+    events
+}
+
+/// Pull the relevant draw-trace line for a side's third card, or a default.
+fn third_card_reason(round: &RoundResult, side: Side) -> String {
+    let needle = match side {
+        Side::Player => "Player",
+        Side::Banker => "Banker",
+    };
+    round
+        .trace
+        .iter()
+        .find(|line| line.contains(needle) && line.contains("third"))
+        .cloned()
+        .unwrap_or_else(|| format!("{needle} drew a third card"))
 }
 
 #[cfg(test)]
@@ -527,5 +576,65 @@ mod tests {
         let mut s = Session::new(cfg());
         let err = s.settle().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
+    }
+}
+
+#[cfg(test)]
+mod event_tests {
+    use super::*;
+    use crate::card::{Card, Rank, Suit};
+    use crate::hand::Hand;
+    use crate::round::RoundResult;
+
+    fn card(rank: Rank) -> Card {
+        Card { rank, suit: Suit::Spades }
+    }
+    fn all_up(n: usize) -> Vec<CardStatus> {
+        vec![CardStatus::FaceUp; n]
+    }
+    fn all_down(n: usize) -> Vec<CardStatus> {
+        vec![CardStatus::FaceDown; n]
+    }
+
+    #[test]
+    fn monkey_event_for_a_revealed_face_card() {
+        let player = Hand { cards: vec![card(Rank::King), card(Rank::Five)] };
+        let banker = Hand { cards: vec![card(Rank::Two), card(Rank::Three)] };
+        let round = RoundResult { player, banker, outcome: Outcome::PlayerWin, trace: Vec::new() };
+        let reveal = RevealState { player: all_up(2), banker: all_up(2) };
+        let events = derive_events(&round, &reveal);
+        assert!(events.contains(&Event::Monkey { hand: Side::Player, index: 0 }));
+    }
+
+    #[test]
+    fn no_events_while_cards_are_face_down() {
+        let player = Hand { cards: vec![card(Rank::King), card(Rank::Five)] };
+        let banker = Hand { cards: vec![card(Rank::Two), card(Rank::Three)] };
+        let round = RoundResult { player, banker, outcome: Outcome::PlayerWin, trace: Vec::new() };
+        let reveal = RevealState { player: all_down(2), banker: all_down(2) };
+        assert!(derive_events(&round, &reveal).is_empty());
+    }
+
+    #[test]
+    fn pair_natural_and_win_events_when_fully_revealed() {
+        // Player nine+nine = 8: both a pair and a two-card natural; beats banker 5.
+        let player = Hand { cards: vec![card(Rank::Nine), card(Rank::Nine)] };
+        let banker = Hand { cards: vec![card(Rank::Two), card(Rank::Three)] };
+        let round = RoundResult { player, banker, outcome: Outcome::PlayerWin, trace: Vec::new() };
+        let reveal = RevealState { player: all_up(2), banker: all_up(2) };
+        let events = derive_events(&round, &reveal);
+        assert!(events.contains(&Event::Pair { side: Side::Player }));
+        assert!(events.contains(&Event::Natural { side: Side::Player, total: 8 }));
+        assert!(events.contains(&Event::Win { winner: Outcome::PlayerWin, player: 8, banker: 5 }));
+    }
+
+    #[test]
+    fn win_event_withheld_until_both_hands_revealed() {
+        let player = Hand { cards: vec![card(Rank::Nine), card(Rank::Nine)] };
+        let banker = Hand { cards: vec![card(Rank::Two), card(Rank::Three)] };
+        let round = RoundResult { player, banker, outcome: Outcome::PlayerWin, trace: Vec::new() };
+        let reveal = RevealState { player: all_up(2), banker: all_down(2) };
+        let events = derive_events(&round, &reveal);
+        assert!(!events.iter().any(|e| matches!(e, Event::Win { .. })));
     }
 }
