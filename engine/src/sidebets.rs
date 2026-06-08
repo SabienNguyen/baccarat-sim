@@ -348,6 +348,38 @@ mod tiger_tests {
     }
 }
 
+/// All supported side bets, for uniform settlement by front-ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SideBet {
+    PlayerPair,
+    BankerPair,
+    Dragon7,
+    Panda8,
+    DragonBonus(BetSide),
+    Tiger,
+    BigTiger,
+    SmallTiger,
+    TigerTie,
+    TigerPair,
+}
+
+/// Settle any side bet against a finished round. `stake` is in cents; the return
+/// is the net bankroll change in cents (same convention as `settle::settle`).
+pub fn settle_side(bet: SideBet, stake: i64, round: &RoundResult) -> i64 {
+    match bet {
+        SideBet::PlayerPair => pair_pays(&round.player, stake),
+        SideBet::BankerPair => pair_pays(&round.banker, stake),
+        SideBet::Dragon7 => dragon7_pays(round, stake),
+        SideBet::Panda8 => panda8_pays(round, stake),
+        SideBet::DragonBonus(side) => dragon_bonus_pays(side, round, stake),
+        SideBet::Tiger => tiger_pays(round, stake),
+        SideBet::BigTiger => big_tiger_pays(round, stake),
+        SideBet::SmallTiger => small_tiger_pays(round, stake),
+        SideBet::TigerTie => tiger_tie_pays(round, stake),
+        SideBet::TigerPair => tiger_pair_pays(round, stake),
+    }
+}
+
 /// Tiger Pair: 4:1 single pair, 20:1 double pair (different ranks),
 /// 100:1 twin pair (both hands paired on the same rank).
 pub fn tiger_pair_pays(round: &RoundResult, stake: i64) -> i64 {
@@ -409,5 +441,44 @@ mod tiger_pair_tests {
     fn no_pair_loses() {
         let r = rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Four), c(Rank::Five)]);
         assert_eq!(tiger_pair_pays(&r, 100), -100);
+    }
+}
+
+#[cfg(test)]
+mod dispatch_tests {
+    use super::*;
+    use crate::card::{Card, Rank, Suit};
+    use crate::hand::Hand;
+    use crate::round::{Outcome, RoundResult};
+
+    fn c(rank: Rank) -> Card {
+        Card { rank, suit: Suit::Spades }
+    }
+
+    fn rr(player: Vec<Card>, banker: Vec<Card>, outcome: Outcome) -> RoundResult {
+        RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn dispatch_player_pair() {
+        let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Two), c(Rank::Three)], Outcome::Tie);
+        assert_eq!(settle_side(SideBet::PlayerPair, 100, &r), 1_100);
+    }
+
+    #[test]
+    fn dispatch_banker_pair() {
+        let r = rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Nine), c(Rank::Nine)], Outcome::Tie);
+        assert_eq!(settle_side(SideBet::BankerPair, 100, &r), 1_100);
+    }
+
+    #[test]
+    fn dispatch_dragon_bonus_player() {
+        let r = rr(vec![c(Rank::Four), c(Rank::Five)], vec![c(Rank::Three), c(Rank::Four)], Outcome::PlayerWin);
+        assert_eq!(settle_side(SideBet::DragonBonus(BetSide::Player), 100, &r), 100);
     }
 }
