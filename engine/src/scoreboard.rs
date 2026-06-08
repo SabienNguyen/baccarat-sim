@@ -101,8 +101,28 @@ fn build_bead_plate(history: &[RoundRecord]) -> BeadPlate {
     BeadPlate { cells }
 }
 
-fn build_big_road(_history: &[RoundRecord]) -> BigRoad {
-    BigRoad { columns: Vec::new() }
+fn build_big_road(history: &[RoundRecord]) -> BigRoad {
+    let mut columns: Vec<Vec<BigRoadCell>> = Vec::new();
+
+    for r in history {
+        let side = match r.outcome {
+            Outcome::PlayerWin => Side::Player,
+            Outcome::BankerWin => Side::Banker,
+            Outcome::Tie => continue, // ties handled in a later task
+        };
+        let cell = BigRoadCell {
+            side,
+            ties: 0,
+            player_pair: r.player_pair,
+            banker_pair: r.banker_pair,
+        };
+        match columns.last() {
+            Some(col) if col[0].side == side => columns.last_mut().unwrap().push(cell),
+            _ => columns.push(vec![cell]),
+        }
+    }
+
+    BigRoad { columns }
 }
 
 fn derived_road(_big: &BigRoad, _offset: usize) -> DerivedRoad {
@@ -152,5 +172,36 @@ mod tests {
         assert!(s.big_eye_boy.columns.is_empty());
         assert!(s.small_road.columns.is_empty());
         assert!(s.cockroach_pig.columns.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod big_road_core_tests {
+    use super::*;
+
+    fn win(outcome: Outcome) -> RoundRecord {
+        RoundRecord { outcome, player_pair: false, banker_pair: false }
+    }
+
+    #[test]
+    fn side_change_starts_new_column() {
+        // B, P, P -> column0 = [B], column1 = [P, P]
+        let history = vec![win(Outcome::BankerWin), win(Outcome::PlayerWin), win(Outcome::PlayerWin)];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.big_road.columns.len(), 2);
+        assert_eq!(s.big_road.columns[0].len(), 1);
+        assert_eq!(s.big_road.columns[0][0].side, Side::Banker);
+        assert_eq!(s.big_road.columns[1].len(), 2);
+        assert_eq!(s.big_road.columns[1][0].side, Side::Player);
+        assert_eq!(s.big_road.columns[1][1].side, Side::Player);
+    }
+
+    #[test]
+    fn long_streak_stays_one_logical_column() {
+        // Seven straight Banker wins -> one column of height 7 (no break at 6).
+        let history = vec![win(Outcome::BankerWin); 7];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.big_road.columns.len(), 1);
+        assert_eq!(s.big_road.columns[0].len(), 7);
     }
 }
