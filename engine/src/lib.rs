@@ -8,6 +8,7 @@ pub mod shoe;
 pub mod settle;
 pub mod sidebets;
 pub mod scoreboard;
+pub mod session;
 
 #[cfg(test)]
 mod smoke {
