@@ -314,6 +314,75 @@ mod big_road_core_tests {
 }
 
 #[cfg(test)]
+mod invariants_tests {
+    use super::*;
+    use crate::card::{Card, Rank, Suit};
+    use crate::hand::Hand;
+    use crate::round::RoundResult;
+
+    fn win(outcome: Outcome) -> RoundRecord {
+        RoundRecord { outcome, player_pair: false, banker_pair: false }
+    }
+
+    #[test]
+    fn from_round_reads_outcome_and_pairs() {
+        let round = RoundResult {
+            player: Hand {
+                cards: vec![
+                    Card { rank: Rank::Seven, suit: Suit::Clubs },
+                    Card { rank: Rank::Seven, suit: Suit::Hearts },
+                ],
+            },
+            banker: Hand {
+                cards: vec![
+                    Card { rank: Rank::Two, suit: Suit::Spades },
+                    Card { rank: Rank::Three, suit: Suit::Diamonds },
+                ],
+            },
+            outcome: Outcome::PlayerWin,
+            trace: Vec::new(),
+        };
+        let rec = RoundRecord::from_round(&round);
+        assert_eq!(rec.outcome, Outcome::PlayerWin);
+        assert!(rec.player_pair);
+        assert!(!rec.banker_pair);
+    }
+
+    #[test]
+    fn derivation_is_pure() {
+        let history = vec![
+            win(Outcome::BankerWin), win(Outcome::PlayerWin), win(Outcome::PlayerWin),
+            win(Outcome::Tie), win(Outcome::BankerWin),
+        ];
+        assert_eq!(derive_scoreboard(&history), derive_scoreboard(&history));
+    }
+
+    #[test]
+    fn all_ties_give_full_bead_plate_but_empty_big_and_derived() {
+        let history = vec![win(Outcome::Tie); 5];
+        let s = derive_scoreboard(&history);
+        assert_eq!(s.bead_plate.cells.len(), 5);
+        assert!(s.big_road.columns.is_empty());
+        assert!(s.big_eye_boy.columns.is_empty());
+        assert!(s.small_road.columns.is_empty());
+        assert!(s.cockroach_pig.columns.is_empty());
+    }
+
+    #[test]
+    fn big_eye_boy_length_equals_worked_example_count() {
+        use Outcome::*;
+        let history = vec![
+            win(BankerWin), win(BankerWin),
+            win(PlayerWin), win(PlayerWin), win(PlayerWin),
+            win(BankerWin), win(PlayerWin), win(BankerWin), win(BankerWin),
+        ];
+        let s = derive_scoreboard(&history);
+        let total_marks: usize = s.big_eye_boy.columns.iter().map(|c| c.len()).sum();
+        assert_eq!(total_marks, 6);
+    }
+}
+
+#[cfg(test)]
 mod big_road_tie_tests {
     use super::*;
 
