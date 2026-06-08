@@ -3,8 +3,8 @@ use crate::hand::Hand;
 use crate::round::{play_round, Outcome, RoundResult};
 use crate::shoe::Shoe;
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
-use crate::settle::{BetSpot, Ruleset};
-use crate::sidebets::SideBet;
+use crate::settle::{settle_with, Bet, BetSpot, Ruleset};
+use crate::sidebets::{settle_side, SideBet};
 
 /// How a session is configured at creation. All money is in cents.
 pub struct SessionConfig {
@@ -278,6 +278,40 @@ impl Session {
         Ok(self.current_snapshot())
     }
 
+    /// Resolve the dealt round: auto-reveal, pay bets, update bankroll/history,
+    /// and return to the betting phase. The returned snapshot is tagged `Settled`.
+    pub fn settle(&mut self) -> Result<RoundSnapshot, CommandError> {
+        let (round, bets) = match &self.phase {
+            Phase::Dealing { round, bets, .. } => (round.clone(), bets.clone()),
+            Phase::Betting { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting })
+            }
+        };
+
+        let payouts: Vec<BetPayout> = bets
+            .iter()
+            .map(|b| BetPayout { bet: *b, net: self.payout_for(b, &round) })
+            .collect();
+        let total_net: i64 = payouts.iter().map(|p| p.net).sum();
+        self.bankroll += total_net;
+        self.history.push(RoundRecord::from_round(&round));
+
+        let reveal = RevealState {
+            player: vec![CardStatus::FaceUp; round.player.cards.len()],
+            banker: vec![CardStatus::FaceUp; round.banker.cards.len()],
+        };
+        let snapshot = self.render_round(PhaseTag::Settled, &round, &reveal, &bets, Some(payouts));
+        self.phase = Phase::Betting { bets: Vec::new() };
+        Ok(snapshot)
+    }
+
+    fn payout_for(&self, bet: &PlacedBet, round: &RoundResult) -> i64 {
+        match bet.kind {
+            BetKind::Main(spot) => settle_with(Bet { spot, amount: bet.amount }, round, self.config.ruleset),
+            BetKind::Side(side_bet) => settle_side(side_bet, bet.amount, round),
+        }
+    }
+
     fn current_snapshot(&self) -> RoundSnapshot {
         match &self.phase {
             Phase::Betting { bets } => RoundSnapshot {
@@ -467,6 +501,31 @@ mod tests {
     fn peek_in_betting_is_wrong_phase() {
         let mut s = Session::new(cfg());
         let err = s.peek(Side::Player, 0).unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
+    }
+
+    #[test]
+    fn settle_pays_updates_bankroll_and_records_history() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let snap = s.settle().unwrap();
+        assert_eq!(snap.phase, PhaseTag::Settled);
+        assert!(snap.outcome.is_some());
+        let payouts = snap.payouts.as_ref().unwrap();
+        assert_eq!(payouts.len(), 1);
+        assert_eq!(snap.bankroll, 100_000 + payouts[0].net);
+        assert_eq!(snap.scoreboard.bead_plate.cells.len(), 1);
+        assert!(snap.player.total.is_some());
+        assert!(snap.banker.total.is_some());
+        assert_eq!(s.snapshot().phase, PhaseTag::Betting);
+        assert!(s.snapshot().bets.is_empty());
+    }
+
+    #[test]
+    fn settle_in_betting_is_wrong_phase() {
+        let mut s = Session::new(cfg());
+        let err = s.settle().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
     }
 }
