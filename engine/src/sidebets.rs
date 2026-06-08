@@ -278,6 +278,51 @@ mod dragon_bonus_tests {
         let r = rr(vec![c(Rank::Four), c(Rank::Five)], vec![c(Rank::Three), c(Rank::Four)], Outcome::PlayerWin);
         assert_eq!(dragon_bonus_pays(BetSide::Banker, &r, 100), -100);
     }
+
+    // Cover the middle rungs of the ladder so a transposed multiplier is caught.
+    #[test]
+    fn non_natural_win_by_five_pays_two_to_one() {
+        // Player 7 (2+2+3, 3 cards) vs Banker 2 (K+2). Margin 5.
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Three)],
+            vec![c(Rank::King), c(Rank::Two)],
+            Outcome::PlayerWin,
+        );
+        assert_eq!(dragon_bonus_pays(BetSide::Player, &r, 100), 200);
+    }
+
+    #[test]
+    fn non_natural_win_by_six_pays_four_to_one() {
+        // Player 8 (2+3+3, 3 cards) vs Banker 2 (K+2). Margin 6.
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Three), c(Rank::Three)],
+            vec![c(Rank::King), c(Rank::Two)],
+            Outcome::PlayerWin,
+        );
+        assert_eq!(dragon_bonus_pays(BetSide::Player, &r, 100), 400);
+    }
+
+    #[test]
+    fn non_natural_win_by_seven_pays_six_to_one() {
+        // Player 9 (2+3+4, 3 cards) vs Banker 2 (K+2). Margin 7.
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Three), c(Rank::Four)],
+            vec![c(Rank::King), c(Rank::Two)],
+            Outcome::PlayerWin,
+        );
+        assert_eq!(dragon_bonus_pays(BetSide::Player, &r, 100), 600);
+    }
+
+    #[test]
+    fn non_natural_win_by_eight_pays_ten_to_one() {
+        // Player 9 (2+3+4, 3 cards) vs Banker 1 (K+A). Margin 8.
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Three), c(Rank::Four)],
+            vec![c(Rank::King), c(Rank::Ace)],
+            Outcome::PlayerWin,
+        );
+        assert_eq!(dragon_bonus_pays(BetSide::Player, &r, 100), 1_000);
+    }
 }
 
 #[cfg(test)]
@@ -480,5 +525,57 @@ mod dispatch_tests {
     fn dispatch_dragon_bonus_player() {
         let r = rr(vec![c(Rank::Four), c(Rank::Five)], vec![c(Rank::Three), c(Rank::Four)], Outcome::PlayerWin);
         assert_eq!(settle_side(SideBet::DragonBonus(BetSide::Player), 100, &r), 100);
+    }
+
+    // Verify every remaining variant is wired to the correct pay function,
+    // so a miswired match arm in settle_side cannot slip through.
+    #[test]
+    fn dispatch_dragon7() {
+        let r = rr(
+            vec![c(Rank::Four), c(Rank::Two)],
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Three)], // banker 3-card 7
+            Outcome::BankerWin,
+        );
+        assert_eq!(settle_side(SideBet::Dragon7, 100, &r), 4_000);
+    }
+
+    #[test]
+    fn dispatch_panda8() {
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Four)], // player 3-card 8
+            vec![c(Rank::Three), c(Rank::Four)],
+            Outcome::PlayerWin,
+        );
+        assert_eq!(settle_side(SideBet::Panda8, 100, &r), 2_500);
+    }
+
+    #[test]
+    fn dispatch_tiger_and_small_tiger_two_card_six() {
+        // Banker wins with a two-card 6.
+        let r = rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Two), c(Rank::Four)], Outcome::BankerWin);
+        assert_eq!(settle_side(SideBet::Tiger, 100, &r), 1_200);
+        assert_eq!(settle_side(SideBet::SmallTiger, 100, &r), 2_200);
+    }
+
+    #[test]
+    fn dispatch_big_tiger_three_card_six() {
+        let r = rr(
+            vec![c(Rank::Two), c(Rank::Three)],
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Two)], // banker 3-card 6
+            Outcome::BankerWin,
+        );
+        assert_eq!(settle_side(SideBet::BigTiger, 100, &r), 5_000);
+    }
+
+    #[test]
+    fn dispatch_tiger_tie() {
+        let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
+        assert_eq!(settle_side(SideBet::TigerTie, 100, &r), 3_500);
+    }
+
+    #[test]
+    fn dispatch_tiger_pair() {
+        let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Two), c(Rank::Three)], Outcome::Tie);
+        assert_eq!(settle_side(SideBet::TigerPair, 100, &r), 400);
     }
 }
