@@ -1,5 +1,7 @@
 use crate::card::{Card, Suit};
-use crate::round::Outcome;
+use crate::hand::Hand;
+use crate::round::{play_round, Outcome, RoundResult};
+use crate::shoe::Shoe;
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::settle::{BetSpot, Ruleset};
 use crate::sidebets::SideBet;
@@ -101,13 +103,31 @@ pub enum CommandError {
     BadCardIndex { hand: Side, index: usize },
 }
 
+/// Per-card reveal status during the squeeze.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Peeked and FaceUp constructed in Task 4 (reveal/squeeze)
+enum CardStatus {
+    FaceDown,
+    Peeked,
+    FaceUp,
+}
+
+/// Reveal status for both hands, indexed to match each hand's cards.
+struct RevealState {
+    player: Vec<CardStatus>,
+    banker: Vec<CardStatus>,
+}
+
 /// In-flight round state.
 enum Phase {
     Betting { bets: Vec<PlacedBet> },
+    Dealing { round: RoundResult, reveal: RevealState, bets: Vec<PlacedBet> },
 }
 
 /// The stateful baccarat game session.
 pub struct Session {
+    shoe: Shoe,
+    shoes_dealt: u64,
     bankroll: i64,
     config: SessionConfig,
     history: Vec<RoundRecord>,
@@ -117,7 +137,10 @@ pub struct Session {
 impl Session {
     /// Start a fresh session in the betting phase.
     pub fn new(config: SessionConfig) -> Self {
+        let shoe = Shoe::new_seeded(config.seed);
         Session {
+            shoe,
+            shoes_dealt: 0,
             bankroll: config.starting_bankroll,
             history: Vec::new(),
             phase: Phase::Betting { bets: Vec::new() },
@@ -138,6 +161,9 @@ impl Session {
 
         let bets = match &mut self.phase {
             Phase::Betting { bets } => bets,
+            Phase::Dealing { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
+            }
         };
 
         if amount < table_min {
@@ -159,7 +185,65 @@ impl Session {
     pub fn clear_bets(&mut self) -> Result<RoundSnapshot, CommandError> {
         match &mut self.phase {
             Phase::Betting { bets } => bets.clear(),
+            Phase::Dealing { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
+            }
         }
+        Ok(self.current_snapshot())
+    }
+
+    fn render_round(
+        &self,
+        tag: PhaseTag,
+        round: &RoundResult,
+        reveal: &RevealState,
+        bets: &[PlacedBet],
+        payouts: Option<Vec<BetPayout>>,
+    ) -> RoundSnapshot {
+        let player = hand_view(&round.player, &reveal.player);
+        let banker = hand_view(&round.banker, &reveal.banker);
+        let fully_revealed = player.total.is_some() && banker.total.is_some();
+        RoundSnapshot {
+            phase: tag,
+            player,
+            banker,
+            bets: bets.to_vec(),
+            bankroll: self.bankroll,
+            table_min: self.config.table_min,
+            table_max: self.config.table_max,
+            outcome: if fully_revealed { Some(round.outcome) } else { None },
+            payouts,
+            events: derive_events(round, reveal),
+            scoreboard: derive_scoreboard(&self.history),
+            explain: round.trace.clone(),
+        }
+    }
+
+    fn reshuffle(&mut self) {
+        self.shoes_dealt += 1;
+        self.shoe = Shoe::new_seeded(self.config.seed.wrapping_add(self.shoes_dealt));
+    }
+
+    /// Deal a full round face-down. Requires at least one staged bet.
+    pub fn deal_round(&mut self) -> Result<RoundSnapshot, CommandError> {
+        let bets = match &self.phase {
+            Phase::Betting { bets } if !bets.is_empty() => bets.clone(),
+            Phase::Betting { .. } => return Err(CommandError::NoBetsPlaced),
+            Phase::Dealing { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
+            }
+        };
+
+        if self.shoe.remaining() < 6 {
+            self.reshuffle();
+        }
+
+        let round = play_round(&mut self.shoe);
+        let reveal = RevealState {
+            player: vec![CardStatus::FaceDown; round.player.cards.len()],
+            banker: vec![CardStatus::FaceDown; round.banker.cards.len()],
+        };
+        self.phase = Phase::Dealing { round, reveal, bets };
         Ok(self.current_snapshot())
     }
 
@@ -179,8 +263,31 @@ impl Session {
                 scoreboard: derive_scoreboard(&self.history),
                 explain: Vec::new(),
             },
+            Phase::Dealing { round, reveal, bets } => {
+                self.render_round(PhaseTag::Dealing, round, reveal, bets, None)
+            }
         }
     }
+}
+
+fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
+    let cards = hand
+        .cards
+        .iter()
+        .zip(status)
+        .map(|(c, s)| match s {
+            CardStatus::FaceDown => CardView::FaceDown,
+            CardStatus::Peeked => CardView::Peeked { sliver: Pip { suit: c.suit } },
+            CardStatus::FaceUp => CardView::FaceUp(*c),
+        })
+        .collect();
+    let all_up = !hand.cards.is_empty() && status.iter().all(|s| matches!(s, CardStatus::FaceUp));
+    HandView { cards, total: if all_up { Some(hand.total()) } else { None } }
+}
+
+/// Placeholder until Task 6 implements progressive event derivation.
+fn derive_events(_round: &RoundResult, _reveal: &RevealState) -> Vec<Event> {
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -251,5 +358,35 @@ mod tests {
         s.place_bet(BetKind::Main(BetSpot::Tie), 1_000).unwrap();
         let snap = s.clear_bets().unwrap();
         assert!(snap.bets.is_empty());
+    }
+
+    #[test]
+    fn deal_round_enters_dealing_with_hidden_cards() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        let snap = s.deal_round().unwrap();
+        assert_eq!(snap.phase, PhaseTag::Dealing);
+        assert!(snap.player.cards.len() >= 2);
+        assert!(snap.banker.cards.len() >= 2);
+        assert!(snap.player.cards.iter().all(|c| *c == CardView::FaceDown));
+        assert_eq!(snap.player.total, None);
+        assert_eq!(snap.banker.total, None);
+        assert_eq!(snap.outcome, None);
+    }
+
+    #[test]
+    fn deal_without_bets_is_rejected() {
+        let mut s = Session::new(cfg());
+        let err = s.deal_round().unwrap_err();
+        assert_eq!(err, CommandError::NoBetsPlaced);
+    }
+
+    #[test]
+    fn place_bet_in_dealing_is_wrong_phase() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let err = s.place_bet(BetKind::Main(BetSpot::Banker), 1_000).unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
     }
 }
