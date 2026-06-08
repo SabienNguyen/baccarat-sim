@@ -135,8 +135,105 @@ fn build_big_road(history: &[RoundRecord]) -> BigRoad {
     BigRoad { columns }
 }
 
-fn derived_road(_big: &BigRoad, _offset: usize) -> DerivedRoad {
-    DerivedRoad { columns: Vec::new() }
+fn derived_road(big: &BigRoad, offset: usize) -> DerivedRoad {
+    let heights: Vec<usize> = big.columns.iter().map(|c| c.len()).collect();
+    let mut marks: Vec<Mark> = Vec::new();
+
+    for (col, column) in big.columns.iter().enumerate() {
+        for row in 0..column.len() {
+            // This road only starts producing once the Big Road is deep/wide enough.
+            let started = col > offset || (col == offset && row >= 1);
+            if !started {
+                continue;
+            }
+
+            let mark = if row == 0 {
+                // Turn: compare the depth of the previous column with the one `offset`
+                // columns further left. Both indices are valid because col > offset here.
+                if heights[col - 1] == heights[col - 1 - offset] {
+                    Mark::Red
+                } else {
+                    Mark::Blue
+                }
+            } else {
+                // Continuation: is there a cell `offset` columns left at this row?
+                if heights[col - offset] > row {
+                    Mark::Red
+                } else {
+                    Mark::Blue
+                }
+            };
+            marks.push(mark);
+        }
+    }
+
+    DerivedRoad { columns: columnize(&marks) }
+}
+
+/// Group a flat mark sequence into run-based columns (new column on color change).
+fn columnize(marks: &[Mark]) -> Vec<Vec<Mark>> {
+    let mut columns: Vec<Vec<Mark>> = Vec::new();
+    for &m in marks {
+        match columns.last_mut() {
+            Some(col) if col[0] == m => col.push(m),
+            _ => columns.push(vec![m]),
+        }
+    }
+    columns
+}
+
+#[cfg(test)]
+mod derived_road_tests {
+    use super::*;
+
+    fn win(outcome: Outcome) -> RoundRecord {
+        RoundRecord { outcome, player_pair: false, banker_pair: false }
+    }
+
+    // B B P P P B P B B
+    fn worked_example() -> Vec<RoundRecord> {
+        use Outcome::*;
+        vec![
+            win(BankerWin), win(BankerWin),
+            win(PlayerWin), win(PlayerWin), win(PlayerWin),
+            win(BankerWin),
+            win(PlayerWin),
+            win(BankerWin), win(BankerWin),
+        ]
+    }
+
+    #[test]
+    fn big_eye_boy_matches_worked_example() {
+        let s = derive_scoreboard(&worked_example());
+        use Mark::*;
+        assert_eq!(
+            s.big_eye_boy.columns,
+            vec![vec![Red], vec![Blue, Blue, Blue], vec![Red], vec![Blue]]
+        );
+    }
+
+    #[test]
+    fn small_road_matches_worked_example() {
+        let s = derive_scoreboard(&worked_example());
+        use Mark::*;
+        assert_eq!(s.small_road.columns, vec![vec![Blue, Blue, Blue]]);
+    }
+
+    #[test]
+    fn cockroach_pig_matches_worked_example() {
+        let s = derive_scoreboard(&worked_example());
+        use Mark::*;
+        assert_eq!(s.cockroach_pig.columns, vec![vec![Blue], vec![Red]]);
+    }
+
+    #[test]
+    fn no_marks_before_the_start_cell() {
+        // Two short columns: B, P -> heights [1,1]. No derived road has started.
+        let s = derive_scoreboard(&[win(Outcome::BankerWin), win(Outcome::PlayerWin)]);
+        assert!(s.big_eye_boy.columns.is_empty());
+        assert!(s.small_road.columns.is_empty());
+        assert!(s.cockroach_pig.columns.is_empty());
+    }
 }
 
 #[cfg(test)]
