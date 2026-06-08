@@ -63,6 +63,50 @@ pub fn dragon_bonus_pays(side: BetSide, round: &RoundResult, stake: i64) -> i64 
     stake * multiplier
 }
 
+/// Some(banker card count) if the banker won with a total of 6; else None.
+/// Shared by the Tiger family.
+fn banker_six(round: &RoundResult) -> Option<usize> {
+    if round.outcome == Outcome::BankerWin && round.banker.total() == 6 {
+        Some(round.banker.cards.len())
+    } else {
+        None
+    }
+}
+
+/// Tiger: banker wins with 6 — 12:1 on two cards, 20:1 on three cards.
+pub fn tiger_pays(round: &RoundResult, stake: i64) -> i64 {
+    match banker_six(round) {
+        Some(2) => stake * 12,
+        Some(_) => stake * 20, // three-card six
+        None => -stake,
+    }
+}
+
+/// Big Tiger: banker wins with a three-card 6 — 50:1.
+pub fn big_tiger_pays(round: &RoundResult, stake: i64) -> i64 {
+    match banker_six(round) {
+        Some(3) => stake * 50,
+        _ => -stake,
+    }
+}
+
+/// Small Tiger: banker wins with a two-card 6 — 22:1.
+pub fn small_tiger_pays(round: &RoundResult, stake: i64) -> i64 {
+    match banker_six(round) {
+        Some(2) => stake * 22,
+        _ => -stake,
+    }
+}
+
+/// Tiger Tie: a 6–6 tie — 35:1.
+pub fn tiger_tie_pays(round: &RoundResult, stake: i64) -> i64 {
+    if round.outcome == Outcome::Tie && round.banker.total() == 6 {
+        stake * 35
+    } else {
+        -stake
+    }
+}
+
 /// Panda 8 (EZ Baccarat): 25:1 if the Player wins with a three-card total of 8.
 pub fn panda8_pays(round: &RoundResult, stake: i64) -> i64 {
     let hit = round.outcome == Outcome::PlayerWin
@@ -233,5 +277,73 @@ mod dragon_bonus_tests {
     fn banker_side_loses_when_player_wins() {
         let r = rr(vec![c(Rank::Four), c(Rank::Five)], vec![c(Rank::Three), c(Rank::Four)], Outcome::PlayerWin);
         assert_eq!(dragon_bonus_pays(BetSide::Banker, &r, 100), -100);
+    }
+}
+
+#[cfg(test)]
+mod tiger_tests {
+    use super::*;
+    use crate::card::{Card, Rank, Suit};
+    use crate::hand::Hand;
+    use crate::round::{Outcome, RoundResult};
+
+    fn c(rank: Rank) -> Card {
+        Card { rank, suit: Suit::Spades }
+    }
+
+    fn rr(player: Vec<Card>, banker: Vec<Card>, outcome: Outcome) -> RoundResult {
+        RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        }
+    }
+
+    fn banker_two_card_six_win() -> RoundResult {
+        rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Two), c(Rank::Four)], Outcome::BankerWin)
+    }
+    fn banker_three_card_six_win() -> RoundResult {
+        rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Two), c(Rank::Two), c(Rank::Two)], Outcome::BankerWin)
+    }
+
+    #[test]
+    fn tiger_two_card_six_pays_twelve() {
+        assert_eq!(tiger_pays(&banker_two_card_six_win(), 100), 1_200);
+    }
+
+    #[test]
+    fn tiger_three_card_six_pays_twenty() {
+        assert_eq!(tiger_pays(&banker_three_card_six_win(), 100), 2_000);
+    }
+
+    #[test]
+    fn tiger_loses_when_banker_does_not_win_with_six() {
+        let r = rr(vec![c(Rank::Five), c(Rank::Four)], vec![c(Rank::Two), c(Rank::Three)], Outcome::PlayerWin);
+        assert_eq!(tiger_pays(&r, 100), -100);
+    }
+
+    #[test]
+    fn big_tiger_only_three_card_six() {
+        assert_eq!(big_tiger_pays(&banker_three_card_six_win(), 100), 5_000);
+        assert_eq!(big_tiger_pays(&banker_two_card_six_win(), 100), -100);
+    }
+
+    #[test]
+    fn small_tiger_only_two_card_six() {
+        assert_eq!(small_tiger_pays(&banker_two_card_six_win(), 100), 2_200);
+        assert_eq!(small_tiger_pays(&banker_three_card_six_win(), 100), -100);
+    }
+
+    #[test]
+    fn tiger_tie_pays_thirtyfive_on_six_six() {
+        let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
+        assert_eq!(tiger_tie_pays(&r, 100), 3_500);
+    }
+
+    #[test]
+    fn tiger_tie_loses_on_other_tie() {
+        let r = rr(vec![c(Rank::Two), c(Rank::Three)], vec![c(Rank::Two), c(Rank::Three)], Outcome::Tie);
+        assert_eq!(tiger_tie_pays(&r, 100), -100);
     }
 }
