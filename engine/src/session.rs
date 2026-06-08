@@ -72,7 +72,8 @@ pub enum Event {
     Monkey { hand: Side, index: usize },
     Pair { side: Side },
     ThirdCard { side: Side, reason: String },
-    Win { winner: Outcome, player: u8, banker: u8 },
+    /// The round resolved. `result` is the `Outcome` (which may be `Tie`).
+    Win { result: Outcome, player: u8, banker: u8 },
 }
 
 /// The single serializable view a front-end renders.
@@ -393,7 +394,7 @@ fn derive_events(round: &RoundResult, reveal: &RevealState) -> Vec<Event> {
         && reveal.banker.iter().all(|s| matches!(s, CardStatus::FaceUp));
     if player_up && banker_up {
         events.push(Event::Win {
-            winner: round.outcome,
+            result: round.outcome,
             player: round.player.total(),
             banker: round.banker.total(),
         });
@@ -660,7 +661,7 @@ mod event_tests {
         let events = derive_events(&round, &reveal);
         assert!(events.contains(&Event::Pair { side: Side::Player }));
         assert!(events.contains(&Event::Natural { side: Side::Player, total: 8 }));
-        assert!(events.contains(&Event::Win { winner: Outcome::PlayerWin, player: 8, banker: 5 }));
+        assert!(events.contains(&Event::Win { result: Outcome::PlayerWin, player: 8, banker: 5 }));
     }
 
     #[test]
