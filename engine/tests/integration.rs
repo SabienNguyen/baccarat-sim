@@ -1,4 +1,5 @@
 use baccarat_engine::round::play_round;
+use baccarat_engine::scoreboard::{derive_scoreboard, RoundRecord};
 use baccarat_engine::settle::{settle, Bet, BetSpot};
 use baccarat_engine::shoe::Shoe;
 use baccarat_engine::sidebets::{settle_side, SideBet};
@@ -23,6 +24,38 @@ fn seeded_round_is_deterministic_and_settles() {
     assert_eq!(result.outcome, result2.outcome);
     assert_eq!(result.player.cards, result2.player.cards);
     assert_eq!(result.banker.cards, result2.banker.cards);
+}
+
+#[test]
+fn seeded_shoe_builds_a_consistent_scoreboard() {
+    let mut shoe = baccarat_engine::shoe::Shoe::new_seeded(2024);
+    let mut history: Vec<RoundRecord> = Vec::new();
+
+    for _ in 0..20 {
+        let round = baccarat_engine::round::play_round(&mut shoe);
+        history.push(RoundRecord::from_round(&round));
+    }
+
+    let board = derive_scoreboard(&history);
+
+    // Bead Plate has exactly one cell per round.
+    assert_eq!(board.bead_plate.cells.len(), 20);
+
+    // Big Road cell count equals the number of non-tie rounds.
+    let non_ties = history
+        .iter()
+        .filter(|r| r.outcome != baccarat_engine::round::Outcome::Tie)
+        .count();
+    let big_road_cells: usize = board.big_road.columns.iter().map(|c| c.len()).sum();
+    assert_eq!(big_road_cells, non_ties);
+
+    // Determinism: same seed, same board.
+    let mut shoe2 = baccarat_engine::shoe::Shoe::new_seeded(2024);
+    let mut history2: Vec<RoundRecord> = Vec::new();
+    for _ in 0..20 {
+        history2.push(RoundRecord::from_round(&baccarat_engine::round::play_round(&mut shoe2)));
+    }
+    assert_eq!(board, derive_scoreboard(&history2));
 }
 
 #[test]
