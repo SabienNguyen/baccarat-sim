@@ -1,5 +1,6 @@
 use baccarat_engine::round::play_round;
 use baccarat_engine::scoreboard::{derive_scoreboard, RoundRecord};
+use baccarat_engine::session::{BetKind, Session, SessionConfig};
 use baccarat_engine::settle::{settle, Bet, BetSpot};
 use baccarat_engine::shoe::Shoe;
 use baccarat_engine::sidebets::{settle_side, SideBet};
@@ -66,4 +67,30 @@ fn seeded_round_settles_a_pair_side_bet() {
     // A Player Pair side bet must pay either 11x the stake (pair) or -stake (no pair).
     let delta = settle_side(SideBet::PlayerPair, 1_000, &result);
     assert!(delta == 11_000 || delta == -1_000, "unexpected pair payout: {delta}");
+}
+
+#[test]
+fn seeded_session_plays_rounds_deterministically() {
+    fn run() -> (i64, usize) {
+        let cfg = SessionConfig {
+            starting_bankroll: 1_000_000,
+            table_min: 100,
+            table_max: 100_000,
+            ruleset: baccarat_engine::settle::Ruleset::Commission,
+            seed: 77,
+        };
+        let mut s = Session::new(cfg);
+        for _ in 0..10 {
+            s.place_bet(BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+            s.deal_round().unwrap();
+            s.settle().unwrap();
+        }
+        let snap = s.snapshot();
+        (snap.bankroll, snap.scoreboard.bead_plate.cells.len())
+    }
+
+    let first = run();
+    let second = run();
+    assert_eq!(first, second, "same seed must produce the same session outcome");
+    assert_eq!(first.1, 10, "ten rounds should be recorded on the scoreboard");
 }

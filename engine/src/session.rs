@@ -305,6 +305,18 @@ impl Session {
         Ok(snapshot)
     }
 
+    /// Replace the shoe with a fresh shuffle. Bankroll and history persist.
+    pub fn new_shoe(&mut self) -> Result<RoundSnapshot, CommandError> {
+        match &self.phase {
+            Phase::Betting { .. } => {}
+            Phase::Dealing { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
+            }
+        }
+        self.reshuffle();
+        Ok(self.current_snapshot())
+    }
+
     fn payout_for(&self, bet: &PlacedBet, round: &RoundResult) -> i64 {
         match bet.kind {
             BetKind::Main(spot) => settle_with(Bet { spot, amount: bet.amount }, round, self.config.ruleset),
@@ -576,6 +588,29 @@ mod tests {
         let mut s = Session::new(cfg());
         let err = s.settle().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
+    }
+
+    #[test]
+    fn new_shoe_resets_cards_but_keeps_bankroll_and_history() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let settled = s.settle().unwrap();
+        let bankroll_after = settled.bankroll;
+
+        let snap = s.new_shoe().unwrap();
+        assert_eq!(snap.phase, PhaseTag::Betting);
+        assert_eq!(snap.bankroll, bankroll_after);
+        assert_eq!(snap.scoreboard.bead_plate.cells.len(), 1);
+    }
+
+    #[test]
+    fn new_shoe_in_dealing_is_wrong_phase() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let err = s.new_shoe().unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
     }
 }
 
