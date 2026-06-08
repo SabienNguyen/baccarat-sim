@@ -234,6 +234,25 @@ mod derived_road_tests {
         assert!(s.small_road.columns.is_empty());
         assert!(s.cockroach_pig.columns.is_empty());
     }
+
+    #[test]
+    fn interspersed_ties_do_not_change_derived_roads() {
+        // Ties never occupy a Big Road cell, so they cannot change column heights
+        // and must leave the derived roads identical to the tie-free worked example.
+        use Outcome::*;
+        let with_ties = vec![
+            win(BankerWin), win(Tie), win(BankerWin),
+            win(PlayerWin), win(PlayerWin), win(Tie), win(PlayerWin),
+            win(BankerWin),
+            win(Tie), win(PlayerWin),
+            win(BankerWin), win(BankerWin),
+        ];
+        let tied = derive_scoreboard(&with_ties);
+        let clean = derive_scoreboard(&worked_example());
+        assert_eq!(tied.big_eye_boy, clean.big_eye_boy);
+        assert_eq!(tied.small_road, clean.small_road);
+        assert_eq!(tied.cockroach_pig, clean.cockroach_pig);
+    }
 }
 
 #[cfg(test)]
