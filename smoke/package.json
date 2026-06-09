@@ -1,0 +1,16 @@
+{
+  "name": "baccarat-wasm-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "smoke": "tsx smoke.ts"
+  },
+  "dependencies": {
+    "engine-wasm": "file:../engine-wasm/pkg"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
