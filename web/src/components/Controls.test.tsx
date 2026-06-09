@@ -10,7 +10,7 @@ test("Deal is enabled in Betting with at least one bet", async () => {
     <Controls
       snapshot={snap}
       onDeal={onDeal}
-      onReveal={vi.fn()}
+      onRevealAll={vi.fn()}
       onSettle={vi.fn()}
       onNewShoe={vi.fn()}
     />,
@@ -26,7 +26,7 @@ test("Deal is disabled in Betting with no bets", () => {
     <Controls
       snapshot={bettingSnapshot()}
       onDeal={vi.fn()}
-      onReveal={vi.fn()}
+      onRevealAll={vi.fn()}
       onSettle={vi.fn()}
       onNewShoe={vi.fn()}
     />,
@@ -34,31 +34,44 @@ test("Deal is disabled in Betting with no bets", () => {
   expect(screen.getByRole("button", { name: "Deal" })).toBeDisabled();
 });
 
-test("Settle is enabled in Dealing and a Reveal button exists per hidden card", () => {
+test("Reveal all is disabled outside Dealing and enabled (and fires) in Dealing", async () => {
+  const onRevealAll = vi.fn();
+  const { rerender } = render(
+    <Controls
+      snapshot={bettingSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={onRevealAll}
+      onSettle={vi.fn()}
+      onNewShoe={vi.fn()}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Reveal all" })).toBeDisabled();
+
+  rerender(
+    <Controls
+      snapshot={dealingSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={onRevealAll}
+      onSettle={vi.fn()}
+      onNewShoe={vi.fn()}
+    />,
+  );
+  const revealAll = screen.getByRole("button", { name: "Reveal all" });
+  expect(revealAll).toBeEnabled();
+  await userEvent.click(revealAll);
+  expect(onRevealAll).toHaveBeenCalledOnce();
+});
+
+test("Settle is enabled in Dealing; no per-card Reveal buttons exist", () => {
   render(
     <Controls
       snapshot={dealingSnapshot()}
       onDeal={vi.fn()}
-      onReveal={vi.fn()}
+      onRevealAll={vi.fn()}
       onSettle={vi.fn()}
       onNewShoe={vi.fn()}
     />,
   );
   expect(screen.getByRole("button", { name: "Settle" })).toBeEnabled();
-  expect(screen.getAllByRole("button", { name: /^Reveal / })).toHaveLength(3);
-});
-
-test("clicking a Reveal button calls onReveal with that hand and index", async () => {
-  const onReveal = vi.fn();
-  render(
-    <Controls
-      snapshot={dealingSnapshot()}
-      onDeal={vi.fn()}
-      onReveal={onReveal}
-      onSettle={vi.fn()}
-      onNewShoe={vi.fn()}
-    />,
-  );
-  await userEvent.click(screen.getByRole("button", { name: "Reveal Player 1" }));
-  expect(onReveal).toHaveBeenCalledWith("Player", 1);
+  expect(screen.queryByRole("button", { name: /^Reveal (Player|Banker) / })).toBeNull();
 });
