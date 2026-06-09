@@ -5,8 +5,12 @@ use crate::shoe::Shoe;
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::settle::{settle_with, Bet, BetSpot, Ruleset};
 use crate::sidebets::{settle_side, SideBet};
+use serde::{Deserialize, Serialize};
 
 /// How a session is configured at creation. All money is in cents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct SessionConfig {
     pub starting_bankroll: i64,
     pub table_min: i64,
@@ -16,34 +20,44 @@ pub struct SessionConfig {
 }
 
 /// A bet kind: a main-bet spot or a side bet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum BetKind {
     Main(BetSpot),
     Side(SideBet),
 }
 
 /// A staged or resolved bet. `amount` is the stake in cents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct PlacedBet {
     pub kind: BetKind,
     pub amount: i64,
 }
 
 /// A resolved bet's net result in cents (profit, -stake, or 0 push).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BetPayout {
     pub bet: PlacedBet,
     pub net: i64,
 }
 
 /// The corner-squeeze hint: only the card's suit shows first.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Pip {
     pub suit: Suit,
 }
 
 /// A card as the front-end may see it. Unrevealed cards hide their identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum CardView {
     FaceDown,
     Peeked { sliver: Pip },
@@ -51,14 +65,18 @@ pub enum CardView {
 }
 
 /// A hand as rendered to the front-end. `total` is `None` until every card is face up.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct HandView {
     pub cards: Vec<CardView>,
     pub total: Option<u8>,
 }
 
 /// The phase tag carried in a snapshot. `Settled` is the transient view `settle()` returns.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum PhaseTag {
     Betting,
     Dealing,
@@ -66,7 +84,9 @@ pub enum PhaseTag {
 }
 
 /// Structured, language-neutral tags front-ends turn into narration and glossary highlights.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Event {
     Natural { side: Side, total: u8 },
     Monkey { hand: Side, index: usize },
@@ -77,7 +97,9 @@ pub enum Event {
 }
 
 /// The single serializable view a front-end renders.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoundSnapshot {
     pub phase: PhaseTag,
     pub player: HandView,
@@ -94,7 +116,9 @@ pub struct RoundSnapshot {
 }
 
 /// A command that could not be applied. The session is unchanged on `Err`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum CommandError {
     WrongPhase { expected: PhaseTag, found: PhaseTag },
     BetBelowMinimum { min: i64, got: i64 },
@@ -612,6 +636,38 @@ mod tests {
         s.deal_round().unwrap();
         let err = s.new_shoe().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
+    }
+
+    #[test]
+    fn round_snapshot_serde_round_trips() {
+        // Play a full round so the snapshot is richly populated.
+        let mut session = Session::new(SessionConfig {
+            starting_bankroll: 100_000,
+            table_min: 100,
+            table_max: 10_000,
+            ruleset: Ruleset::Commission,
+            seed: 42,
+        });
+        session
+            .place_bet(BetKind::Main(BetSpot::Player), 500)
+            .unwrap();
+        session.deal_round().unwrap();
+        let snapshot = session.settle().unwrap();
+
+        let json = serde_json::to_string(&snapshot).expect("serialize");
+        let back: RoundSnapshot = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(snapshot, back);
+    }
+
+    #[test]
+    fn command_error_serde_round_trips() {
+        let err = CommandError::WrongPhase {
+            expected: PhaseTag::Betting,
+            found: PhaseTag::Dealing,
+        };
+        let json = serde_json::to_string(&err).expect("serialize");
+        let back: CommandError = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(err, back);
     }
 }
 
