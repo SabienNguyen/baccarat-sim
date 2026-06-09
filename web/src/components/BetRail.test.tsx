@@ -1,0 +1,62 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { BetRail } from "./BetRail";
+import { bettingSnapshot, dealingSnapshot } from "../test/fixtures";
+import type { BetKind } from "../engine/types";
+
+test("placing a bet calls onPlaceBet with the spot's BetKind", async () => {
+  const onPlaceBet = vi.fn();
+  render(
+    <BetRail
+      snapshot={bettingSnapshot()}
+      selectedChip={2500}
+      onSelectChip={vi.fn()}
+      onPlaceBet={onPlaceBet}
+      onClear={vi.fn()}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Bet Player" }));
+  const expected: BetKind = { Main: "Player" };
+  expect(onPlaceBet).toHaveBeenCalledWith(expected);
+});
+
+test("selecting a chip calls onSelectChip with the denomination", async () => {
+  const onSelectChip = vi.fn();
+  render(
+    <BetRail
+      snapshot={bettingSnapshot()}
+      selectedChip={2500}
+      onSelectChip={onSelectChip}
+      onPlaceBet={vi.fn()}
+      onClear={vi.fn()}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "$500.00 chip" }));
+  expect(onSelectChip).toHaveBeenCalledWith(50000);
+});
+
+test("bet spots are disabled outside the Betting phase", () => {
+  render(
+    <BetRail
+      snapshot={dealingSnapshot()}
+      selectedChip={2500}
+      onSelectChip={vi.fn()}
+      onPlaceBet={vi.fn()}
+      onClear={vi.fn()}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Bet Player" })).toBeDisabled();
+});
+
+test("lists staged bets with formatted amounts", () => {
+  render(
+    <BetRail
+      snapshot={dealingSnapshot()}
+      selectedChip={2500}
+      onSelectChip={vi.fn()}
+      onPlaceBet={vi.fn()}
+      onClear={vi.fn()}
+    />,
+  );
+  expect(screen.getByText(/Player.*\$5\.00/)).toBeInTheDocument();
+});
