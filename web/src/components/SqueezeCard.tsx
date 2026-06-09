@@ -6,6 +6,8 @@ import { isFaceUp } from "../cards";
 import { actionForProgress, PEEK_AT } from "../squeeze";
 
 const DRAG_DISTANCE_PX = 120;
+/** Pointer travel (px) above which a gesture counts as a drag, not a tap. */
+const TAP_SLOP_PX = 8;
 
 interface SqueezeCardProps {
   card: CardView;
@@ -22,6 +24,10 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const startY = useRef<number | null>(null);
   const peekedThisGesture = useRef(false);
   const revealedThisGesture = useRef(false);
+  const draggedThisGesture = useRef(false);
+  // A pointer drag is resolved by the pointer handlers; suppress the synthetic
+  // `click` the browser fires afterward so it doesn't advance the card again.
+  const suppressClick = useRef(false);
 
   const faceUp = isFaceUp(card);
 
@@ -35,11 +41,15 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     startY.current = e.clientY;
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;
+    draggedThisGesture.current = false;
     e.currentTarget.setPointerCapture?.(e.pointerId);
   }
 
   function handlePointerMove(e: ReactPointerEvent) {
     if (faceUp || startY.current === null) return;
+    if (Math.abs(startY.current - e.clientY) > TAP_SLOP_PX) {
+      draggedThisGesture.current = true;
+    }
     const progress = progressFrom(e.clientY);
     setBend(progress);
     const action = actionForProgress(progress);
@@ -56,11 +66,19 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   function handlePointerUp(e: ReactPointerEvent) {
     if (faceUp || startY.current === null) return;
     const progress = progressFrom(e.clientY);
-    startY.current = null;
+    // Releasing a started squeeze past the peek point commits the flip.
     if (!revealedThisGesture.current && progress >= PEEK_AT) {
       revealedThisGesture.current = true;
       onReveal();
     }
+    // If this gesture was a real drag (or already acted), the pointer path has
+    // resolved it; swallow the trailing synthetic click so it doesn't re-advance
+    // a card the user peeked-then-retreated from.
+    suppressClick.current =
+      draggedThisGesture.current ||
+      peekedThisGesture.current ||
+      revealedThisGesture.current;
+    startY.current = null;
     setBend(0);
   }
 
@@ -71,6 +89,11 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   }
 
   function handleClick() {
+    // Swallow the synthetic click that follows a resolved pointer drag.
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
     // Only treat as a tap when no drag gesture is in progress.
     if (startY.current !== null) return;
     advanceOneStep();
