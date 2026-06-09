@@ -1,0 +1,44 @@
+.card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 72px;
+  border: 2px solid #222;
+  border-radius: 6px;
+  margin: 2px;
+  font-weight: bold;
+  user-select: none;
+  position: relative;
+  transition: transform 120ms ease;
+}
+.card-back {
+  background: repeating-linear-gradient(45deg, #334, #334 4px, #445 4px, #445 8px);
+}
+.card-face {
+  background: #fefefe;
+  flex-direction: column;
+}
+.card-face[data-color="red"],
+.card-sliver[data-color="red"] {
+  color: #c0202a;
+}
+.card-face[data-color="black"],
+.card-sliver[data-color="black"] {
+  color: #111;
+}
+.card-sliver {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: #fefefe;
+  padding: 1px 3px;
+  font-size: 12px;
+  line-height: 1;
+}
+.card-rank {
+  font-size: 18px;
+}
+.card-suit {
+  font-size: 16px;
+}

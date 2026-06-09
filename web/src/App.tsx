@@ -2,6 +2,7 @@ import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
 import { defaultStore } from "./store/useGameStore";
+import { hiddenIndices } from "./cards";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail } from "./components/BetRail";
@@ -21,9 +22,15 @@ export function App({ store }: AppProps = {}) {
   const placeSelectedBet = useStore(active, (s) => s.placeSelectedBet);
   const clearBets = useStore(active, (s) => s.clearBets);
   const deal = useStore(active, (s) => s.deal);
+  const peek = useStore(active, (s) => s.peek);
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
   const newShoe = useStore(active, (s) => s.newShoe);
+
+  const revealAll = () => {
+    for (const i of hiddenIndices(snapshot.player.cards)) reveal("Player", i);
+    for (const i of hiddenIndices(snapshot.banker.cards)) reveal("Banker", i);
+  };
 
   return (
     <main>
@@ -31,12 +38,24 @@ export function App({ store }: AppProps = {}) {
       <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
         <Hud snapshot={snapshot} lastError={lastError} />
         <div>
-          <Hand side="Player" hand={snapshot.player} />
-          <Hand side="Banker" hand={snapshot.banker} />
+          <Hand
+            side="Player"
+            hand={snapshot.player}
+            phase={snapshot.phase}
+            onPeek={(i) => peek("Player", i)}
+            onReveal={(i) => reveal("Player", i)}
+          />
+          <Hand
+            side="Banker"
+            hand={snapshot.banker}
+            phase={snapshot.phase}
+            onPeek={(i) => peek("Banker", i)}
+            onReveal={(i) => reveal("Banker", i)}
+          />
           <Controls
             snapshot={snapshot}
             onDeal={deal}
-            onReveal={reveal}
+            onRevealAll={revealAll}
             onSettle={settle}
             onNewShoe={newShoe}
           />
