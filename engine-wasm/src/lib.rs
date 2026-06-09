@@ -83,7 +83,7 @@ pub fn glossary() -> Glossary {
 mod tests {
     use super::*;
     use baccarat_engine::session::PhaseTag;
-    use baccarat_engine::settle::Ruleset;
+    use baccarat_engine::settle::{BetSpot, Ruleset};
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
@@ -98,5 +98,45 @@ mod tests {
         let snap = session.snapshot();
         assert_eq!(snap.phase, PhaseTag::Betting);
         assert_eq!(snap.bankroll, 100_000);
+    }
+
+    #[wasm_bindgen_test]
+    fn full_round_reaches_settled() {
+        let mut session = WasmSession::new(SessionConfig {
+            starting_bankroll: 100_000,
+            table_min: 100,
+            table_max: 10_000,
+            ruleset: Ruleset::Commission,
+            seed: 7,
+        });
+        session
+            .place_bet(BetKind::Main(BetSpot::Player), 500)
+            .expect("bet accepted");
+        session.deal_round().expect("deal");
+        let snap = session.settle().expect("settle");
+        assert_eq!(snap.phase, PhaseTag::Settled);
+        assert!(snap.outcome.is_some());
+        assert!(snap.payouts.is_some());
+    }
+
+    #[wasm_bindgen_test]
+    fn wrong_phase_command_throws() {
+        let mut session = WasmSession::new(SessionConfig {
+            starting_bankroll: 100_000,
+            table_min: 100,
+            table_max: 10_000,
+            ruleset: Ruleset::Commission,
+            seed: 7,
+        });
+        // settle() before any deal is the wrong phase -> Err -> thrown JsValue.
+        let result = session.settle();
+        assert!(result.is_err(), "expected a thrown error for wrong-phase settle");
+    }
+
+    #[wasm_bindgen_test]
+    fn glossary_export_is_nonempty_and_has_monkey() {
+        let Glossary(entries) = glossary();
+        assert!(entries.len() >= 20);
+        assert!(entries.iter().any(|e| e.term == "monkey"));
     }
 }
