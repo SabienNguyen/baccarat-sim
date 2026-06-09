@@ -3,3 +3,6 @@ node_modules/
 target/
 pkg/
 dist/
+engine-wasm/pkg/
+smoke/node_modules/
+smoke/dist/
