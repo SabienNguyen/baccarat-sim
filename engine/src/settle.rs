@@ -1,6 +1,7 @@
 use crate::round::{Outcome, RoundResult};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BetSpot {
     Player,
     Banker,
@@ -40,7 +41,7 @@ pub fn settle(bet: Bet, outcome: Outcome) -> i64 {
 }
 
 /// Which commission rules apply to the main Banker bet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Ruleset {
     /// Traditional: 5% commission on banker wins.
     Commission,

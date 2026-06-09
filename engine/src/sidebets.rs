@@ -1,8 +1,9 @@
 use crate::hand::Hand;
 use crate::round::{Outcome, RoundResult};
+use serde::{Deserialize, Serialize};
 
 /// Which main hand a side bet refers to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BetSide {
     Player,
     Banker,
@@ -394,7 +395,7 @@ mod tiger_tests {
 }
 
 /// All supported side bets, for uniform settlement by front-ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SideBet {
     PlayerPair,
     BankerPair,
