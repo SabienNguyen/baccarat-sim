@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 
 /// How a session is configured at creation. All money is in cents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct SessionConfig {
     pub starting_bankroll: i64,
     pub table_min: i64,
@@ -19,6 +21,8 @@ pub struct SessionConfig {
 
 /// A bet kind: a main-bet spot or a side bet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum BetKind {
     Main(BetSpot),
     Side(SideBet),
@@ -26,6 +30,8 @@ pub enum BetKind {
 
 /// A staged or resolved bet. `amount` is the stake in cents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct PlacedBet {
     pub kind: BetKind,
     pub amount: i64,
@@ -33,6 +39,8 @@ pub struct PlacedBet {
 
 /// A resolved bet's net result in cents (profit, -stake, or 0 push).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BetPayout {
     pub bet: PlacedBet,
     pub net: i64,
@@ -40,12 +48,16 @@ pub struct BetPayout {
 
 /// The corner-squeeze hint: only the card's suit shows first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Pip {
     pub suit: Suit,
 }
 
 /// A card as the front-end may see it. Unrevealed cards hide their identity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum CardView {
     FaceDown,
     Peeked { sliver: Pip },
@@ -54,6 +66,8 @@ pub enum CardView {
 
 /// A hand as rendered to the front-end. `total` is `None` until every card is face up.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct HandView {
     pub cards: Vec<CardView>,
     pub total: Option<u8>,
@@ -61,6 +75,8 @@ pub struct HandView {
 
 /// The phase tag carried in a snapshot. `Settled` is the transient view `settle()` returns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum PhaseTag {
     Betting,
     Dealing,
@@ -69,6 +85,8 @@ pub enum PhaseTag {
 
 /// Structured, language-neutral tags front-ends turn into narration and glossary highlights.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Event {
     Natural { side: Side, total: u8 },
     Monkey { hand: Side, index: usize },
@@ -80,6 +98,8 @@ pub enum Event {
 
 /// The single serializable view a front-end renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct RoundSnapshot {
     pub phase: PhaseTag,
     pub player: HandView,
@@ -97,6 +117,8 @@ pub struct RoundSnapshot {
 
 /// A command that could not be applied. The session is unchanged on `Err`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum CommandError {
     WrongPhase { expected: PhaseTag, found: PhaseTag },
     BetBelowMinimum { min: i64, got: i64 },

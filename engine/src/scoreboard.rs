@@ -22,6 +22,8 @@ impl RoundRecord {
 
 /// Winning side of a decided round (no Tie — ties never occupy a Big Road cell).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Side {
     Player,
     Banker,
@@ -29,6 +31,8 @@ pub enum Side {
 
 /// Bead Plate: one cell per round, in play order (ties included).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BeadCell {
     pub outcome: Outcome,
     pub player_pair: bool,
@@ -36,12 +40,16 @@ pub struct BeadCell {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BeadPlate {
     pub cells: Vec<BeadCell>,
 }
 
 /// Big Road: a win cell. Ties resolved on this cell bump `ties`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BigRoadCell {
     pub side: Side,
     pub ties: u8,
@@ -51,12 +59,16 @@ pub struct BigRoadCell {
 
 /// Logical columns (unbounded height); the 6-row dragon-tail bend is front-end layout.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct BigRoad {
     pub columns: Vec<Vec<BigRoadCell>>,
 }
 
 /// A derived-road mark. Red = pattern, Blue = choppy. Not tied to Player/Banker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Mark {
     Red,
     Blue,
@@ -64,12 +76,16 @@ pub enum Mark {
 
 /// Derived road: run-based columns (new column when the color changes).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct DerivedRoad {
     pub columns: Vec<Vec<Mark>>,
 }
 
 /// The full scoreboard derived from a round history.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct ScoreboardSnapshot {
     pub bead_plate: BeadPlate,
     pub big_road: BigRoad,

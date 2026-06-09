@@ -2,6 +2,8 @@ use crate::round::{Outcome, RoundResult};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum BetSpot {
     Player,
     Banker,
@@ -42,6 +44,8 @@ pub fn settle(bet: Bet, outcome: Outcome) -> i64 {
 
 /// Which commission rules apply to the main Banker bet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum Ruleset {
     /// Traditional: 5% commission on banker wins.
     Commission,
