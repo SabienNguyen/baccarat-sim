@@ -1,0 +1,8 @@
+{
+  "name": "baccarat-simulator",
+  "private": true,
+  "workspaces": ["web", "smoke"],
+  "scripts": {
+    "build:wasm": "wasm-pack build engine-wasm --target bundler"
+  }
+}
