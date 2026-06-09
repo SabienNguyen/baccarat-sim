@@ -9,6 +9,7 @@ pub mod settle;
 pub mod sidebets;
 pub mod scoreboard;
 pub mod session;
+pub mod glossary;
 
 #[cfg(test)]
 mod smoke {
