@@ -22,13 +22,19 @@ state to feed it.
 **In scope (the visual skin):**
 - Global theme tokens + swirl felt background + app grid layout + web-font import.
 - Retro restyle of: Hud, Card, SqueezeCard, Hand, BetRail, Controls, Scoreboard.
-- Shoe counter (`remaining/total`) in the scoreboard dock.
 - One new presentational component: `WinPopup` (floating `+$95`-style payout pop-up).
 - UI-only store state `lastDelta` (bankroll change across `settle()`) to drive the pop-up.
 
 **Out of scope (deferred to Plan 4 — Immersion & Teaching):**
 - Dealer narration line, contextual glossary hover, explain-the-rule readout,
   simulated other-player seats.
+
+**Deferred (need engine/snapshot fields that do not exist yet):**
+- **Shoe counter** (`remaining/total`) and **commission tally** in the HUD. `RoundSnapshot`
+  (`engine/src/session.rs`) exposes no cards-remaining or commission field; surfacing
+  them would require an engine change, which this skin-only plan does not make. They land
+  when a later plan extends the snapshot. The HUD restyle surfaces only fields that
+  already exist: bankroll, phase, table min/max, outcome, payouts.
 
 **Explicitly not done:**
 - Real binary pixel-art card sprites / bitmap font files (CSS-drawn faces + Google
@@ -85,9 +91,9 @@ the HUD panel. Responsive collapse is out of scope.
 Each item is a CSS + markup-class change only; component props, callbacks, roles, and
 ARIA labels are preserved so existing tests pass unchanged.
 
-- **Hud** — beveled left panel; bankroll / current bet / table min-max / commission
-  tally rendered as pixel-font readouts. Surfaces fields already present in the
-  snapshot; no new data requirements.
+- **Hud** — beveled left panel; bankroll / phase / table min-max / outcome / payouts
+  rendered as pixel-font readouts. Surfaces only fields already present in the
+  snapshot; no new data requirements (commission tally is deferred — see §2).
 - **Card / SqueezeCard / Hand** — chunky `--ink` outline, drop shadow, pixel-font
   rank, pip layout, patterned card back. The squeeze corner-bend keeps its existing
   `bend` transform and the `Peeked` suit-sliver clip.
@@ -98,7 +104,7 @@ ARIA labels are preserved so existing tests pass unchanged.
 - **Controls** — beveled "plastic" buttons (Deal / Reveal all / Settle / New shoe),
   with disabled states styled.
 - **Scoreboard** — right-dock grid cells for the roads (bead plate, big road, derived
-  roads), plus a **shoe counter** showing `remaining/total` in the dock corner.
+  roads). (Shoe counter deferred — see §2.)
 
 ## 6. New component — `WinPopup`
 
@@ -128,7 +134,6 @@ This is the only store touch in the plan and the only new behavior surface.
     `null`/`0`; sign/color class correct.
   - Store `lastDelta` — computed correctly on `settle()` (positive win, negative loss,
     zero/push); reset to `null` on `deal()`/`clearBets()`.
-  - Shoe counter — renders `remaining/total` from the snapshot.
 - **CSS is not unit-tested.** Correctness lives in the unchanged behavior tests; the
   visual skin is verified by eye via `npm --workspace web run dev`. Typecheck
   (`tsc --noEmit`) must stay clean.
