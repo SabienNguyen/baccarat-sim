@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Hud } from "./Hud";
 import { bettingSnapshot, settledSnapshot } from "../test/fixtures";
 
@@ -22,4 +23,21 @@ test("shows an error message when a command was rejected", () => {
     />,
   );
   expect(screen.getByRole("alert")).toHaveTextContent(/WrongPhase/);
+});
+
+test("house actions live in the panel: Reset bank and Lobby fire their handlers", async () => {
+  const onResetBankroll = vi.fn();
+  const onLeave = vi.fn();
+  render(
+    <Hud
+      snapshot={bettingSnapshot()}
+      lastError={null}
+      onResetBankroll={onResetBankroll}
+      onLeave={onLeave}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Reset bank" }));
+  expect(onResetBankroll).toHaveBeenCalledOnce();
+  await userEvent.click(screen.getByRole("button", { name: "Lobby" }));
+  expect(onLeave).toHaveBeenCalledOnce();
 });

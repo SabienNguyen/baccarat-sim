@@ -5,6 +5,8 @@ import "./hud.css";
 interface HudProps {
   snapshot: RoundSnapshot;
   lastError: CommandError | null;
+  onResetBankroll?: () => void;
+  onLeave?: () => void;
 }
 
 /** Format a signed net amount, e.g. 500 -> "+$5.00", -500 -> "-$5.00". */
@@ -19,7 +21,7 @@ function describeBet(kind: RoundSnapshot["bets"][number]["kind"]): string {
   return Object.keys(kind.Side)[0];
 }
 
-export function Hud({ snapshot, lastError }: HudProps) {
+export function Hud({ snapshot, lastError, onResetBankroll, onLeave }: HudProps) {
   return (
     <section aria-label="HUD" className="hud panel">
       <h1 className="hud-title">Baccarat Simulator</h1>
@@ -65,6 +67,21 @@ export function Hud({ snapshot, lastError }: HudProps) {
         <p role="alert" className="hud-error">
           {JSON.stringify(lastError)}
         </p>
+      )}
+
+      {(onResetBankroll || onLeave) && (
+        <div className="hud-actions">
+          {onResetBankroll && (
+            <button type="button" className="hud-action" onClick={onResetBankroll}>
+              Reset bank
+            </button>
+          )}
+          {onLeave && (
+            <button type="button" className="hud-action" onClick={onLeave}>
+              Lobby
+            </button>
+          )}
+        </div>
       )}
     </section>
   );

@@ -78,7 +78,15 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
 
   return (
     <div className="app">
-      <Hud snapshot={snapshot} lastError={lastError} />
+      <Hud
+        snapshot={snapshot}
+        lastError={lastError}
+        onResetBankroll={() => {
+          clearBankroll(tier);
+          window.location.reload();
+        }}
+        onLeave={onLeave}
+      />
       <main className="stage">
         <DealerLine snapshot={snapshot} />
         <div className="card-stage">
@@ -110,11 +118,6 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
           onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
-          onResetBankroll={() => {
-            clearBankroll(tier);
-            window.location.reload();
-          }}
-          onLeave={onLeave}
         />
         <BetRail
           snapshot={snapshot}
