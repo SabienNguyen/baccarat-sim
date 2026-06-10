@@ -25,7 +25,7 @@ export function VictoryModal({ bankroll, goal, onKeepPlaying, onLobby }: Victory
             Keep playing
           </button>
           <button type="button" className="btn btn--gold" onClick={onLobby}>
-            Move up — Lobby
+            Back to lobby
           </button>
         </div>
       </div>

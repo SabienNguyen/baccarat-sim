@@ -19,6 +19,6 @@ test("celebrates the run and offers both exits", async () => {
   expect(dialog).toHaveTextContent(/past \$5,000\.00/);
   await userEvent.click(screen.getByRole("button", { name: "Keep playing" }));
   expect(onKeepPlaying).toHaveBeenCalledOnce();
-  await userEvent.click(screen.getByRole("button", { name: "Move up — Lobby" }));
+  await userEvent.click(screen.getByRole("button", { name: "Back to lobby" }));
   expect(onLobby).toHaveBeenCalledOnce();
 });
