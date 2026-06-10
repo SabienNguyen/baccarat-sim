@@ -61,7 +61,7 @@ export function ExchangeModal({ denoms, rack, change, onBreak, onAcquire, onClos
                 disabled={acquire(rack, denom, denoms) === null}
                 onClick={() => onAcquire(denom)}
               >
-                Get one
+                Get
               </button>
             </li>
           ))}

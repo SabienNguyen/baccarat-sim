@@ -20,16 +20,16 @@ test("break is offered only when you hold a breakable chip", async () => {
   expect(within(rows[0]).getByRole("button", { name: "Break" })).toBeDisabled();
 });
 
-test("any chip is purchasable when the rack covers it", async () => {
+test("any chip is gettable when the rack covers it", async () => {
   const onAcquire = vi.fn();
   const rack = addChips(emptyRack(), [2500, 2500, 2500, 2500]); // 4x$25 = $100
   render(
     <ExchangeModal denoms={CHIP_DENOMINATIONS} rack={rack} change={0} onBreak={vi.fn()} onAcquire={onAcquire} onClose={vi.fn()} />,
   );
   const rows = screen.getAllByRole("listitem");
-  const hundred = within(rows[2]).getByRole("button", { name: "Get one" });
+  const hundred = within(rows[2]).getByRole("button", { name: "Get" });
   expect(hundred).toBeEnabled(); // $100: affordable
-  expect(within(rows[1]).getByRole("button", { name: "Get one" })).toBeDisabled(); // $500: not
+  expect(within(rows[1]).getByRole("button", { name: "Get" })).toBeDisabled(); // $500: not
   await userEvent.click(hundred);
   expect(onAcquire).toHaveBeenCalledWith(10000);
 });
