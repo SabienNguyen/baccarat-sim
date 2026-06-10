@@ -10,6 +10,7 @@ import { BetRail } from "./components/BetRail";
 import { Controls } from "./components/Controls";
 import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
+import { DealerLine } from "./components/DealerLine";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -62,6 +63,7 @@ export function App({ store }: AppProps = {}) {
             onReveal={(i) => reveal("Banker", i)}
           />
         </div>
+        <DealerLine snapshot={snapshot} />
         <Controls
           snapshot={snapshot}
           onDeal={deal}
