@@ -6,6 +6,7 @@ interface ControlsProps {
   onDeal: () => void;
   onRevealAll: () => void;
   onSettle: () => void;
+  onNewHand?: () => void;
   onNewShoe: () => void;
   explainOn?: boolean;
   onToggleExplain?: () => void;
@@ -16,12 +17,14 @@ export function Controls({
   onDeal,
   onRevealAll,
   onSettle,
+  onNewHand,
   onNewShoe,
   explainOn,
   onToggleExplain,
 }: ControlsProps) {
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
+  const settled = snapshot.phase === "Settled";
   const hasBets = snapshot.bets.length > 0;
 
   return (
@@ -35,7 +38,10 @@ export function Controls({
       <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
         Settle
       </button>
-      <button type="button" className="btn" onClick={onNewShoe}>
+      <button type="button" className="btn" disabled={!settled} onClick={onNewHand}>
+        Next hand
+      </button>
+      <button type="button" className="btn" disabled={dealing} onClick={onNewShoe}>
         New Shoe
       </button>
       <button

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
@@ -12,6 +13,8 @@ import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
+import { CutDeckModal } from "./components/CutDeckModal";
+import { Dealer } from "./components/Dealer";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -19,6 +22,7 @@ interface AppProps {
 
 export function App({ store }: AppProps = {}) {
   const active = store ?? defaultStore();
+  const [cutting, setCutting] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
   const selectedChip = useStore(active, (s) => s.selectedChip);
   const lastError = useStore(active, (s) => s.lastError);
@@ -31,7 +35,9 @@ export function App({ store }: AppProps = {}) {
   const peek = useStore(active, (s) => s.peek);
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
+  const newHand = useStore(active, (s) => s.newHand);
   const newShoe = useStore(active, (s) => s.newShoe);
+  const placeChip = useStore(active, (s) => s.placeChip);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
 
@@ -48,6 +54,7 @@ export function App({ store }: AppProps = {}) {
     <div className="app">
       <Hud snapshot={snapshot} lastError={lastError} />
       <main className="stage">
+        <Dealer phase={snapshot.phase} />
         <div className="card-stage">
           <Hand
             side="Player"
@@ -72,7 +79,8 @@ export function App({ store }: AppProps = {}) {
           onDeal={deal}
           onRevealAll={revealAll}
           onSettle={settle}
-          onNewShoe={newShoe}
+          onNewHand={newHand}
+          onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
         />
@@ -81,6 +89,7 @@ export function App({ store }: AppProps = {}) {
           selectedChip={selectedChip}
           onSelectChip={setSelectedChip}
           onPlaceBet={placeSelectedBet}
+          onPlaceChip={placeChip}
           onClear={clearBets}
         />
       </main>
@@ -89,6 +98,15 @@ export function App({ store }: AppProps = {}) {
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
       <WinPopup key={settleSeq} amount={lastDelta} />
+      {cutting && (
+        <CutDeckModal
+          onCut={() => {
+            newShoe();
+            setCutting(false);
+          }}
+          onCancel={() => setCutting(false)}
+        />
+      )}
     </div>
   );
 }

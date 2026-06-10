@@ -120,3 +120,25 @@ test("explain mode is off by default and toggles", () => {
   store.getState().toggleExplain();
   expect(store.getState().explainOn).toBe(false);
 });
+
+test("newHand refreshes to the session's betting snapshot and clears the delta", () => {
+  const betting = snapshotWith({ phase: "Betting", bankroll: 100000 });
+  const settled = snapshotWith({ phase: "Settled", bankroll: 109500 });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: settled }, betting));
+  store.getState().settle();
+  expect(store.getState().snapshot.phase).toBe("Settled");
+  expect(store.getState().lastDelta).toBe(9500);
+  store.getState().newHand();
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  expect(store.getState().lastDelta).toBeNull();
+});
+
+test("placeChip places the given amount on a spot", () => {
+  const placed = snapshotWith({ bets: [{ kind: { Main: "Player" }, amount: 50000 }] });
+  const placeBet = vi.fn(() => ({ ok: true, snapshot: placed }) as CommandResult);
+  const session: GameSession = { ...fakeSession({ ok: true, snapshot: placed }), placeBet };
+  const store = createGameStore(session);
+  store.getState().placeChip({ Main: "Player" }, 50000);
+  expect(placeBet).toHaveBeenCalledWith({ Main: "Player" }, 50000);
+  expect(store.getState().snapshot.bets).toHaveLength(1);
+});

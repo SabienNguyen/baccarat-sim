@@ -1,0 +1,87 @@
+.cut-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.cut-modal {
+  max-width: min(680px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.cut-modal h3 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--gold);
+  margin: 0;
+}
+.cut-modal p {
+  margin: 0;
+  font-size: 16px;
+  color: #d8cfb0;
+}
+.deck {
+  display: flex;
+  gap: 1px;
+  padding: 14px 10px;
+  background: var(--panel-bevel-lo);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+}
+.deck-card {
+  width: 12px;
+  height: 84px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(45deg, #3a2a55, #3a2a55 3px, #4a3a6a 3px, #4a3a6a 6px);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  position: relative;
+}
+.deck-card:hover {
+  outline: 2px solid rgba(244, 196, 48, 0.6);
+}
+.deck-card.is-cut {
+  background: var(--chip-red);
+  box-shadow: 0 0 8px rgba(192, 32, 42, 0.9);
+}
+.cut-card-source {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: #fff;
+  background: var(--chip-red);
+  border: 3px solid var(--ink);
+  border-radius: 4px;
+  padding: 8px 22px;
+  cursor: grab;
+  text-shadow: 1px 1px 0 var(--ink);
+}
+.cut-card-source:active {
+  cursor: grabbing;
+}
+.cut-actions {
+  display: flex;
+  gap: 12px;
+}
+.cut-modal .btn {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: #fff;
+  background: var(--chip-red);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+.cut-modal .btn:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+}
+.cut-modal .cut-cancel {
+  background: var(--panel-bevel-hi);
+}
