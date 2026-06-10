@@ -9,6 +9,10 @@ export interface GameState {
   snapshot: RoundSnapshot;
   selectedChip: number;
   lastError: CommandError | null;
+  /** Bankroll change across the last settle, in cents; null until/after a settle. */
+  lastDelta: number | null;
+  /** Increments on each settle so the win pop-up can remount via React key. */
+  settleSeq: number;
   setSelectedChip: (cents: number) => void;
   placeSelectedBet: (kind: BetKind) => void;
   clearBets: () => void;
@@ -29,13 +33,31 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       snapshot: session.snapshot(),
       selectedChip: CHIP_DENOMINATIONS[0],
       lastError: null,
+      lastDelta: null,
+      settleSeq: 0,
       setSelectedChip: (cents) => set({ selectedChip: cents }),
       placeSelectedBet: (kind) => apply(session.placeBet(kind, get().selectedChip)),
-      clearBets: () => apply(session.clearBets()),
-      deal: () => apply(session.deal()),
+      clearBets: () => {
+        set({ lastDelta: null });
+        apply(session.clearBets());
+      },
+      deal: () => {
+        set({ lastDelta: null });
+        apply(session.deal());
+      },
       peek: (side, index) => apply(session.peek(side, index)),
       reveal: (side, index) => apply(session.reveal(side, index)),
-      settle: () => apply(session.settle()),
+      settle: () => {
+        const before = session.snapshot().bankroll;
+        const result = session.settle();
+        if (result.ok) {
+          set({
+            lastDelta: result.snapshot.bankroll - before,
+            settleSeq: get().settleSeq + 1,
+          });
+        }
+        apply(result);
+      },
       newShoe: () => apply(session.newShoe()),
     };
   });

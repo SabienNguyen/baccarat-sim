@@ -69,3 +69,45 @@ test("setSelectedChip updates the active denomination", () => {
   store.getState().setSelectedChip(50000);
   expect(store.getState().selectedChip).toBe(50000);
 });
+
+test("settle records the positive bankroll delta as lastDelta and bumps settleSeq", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 100000 });
+  const after = snapshotWith({ phase: "Settled", bankroll: 109500 });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: after }, before));
+  expect(store.getState().lastDelta).toBeNull();
+  expect(store.getState().settleSeq).toBe(0);
+  store.getState().settle();
+  expect(store.getState().lastDelta).toBe(9500);
+  expect(store.getState().settleSeq).toBe(1);
+});
+
+test("settle records a negative delta on a loss", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 100000 });
+  const after = snapshotWith({ phase: "Settled", bankroll: 99500 });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: after }, before));
+  store.getState().settle();
+  expect(store.getState().lastDelta).toBe(-500);
+});
+
+test("deal and clearBets reset lastDelta to null", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 100000 });
+  const after = snapshotWith({ phase: "Settled", bankroll: 109500 });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: after }, before));
+  store.getState().settle();
+  expect(store.getState().lastDelta).toBe(9500);
+  store.getState().deal();
+  expect(store.getState().lastDelta).toBeNull();
+  store.getState().settle();
+  expect(store.getState().lastDelta).toBe(9500);
+  store.getState().clearBets();
+  expect(store.getState().lastDelta).toBeNull();
+});
+
+test("a failed settle leaves lastDelta untouched", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 100000 });
+  const err: CommandError = { WrongPhase: { expected: "Dealing", found: "Settled" } };
+  const store = createGameStore(fakeSession({ ok: false, error: err }, before));
+  store.getState().settle();
+  expect(store.getState().lastDelta).toBeNull();
+  expect(store.getState().settleSeq).toBe(0);
+});
