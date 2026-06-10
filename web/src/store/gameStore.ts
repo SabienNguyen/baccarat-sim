@@ -11,6 +11,7 @@ import {
   breakChip,
   colorUp,
   mintChange,
+  acquire,
 } from "../chips";
 
 export { CHIP_DENOMINATIONS };
@@ -50,6 +51,8 @@ export interface GameState {
   exchangeBreak: (denom: number) => void;
   /** Ask the dealer to color up smaller chips into this denomination. */
   exchangeColorUp: (denom: number) => void;
+  /** Buy one chip of this denomination with whatever you hold. */
+  exchangeAcquire: (denom: number) => void;
   clearBets: () => void;
   deal: () => void;
   peek: (side: Side, index: number) => void;
@@ -141,6 +144,11 @@ export function createGameStore(
       exchangeColorUp: (denom) => {
         const next = colorUp(get().rack, denom, denoms);
         if (next !== null) set({ rack: next });
+      },
+
+      exchangeAcquire: (denom) => {
+        const next = acquire(get().rack, denom, denoms);
+        if (next !== null) set({ rack: next.rack, change: get().change + next.loose });
       },
 
       clearBets: () => {

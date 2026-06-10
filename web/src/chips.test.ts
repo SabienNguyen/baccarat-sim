@@ -1,5 +1,6 @@
 import {
   CHIP_DENOMINATIONS,
+  acquire,
   buyIn,
   toChips,
   rackTotal,
@@ -91,4 +92,27 @@ test("colorUp fails when the smaller chips can't make the amount", () => {
 test("mintChange folds loose cents into $1 chips at the dollar", () => {
   expect(mintChange(150)).toEqual({ chips: [100], change: 50 });
   expect(mintChange(75)).toEqual({ chips: [], change: 75 });
+});
+
+test("acquire: any chip is available if the rack covers it", () => {
+  // color-up style: exact payment from smaller chips
+  const smalls = addChips(emptyRack(), [2500, 2500, 2500, 2500]);
+  const up = acquire(smalls, 10000);
+  expect(up).not.toBeNull();
+  expect(up!.rack[10000]).toBe(1);
+  expect(rackTotal(up!.rack) + up!.loose).toBe(10000);
+
+  // break-down style: overshoot a big chip and take change in chips
+  const HIGH = [10000, 50000, 100000, 500000, 2500000, 10000000];
+  const plates = addChips(emptyRack(HIGH), [10000000]); // one $100k
+  const got = acquire(plates, 2500000, HIGH); // want a $25k
+  expect(got).not.toBeNull();
+  expect(got!.rack[2500000]).toBe(1 + 3); // the bought one + 3 in change
+  expect(got!.rack[10000000]).toBe(0);
+  expect(rackTotal(got!.rack) + got!.loose).toBe(10000000);
+});
+
+test("acquire refuses when the rack can't cover the chip", () => {
+  const rack = addChips(emptyRack(), [2500]);
+  expect(acquire(rack, 10000)).toBeNull();
 });

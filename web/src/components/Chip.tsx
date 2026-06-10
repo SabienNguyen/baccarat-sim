@@ -10,6 +10,7 @@ export const CHIP_COLOR: Record<number, string> = {
   100000: "chip--gold",
   500000: "chip--orange",
   2500000: "chip--teal",
+  10000000: "chip--platinum",
 };
 
 /** Short face value for the chip art, e.g. 2500 -> "$25", 100000 -> "$1k". */

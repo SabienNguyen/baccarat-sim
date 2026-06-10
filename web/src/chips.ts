@@ -167,3 +167,32 @@ export function mintChange(
   const { chips, remainder } = toChips(change, denoms);
   return { chips, change: remainder };
 }
+
+/**
+ * Get one `denom` chip from the dealer, paying with whatever you hold —
+ * any chip is available if you have the money. Pays smallest chips first
+ * (disturbing the rack as little as possible) and takes change back in
+ * chips; cents that can't form a chip are returned as `loose`.
+ * Null only when the rack can't cover the chip.
+ */
+export function acquire(
+  rack: Rack,
+  denom: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): { rack: Rack; loose: number } | null {
+  if (rackTotal(rack) < denom) return null;
+  const next = { ...rack };
+  let paid = 0;
+  for (const d of asc(denoms)) {
+    while (paid < denom && (next[d] ?? 0) > 0) {
+      next[d] -= 1;
+      paid += d;
+    }
+    if (paid >= denom) break;
+  }
+  if (paid < denom) return null;
+  next[denom] = (next[denom] ?? 0) + 1;
+  const back = toChips(paid - denom, denoms);
+  for (const c of back.chips) next[c] = (next[c] ?? 0) + 1;
+  return { rack: next, loose: back.remainder };
+}

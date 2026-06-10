@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { Rack } from "../chips";
-import { breakChip, colorUp } from "../chips";
+import { breakChip, acquire } from "../chips";
 import { formatCents } from "../format";
 import { MiniChip, chipFace } from "./Chip";
 import "./exchange.css";
@@ -10,12 +10,12 @@ interface ExchangeModalProps {
   rack: Rack;
   change: number;
   onBreak: (denom: number) => void;
-  onColorUp: (denom: number) => void;
+  onAcquire: (denom: number) => void;
   onClose: () => void;
 }
 
 /** The dealer makes change: break big chips down, color small chips up. */
-export function ExchangeModal({ denoms, rack, change, onBreak, onColorUp, onClose }: ExchangeModalProps) {
+export function ExchangeModal({ denoms, rack, change, onBreak, onAcquire, onClose }: ExchangeModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -58,10 +58,10 @@ export function ExchangeModal({ denoms, rack, change, onBreak, onColorUp, onClos
               <button
                 type="button"
                 className="btn"
-                disabled={colorUp(rack, denom, denoms) === null}
-                onClick={() => onColorUp(denom)}
+                disabled={acquire(rack, denom, denoms) === null}
+                onClick={() => onAcquire(denom)}
               >
-                Color up
+                Get one
               </button>
             </li>
           ))}

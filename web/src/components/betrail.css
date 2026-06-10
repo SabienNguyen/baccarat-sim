@@ -299,3 +299,6 @@
 .chip--teal { background: #0f7c74; }
 .mini-chip.chip--orange { background: #d2691e; }
 .mini-chip.chip--teal { background: #0f7c74; }
+.chip--platinum { background: #cfd2d6; }
+.chip--platinum .chip-face { color: #1a1208; text-shadow: none; }
+.mini-chip.chip--platinum { background: #cfd2d6; }

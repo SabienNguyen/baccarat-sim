@@ -57,7 +57,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
   const placeHand = useStore(active, (s) => s.placeHand);
   const placeChip = useStore(active, (s) => s.placeChip);
   const exchangeBreak = useStore(active, (s) => s.exchangeBreak);
-  const exchangeColorUp = useStore(active, (s) => s.exchangeColorUp);
+  const exchangeAcquire = useStore(active, (s) => s.exchangeAcquire);
   const clearBets = useStore(active, (s) => s.clearBets);
   const deal = useStore(active, (s) => s.deal);
   const peek = useStore(active, (s) => s.peek);
@@ -155,7 +155,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
           rack={rack}
           change={change}
           onBreak={exchangeBreak}
-          onColorUp={exchangeColorUp}
+          onAcquire={exchangeAcquire}
           onClose={() => setExchanging(false)}
         />
       )}

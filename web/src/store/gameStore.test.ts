@@ -208,7 +208,7 @@ test("exchange: break and color up preserve the total", () => {
   store.getState().exchangeBreak(10000);
   expect(store.getState().rack[10000]).toBe(hundreds - 1);
   expect(chipsTotal(store)).toBe(1_000_000);
-  store.getState().exchangeColorUp(10000);
+  store.getState().exchangeAcquire(10000);
   expect(store.getState().rack[10000]).toBe(hundreds);
   expect(chipsTotal(store)).toBe(1_000_000);
 });
