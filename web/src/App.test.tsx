@@ -28,6 +28,7 @@ function fakeSession(initial: RoundSnapshot, spies: Partial<GameSession> = {}): 
 test("mounts the composed table with its core regions", () => {
   const store = createGameStore(fakeSession(bettingSnapshot()));
   render(<App store={store} />);
+  expect(screen.getByRole("heading", { name: "Baccarat Simulator" })).toBeInTheDocument();
   expect(screen.getByLabelText("HUD")).toBeInTheDocument();
   expect(screen.getByLabelText("Bet rail")).toBeInTheDocument();
   expect(screen.getByLabelText("Scoreboard")).toBeInTheDocument();

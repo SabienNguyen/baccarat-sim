@@ -48,6 +48,9 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       peek: (side, index) => apply(session.peek(side, index)),
       reveal: (side, index) => apply(session.reveal(side, index)),
       settle: () => {
+        // Read the pre-settle bankroll straight from the session (the engine's
+        // source of truth) rather than the store snapshot, so the delta is correct
+        // even if the store snapshot lags. Do not switch to get().snapshot here.
         const before = session.snapshot().bankroll;
         const result = session.settle();
         if (result.ok) {
