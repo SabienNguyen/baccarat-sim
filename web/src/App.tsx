@@ -137,7 +137,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         <Controls
           snapshot={snapshot}
           onDeal={deal}
-          onRevealAll={revealAll}
+          onRevealAll={seats === null ? revealAll : undefined}
           onSettle={settle}
           onNewHand={newHand}
           onNewShoe={() => setCutting(true)}

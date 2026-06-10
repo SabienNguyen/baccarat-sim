@@ -4,7 +4,8 @@ import "./controls.css";
 interface ControlsProps {
   snapshot: RoundSnapshot;
   onDeal: () => void;
-  onRevealAll: () => void;
+  /** Flip everything (single player; live tables follow squeeze rights). */
+  onRevealAll?: () => void;
   onSettle: () => void;
   onNewHand?: () => void;
   onNewShoe: () => void;
@@ -40,9 +41,11 @@ export function Controls({
           Sit out
         </button>
       )}
-      <button type="button" className="btn" disabled={!dealing} onClick={onRevealAll}>
-        Reveal all
-      </button>
+      {onRevealAll && (
+        <button type="button" className="btn" disabled={!dealing} onClick={onRevealAll}>
+          Reveal all
+        </button>
+      )}
       <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
         Settle
       </button>

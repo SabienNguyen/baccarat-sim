@@ -182,6 +182,7 @@ impl Table {
         if self.players.len() == before {
             return Err(TableError::NoSuchPlayer);
         }
+        self.dealer_flips();
         Ok(())
     }
 
@@ -279,6 +280,8 @@ impl Table {
         let player_squeezer = self.biggest_bettor(crate::settle::BetSpot::Player);
         let banker_squeezer = self.biggest_bettor(crate::settle::BetSpot::Banker);
         self.phase = Phase::Dealing { round, reveal, player_squeezer, banker_squeezer };
+        // sides nobody bet are the dealer's to flip, in order
+        self.dealer_flips();
         Ok(())
     }
 
@@ -300,6 +303,51 @@ impl Table {
             .map(|(id, _)| id)
     }
 
+    /// The house dealer's hands: any next-in-order card belonging to a side
+    /// nobody bet gets flipped by the dealer himself, cascading until a
+    /// player-held card is reached. (A Tie-only coup flips everything.)
+    fn dealer_flips(&mut self) {
+        loop {
+            let Phase::Dealing { reveal, player_squeezer, banker_squeezer, .. } = &mut self.phase
+            else {
+                return;
+            };
+            let sequence: [(Side, usize); 6] = [
+                (Side::Player, 0),
+                (Side::Player, 1),
+                (Side::Banker, 0),
+                (Side::Banker, 1),
+                (Side::Player, 2),
+                (Side::Banker, 2),
+            ];
+            let mut flipped = false;
+            for (h, i) in sequence {
+                let owner = match h {
+                    Side::Player => *player_squeezer,
+                    Side::Banker => *banker_squeezer,
+                };
+                let statuses = match h {
+                    Side::Player => &mut reveal.player,
+                    Side::Banker => &mut reveal.banker,
+                };
+                if i >= statuses.len() {
+                    continue; // that card wasn't drawn this coup
+                }
+                if statuses[i] == CardStatus::FaceUp {
+                    continue; // already exposed, next in order
+                }
+                if owner.is_none() {
+                    statuses[i] = CardStatus::FaceUp;
+                    flipped = true;
+                }
+                break; // stop at the first unexposed card either way
+            }
+            if !flipped {
+                return;
+            }
+        }
+    }
+
     pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
         self.check_rights(pid, hand)?;
         self.set_status(hand, index, CardStatus::Peeked)
@@ -308,7 +356,10 @@ impl Table {
     pub fn reveal(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
         self.check_rights(pid, hand)?;
         self.check_order(hand, index)?;
-        self.set_status(hand, index, CardStatus::FaceUp)
+        self.set_status(hand, index, CardStatus::FaceUp)?;
+        // a player's reveal can put house cards next in order
+        self.dealer_flips();
+        Ok(())
     }
 
     /// The squeeze belongs to the biggest bettor on that side, when there is one.
@@ -595,7 +646,7 @@ mod tests {
     fn no_view_ever_exposes_a_face_down_card() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
-        t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.deal().unwrap();
         let v = t.view_for(a).unwrap();
         for card in v.player.cards.iter().chain(v.banker.cards.iter()) {
@@ -708,17 +759,33 @@ mod tests {
     }
 
     #[test]
-    fn an_unbet_side_may_be_flipped_by_anyone() {
+    fn the_house_dealer_flips_unbet_sides_in_order() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
-        let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
-        t.sit_out(b).unwrap();
         t.deal().unwrap();
+        // a holds the Player hand, so nothing is exposed yet
+        let v = t.view_for(a).unwrap();
+        assert!(matches!(v.player.cards[0], crate::session::CardView::FaceDown));
+        // a exposes the Player hand; the dealer immediately flips the
+        // (unbet) Banker hand, since it's next in the ritual
         t.reveal(a, Side::Player, 0).unwrap();
         t.reveal(a, Side::Player, 1).unwrap();
-        // nobody bet Banker: even the sitting-out player may flip it
-        t.reveal(b, Side::Banker, 0).unwrap();
+        let v = t.view_for(a).unwrap();
+        assert!(matches!(v.banker.cards[0], crate::session::CardView::FaceUp(_)));
+        assert!(matches!(v.banker.cards[1], crate::session::CardView::FaceUp(_)));
+    }
+
+    #[test]
+    fn a_tie_only_coup_is_entirely_dealer_flipped() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
+        t.deal().unwrap();
+        // nobody owns either hand: the dealer exposes the whole coup at once
+        let v = t.view_for(a).unwrap();
+        assert!(v.player.total.is_some());
+        assert!(v.banker.total.is_some());
     }
 
     #[test]
