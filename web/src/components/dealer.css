@@ -66,3 +66,10 @@
     animation: none;
   }
 }
+
+@media (max-width: 520px) {
+  .dealer-line p {
+    font-size: 19px;
+    padding: 12px 12px 10px;
+  }
+}

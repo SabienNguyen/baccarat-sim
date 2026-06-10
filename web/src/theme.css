@@ -120,3 +120,24 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* --- phones: one column, table first --- */
+@media (max-width: 700px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "stage"
+      "hud"
+      "board";
+    gap: 12px;
+    padding: 10px;
+  }
+  .app .hud,
+  .app .board {
+    min-height: 0;
+    justify-content: flex-start;
+  }
+  .app > .stage {
+    gap: 12px;
+  }
+}

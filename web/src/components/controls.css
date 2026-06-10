@@ -33,3 +33,14 @@
 .controls .btn--leave {
   background: var(--panel-bevel-hi);
 }
+
+@media (max-width: 700px) {
+  .controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .controls .btn {
+    font-size: 9px;
+    padding: 10px 10px;
+  }
+}

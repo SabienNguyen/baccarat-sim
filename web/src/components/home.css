@@ -173,3 +173,21 @@
   width: 100%;
   max-width: 160px;
 }
+
+@media (max-width: 520px) {
+  .home {
+    gap: 26px;
+  }
+  .home-title {
+    font-size: 34px;
+  }
+  .mode-card {
+    width: 100%;
+    max-width: 320px;
+    padding: 26px 18px;
+  }
+  .table-card {
+    width: 100%;
+    max-width: 320px;
+  }
+}

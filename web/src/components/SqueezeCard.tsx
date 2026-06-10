@@ -126,6 +126,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   return (
     <div
       role="button"
+      style={{ touchAction: "none" }}
       tabIndex={faceUp ? -1 : 0}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
