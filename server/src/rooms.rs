@@ -15,6 +15,9 @@ pub const MAX_SEATS: usize = 7;
 /// The house dealer's rhythm: one card flip per beat.
 pub const DEALER_FLIP_MS: u64 = 1100;
 
+/// The casino floor only has so much room.
+pub const MAX_ROOMS: usize = 200;
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -86,8 +89,12 @@ impl Registry {
             .collect()
     }
 
-    pub async fn create(&self, tier: Tier, private: bool) -> Arc<Mutex<Room>> {
+    /// None when the floor is at capacity.
+    pub async fn create(&self, tier: Tier, private: bool) -> Option<Arc<Mutex<Room>>> {
         let mut rooms = self.rooms.lock().await;
+        if rooms.len() >= MAX_ROOMS {
+            return None;
+        }
         let id = loop {
             let id = Self::new_room_id();
             if !rooms.contains_key(&id) {
@@ -96,7 +103,7 @@ impl Registry {
         };
         let room = Arc::new(Mutex::new(Room::new(id.clone(), tier, private)));
         rooms.insert(id, room.clone());
-        room
+        Some(room)
     }
 
     pub async fn get(&self, id: &str) -> Option<Arc<Mutex<Room>>> {
@@ -113,7 +120,8 @@ impl Registry {
                 infos.push(room.info());
             }
         }
-        infos.sort_by(|a, b| a.id.cmp(&b.id));
+        // liveliest tables first: most seats taken, then stable by code
+        infos.sort_by(|a, b| b.seats.cmp(&a.seats).then(a.id.cmp(&b.id)));
         infos
     }
 
@@ -194,7 +202,7 @@ mod tests {
     #[tokio::test]
     async fn create_join_play_settle_through_a_room() {
         let registry = Registry::new();
-        let room = registry.create(Tier::Mid, false).await;
+        let room = registry.create(Tier::Mid, false).await.unwrap();
         {
             let mut room = room.lock().await;
             let (.., buy_in) = room.tier.stakes();
@@ -213,8 +221,8 @@ mod tests {
     #[tokio::test]
     async fn private_rooms_stay_out_of_the_public_list() {
         let registry = Registry::new();
-        let _pub = registry.create(Tier::Low, false).await;
-        let priv_room = registry.create(Tier::High, true).await;
+        let _pub = registry.create(Tier::Low, false).await.unwrap();
+        let priv_room = registry.create(Tier::High, true).await.unwrap();
         let listed = registry.list_public().await;
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].tier, Tier::Low);
@@ -227,10 +235,19 @@ mod tests {
     #[tokio::test]
     async fn sweeping_removes_empty_rooms() {
         let registry = Registry::new();
-        let room = registry.create(Tier::Mid, false).await;
+        let room = registry.create(Tier::Mid, false).await.unwrap();
         let id = room.lock().await.id.clone();
         registry.sweep().await;
         assert!(registry.get(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn the_floor_has_a_capacity() {
+        let registry = Registry::new();
+        for _ in 0..MAX_ROOMS {
+            assert!(registry.create(Tier::Low, false).await.is_some());
+        }
+        assert!(registry.create(Tier::Low, false).await.is_none());
     }
 
     #[test]

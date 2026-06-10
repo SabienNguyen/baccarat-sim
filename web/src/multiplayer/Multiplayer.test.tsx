@@ -134,3 +134,28 @@ test("the room code copies to the clipboard", async () => {
   expect(writeText).toHaveBeenCalledWith("COPYME");
   expect(await screen.findByText("✓ copied")).toBeInTheDocument();
 });
+
+test("the public list paginates past eight tables", async () => {
+  const { socket } = mount();
+  socket.open();
+  const rooms = Array.from({ length: 20 }, (_, i) => ({
+    id: `ROOM${String(i).padStart(2, "0")}`,
+    tier: "mid",
+    seats: 0,
+    max_seats: 7,
+  }));
+  socket.push({ type: "rooms", rooms });
+  expect(screen.getByText(/Public tables \(20\)/)).toBeInTheDocument();
+  expect(screen.getByText("ROOM00")).toBeInTheDocument();
+  expect(screen.queryByText("ROOM08")).toBeNull(); // page 1 holds eight
+  expect(screen.getByText("1 / 3")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(screen.getByText("ROOM08")).toBeInTheDocument();
+  expect(screen.queryByText("ROOM00")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(screen.getByText("ROOM16")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Next ›" })).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: "‹ Prev" }));
+  expect(screen.getByText("2 / 3")).toBeInTheDocument();
+  expect(screen.getByText("ROOM08")).toBeInTheDocument();
+});

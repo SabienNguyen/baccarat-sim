@@ -53,6 +53,8 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const storeRef = useRef<RemoteStore | null>(null);
   const [stage, setStage] = useState<Stage>({ at: "connecting" });
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 8;
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState(loadName);
   const [code, setCode] = useState("");
@@ -83,6 +85,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       }
       if (msg.type === "rooms") {
         setRooms(msg.rooms);
+        setPage(0);
       } else if (msg.type === "joined") {
         const store = createRemoteStore({
           tier: msg.tier,
@@ -244,12 +247,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       </section>
 
       <section className="mp-panel mp-panel--rooms">
-        <h3>Public tables</h3>
+        <h3>Public tables{rooms.length > 0 ? ` (${rooms.length})` : ""}</h3>
         {rooms.length === 0 ? (
           <p className="mp-empty">No tables open — start one.</p>
         ) : (
           <ul className="mp-rooms">
-            {rooms.map((r) => (
+            {rooms.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => (
               <li key={r.id}>
                 <span className="mp-roomname">{r.id}</span>
                 <span className="mp-roominfo">
@@ -267,9 +270,34 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
             ))}
           </ul>
         )}
-        <button type="button" className="mp-refresh" onClick={() => send({ type: "list_rooms" })}>
-          Refresh
-        </button>
+        <div className="mp-rooms-foot">
+          {rooms.length > PAGE_SIZE && (
+            <div className="mp-pages">
+              <button
+                type="button"
+                className="mp-refresh"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                ‹ Prev
+              </button>
+              <span className="mp-pagecount">
+                {page + 1} / {Math.ceil(rooms.length / PAGE_SIZE)}
+              </span>
+              <button
+                type="button"
+                className="mp-refresh"
+                disabled={(page + 1) * PAGE_SIZE >= rooms.length}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next ›
+              </button>
+            </div>
+          )}
+          <button type="button" className="mp-refresh" onClick={() => send({ type: "list_rooms" })}>
+            Refresh
+          </button>
+        </div>
       </section>
 
       <button type="button" className="mp-back" onClick={onExit}>
