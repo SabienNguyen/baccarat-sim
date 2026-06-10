@@ -16,9 +16,13 @@ use serde::{Deserialize, Serialize};
 
 /// A seat at the table, identified for the lifetime of the table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct PlayerId(pub u64);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(from_wasm_abi))]
 pub struct TableConfig {
     pub table_min: i64,
     pub table_max: i64,
@@ -27,6 +31,8 @@ pub struct TableConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
 pub enum TableError {
     TableFull,
     NoSuchPlayer,
@@ -76,6 +82,8 @@ enum Phase {
 
 /// What one seated player sees. Cards and events are shared; money is theirs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
 pub struct TableView {
     pub phase: PhaseTag,
     pub player: HandView,
@@ -97,6 +105,8 @@ pub struct TableView {
 
 /// The public face of every seat, shown to the whole table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi))]
 pub struct SeatView {
     pub id: PlayerId,
     pub name: String,

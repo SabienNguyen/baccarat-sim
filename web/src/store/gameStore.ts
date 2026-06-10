@@ -21,6 +21,22 @@ import {
 
 export { CHIP_DENOMINATIONS };
 
+/** Matches the server's beat between house-dealer card turns. */
+const DEALER_FLIP_MS = 1100;
+
+/**
+ * Squeeze rights riding along on a table snapshot (single-player tables run
+ * the same rules engine as multiplayer). Plain sessions have no such fields.
+ */
+function squeezersOf(snapshot: RoundSnapshot): GameState["squeezers"] {
+  const v = snapshot as RoundSnapshot & {
+    player_squeezer?: number | null;
+    banker_squeezer?: number | null;
+  };
+  if (v.player_squeezer === undefined && v.banker_squeezer === undefined) return null;
+  return { player: v.player_squeezer ?? null, banker: v.banker_squeezer ?? null };
+}
+
 
 export interface GameState {
   snapshot: RoundSnapshot;
@@ -95,11 +111,38 @@ export function createGameStore(
         set({
           snapshot: result.snapshot,
           lastError: null,
+          squeezers: squeezersOf(result.snapshot),
           ...(flip ? { lastFlip: flip } : {}),
         });
+        pace();
       } else {
         set({ lastError: result.error });
       }
+    };
+
+    // The house dealer's hands: when a side has no bettor the engine leaves
+    // its cards to the dealer, and this pacer turns them one per beat with an
+    // announcement — the same rhythm the multiplayer server uses.
+    let pacing = false;
+    let announcedFor: Side | null = null;
+    const pace = () => {
+      if (pacing) return;
+      if (!session.dealerFlipPending?.()) {
+        announcedFor = null;
+        return;
+      }
+      pacing = true;
+      const side = session.dealerNextSide?.() ?? null;
+      if (side !== null && side !== announcedFor) {
+        announcedFor = side;
+        set({ announcement: `Turning the ${side} hand…` });
+      }
+      setTimeout(() => {
+        pacing = false;
+        set({ announcement: null });
+        if (!session.dealerFlipPending?.() || !session.dealerFlipOne) return;
+        apply(session.dealerFlipOne());
+      }, DEALER_FLIP_MS);
     };
 
     const initial = buyIn(session.snapshot().bankroll, denoms);
@@ -254,10 +297,25 @@ export function createGameStore(
         apply(result);
       },
 
-      // After a settled round the engine is already back in Betting; refresh the
-      // snapshot to a clean Betting view so the player can bet and deal the next
-      // hand from the SAME shoe (no reshuffle).
-      newHand: () => set({ snapshot: session.snapshot(), lastError: null, lastDelta: null }),
+      // After a settled round the engine is already back in Betting, but a
+      // table view keeps showing Settled (payouts on the felt) until the next
+      // wager. Sweep the felt locally — same shoe, no reshuffle — exactly
+      // like the multiplayer client does.
+      newHand: () =>
+        set({
+          snapshot: {
+            ...session.snapshot(),
+            phase: "Betting",
+            payouts: null,
+            outcome: null,
+            events: [],
+            player: { cards: [], total: null },
+            banker: { cards: [], total: null },
+          },
+          lastError: null,
+          lastDelta: null,
+          lastFlip: null,
+        }),
 
       newShoe: () => {
         get().returnHand();

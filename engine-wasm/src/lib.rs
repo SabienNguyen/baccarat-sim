@@ -140,3 +140,87 @@ mod tests {
         assert!(entries.iter().any(|e| e.term == "monkey"));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Single-player table: the SAME multiplayer rules engine with one seat. You
+// squeeze the sides you bet; the unbet hands are the house dealer's, exposed
+// via dealer_flip_one so the front-end can pace him.
+// ---------------------------------------------------------------------------
+
+use baccarat_engine::table::{Table, TableConfig, TableError, TableView};
+
+fn table_err(err: TableError) -> JsValue {
+    serde_wasm_bindgen::to_value(&err).unwrap_or(JsValue::NULL)
+}
+
+#[wasm_bindgen]
+pub struct WasmTable {
+    inner: Table,
+    me: baccarat_engine::table::PlayerId,
+}
+
+#[wasm_bindgen]
+impl WasmTable {
+    /// A one-seat table: `buy_in` cents are the sole player's bankroll.
+    #[wasm_bindgen(constructor)]
+    pub fn new(config: TableConfig, seed: u64, buy_in: i64) -> WasmTable {
+        console_error_panic_hook::set_once();
+        let mut inner = Table::new(config, seed);
+        let me = inner.join("You", buy_in).expect("fresh table has a seat");
+        WasmTable { inner, me }
+    }
+
+    pub fn view(&self) -> Result<TableView, JsValue> {
+        self.inner.view_for(self.me).map_err(table_err)
+    }
+
+    pub fn place_bet(&mut self, kind: BetKind, amount: i64) -> Result<TableView, JsValue> {
+        self.inner.place_bet(self.me, kind, amount).map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn clear_bets(&mut self) -> Result<TableView, JsValue> {
+        self.inner.clear_bets(self.me).map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn deal(&mut self) -> Result<TableView, JsValue> {
+        self.inner.deal().map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn peek(&mut self, hand: Side, index: usize) -> Result<TableView, JsValue> {
+        self.inner.peek(self.me, hand, index).map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn reveal(&mut self, hand: Side, index: usize) -> Result<TableView, JsValue> {
+        self.inner.reveal(self.me, hand, index).map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn settle(&mut self) -> Result<TableView, JsValue> {
+        self.inner.settle().map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn new_shoe(&mut self) -> Result<TableView, JsValue> {
+        self.inner.new_shoe().map_err(table_err)?;
+        self.view()
+    }
+
+    pub fn dealer_flip_pending(&self) -> bool {
+        self.inner.dealer_flip_pending()
+    }
+
+    /// Which hand the dealer would turn next ("Player"/"Banker"), if any.
+    pub fn dealer_next_side(&self) -> Option<Side> {
+        self.inner.dealer_next_side()
+    }
+
+    /// The dealer turns one card; the caller paces the beat.
+    pub fn dealer_flip_one(&mut self) -> Result<TableView, JsValue> {
+        self.inner.dealer_flip_one();
+        self.view()
+    }
+}

@@ -94,7 +94,9 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
 
-  // The dealer flips for you — one card per beat, in ritual order.
+  // Turn YOUR cards for you, one per beat, in ritual order. Hands you didn't
+  // bet belong to the house dealer — his own pacer turns those, so this just
+  // waits its turn whenever an earlier stage is still his to expose.
   const revealAll = () => {
     const order: Array<["Player" | "Banker", number]> = [
       ["Player", 0],
@@ -104,16 +106,30 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
       ["Player", 2],
       ["Banker", 2],
     ];
+    const stageOf = (side: "Player" | "Banker", idx: number): number =>
+      idx < 2 ? (side === "Player" ? 1 : 2) : side === "Player" ? 3 : 4;
     const flipNext = (): boolean => {
-      const snap = active.getState().snapshot;
+      const { snapshot: snap, squeezers } = active.getState();
       if (snap.phase !== "Dealing") return false;
+      const holds = (side: "Player" | "Banker"): boolean =>
+        squeezers === null ||
+        (side === "Player" ? squeezers.player === 0 : squeezers.banker === 0);
+      const cardAt = (side: "Player" | "Banker", idx: number) =>
+        (side === "Player" ? snap.player.cards : snap.banker.cards)[idx];
       for (const [side, idx] of order) {
-        const cards = side === "Player" ? snap.player.cards : snap.banker.cards;
-        const card = cards[idx];
-        if (card !== undefined && !isFaceUp(card)) {
-          reveal(side, idx);
-          return true;
-        }
+        const card = cardAt(side, idx);
+        if (card === undefined || isFaceUp(card)) continue;
+        if (!holds(side)) continue; // the dealer's card — he turns it himself
+        const ready = order.every(
+          ([s, i]) =>
+            stageOf(s, i) >= stageOf(side, idx) ||
+            (() => {
+              const c = cardAt(s, i);
+              return c === undefined || isFaceUp(c);
+            })(),
+        );
+        if (ready) reveal(side, idx);
+        return true; // either flipped, or waiting on the dealer's stage
       }
       return false;
     };
