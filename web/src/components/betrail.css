@@ -115,7 +115,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 36px;
+  /* tall enough for the hand tray, so picking chips never shifts the page */
+  min-height: 50px;
 }
 .rail-hint {
   flex: 1;

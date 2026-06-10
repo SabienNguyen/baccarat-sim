@@ -118,3 +118,8 @@ test("the felt's info icon opens the bonus-bets explainer", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Close bonus info" }));
   expect(screen.queryByRole("dialog", { name: "Bonus bets" })).toBeNull();
 });
+
+test("Clear bets is disabled when nothing is staged", () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  expect(screen.getByRole("button", { name: "Clear bets" })).toBeDisabled();
+});

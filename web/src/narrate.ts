@@ -173,6 +173,9 @@ export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): 
   const salient = pickSalient(snapshot.events);
   if (salient) return eventLine(salient);
 
+  if (snapshot.phase === "Settled") {
+    return [{ text: "Hand's settled — chips down for the next one." }];
+  }
   if (anyCardShowing(snapshot)) {
     return [{ text: "Take your time — bend that corner." }];
   }

@@ -1,0 +1,8 @@
+target/
+node_modules/
+web/dist/
+web/node_modules/
+smoke/node_modules/
+engine-wasm/pkg/
+.git/
+docs/

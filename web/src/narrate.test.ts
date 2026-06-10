@@ -175,3 +175,9 @@ test("the win line outranks the card call", () => {
   );
   expect(text(segs)).toBe("Banker wins, 7 over 5.");
 });
+
+test("a settled table with no events talks about the next hand, not the squeeze", () => {
+  // the multiplayer settled view: empty hands, no events, payouts retained
+  const s = { ...snap("Settled"), payouts: [] };
+  expect(text(narrate(s))).toBe("Hand's settled — chips down for the next one.");
+});

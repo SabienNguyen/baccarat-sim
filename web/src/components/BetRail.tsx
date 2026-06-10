@@ -181,7 +181,12 @@ export function BetRail({
                 : "Bets are locked — squeeze the cards."}
           </p>
         )}
-        <button type="button" className="clear-bets" disabled={!betting} onClick={onClear}>
+        <button
+          type="button"
+          className="clear-bets"
+          disabled={!betting || snapshot.bets.length === 0}
+          onClick={onClear}
+        >
           Clear bets
         </button>
         <button type="button" className="exchange-btn" onClick={onOpenExchange}>
