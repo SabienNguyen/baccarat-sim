@@ -1,0 +1,60 @@
+.board {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.board h4 {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--gold);
+  margin: 0 0 6px;
+  letter-spacing: 1px;
+}
+.bead-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+}
+.bead-grid li {
+  background: var(--panel-bevel-lo);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  font-size: 14px;
+  text-align: center;
+  min-height: 20px;
+  line-height: 20px;
+}
+.road-grid {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+.road-grid ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.road-grid li {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  background: var(--panel-bevel-lo);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+}
+.road-grid li[data-mark="Red"] {
+  color: var(--chip-red);
+}
+.road-grid li[data-mark="Blue"] {
+  color: var(--chip-blue);
+}

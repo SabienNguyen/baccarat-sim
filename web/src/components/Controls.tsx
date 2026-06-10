@@ -1,4 +1,5 @@
 import type { RoundSnapshot } from "../engine/types";
+import "./controls.css";
 
 interface ControlsProps {
   snapshot: RoundSnapshot;
@@ -20,17 +21,17 @@ export function Controls({
   const hasBets = snapshot.bets.length > 0;
 
   return (
-    <section aria-label="Controls">
-      <button type="button" disabled={!betting || !hasBets} onClick={onDeal}>
+    <section aria-label="Controls" className="controls">
+      <button type="button" className="btn" disabled={!betting || !hasBets} onClick={onDeal}>
         Deal
       </button>
-      <button type="button" disabled={!dealing} onClick={onRevealAll}>
+      <button type="button" className="btn" disabled={!dealing} onClick={onRevealAll}>
         Reveal all
       </button>
-      <button type="button" disabled={!dealing} onClick={onSettle}>
+      <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
         Settle
       </button>
-      <button type="button" onClick={onNewShoe}>
+      <button type="button" className="btn" onClick={onNewShoe}>
         New Shoe
       </button>
     </section>

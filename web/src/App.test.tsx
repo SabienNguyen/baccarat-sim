@@ -55,3 +55,20 @@ test("Reveal all reveals every hidden card in both hands", async () => {
   expect(reveal).toHaveBeenCalledWith("Banker", 0);
   expect(reveal).toHaveBeenCalledWith("Banker", 1);
 });
+
+test("shows the win pop-up after a winning settle", () => {
+  const dealing = dealingSnapshot();
+  const won: RoundSnapshot = {
+    ...dealing,
+    phase: "Settled",
+    bankroll: dealing.bankroll + 9500,
+  };
+  const store = createGameStore(
+    fakeSession(dealing, { settle: () => okResult(won) }),
+  );
+  const { rerender } = render(<App store={store} />);
+  expect(screen.queryByRole("status")).toBeNull();
+  store.getState().settle();
+  rerender(<App store={store} />);
+  expect(screen.getByRole("status")).toHaveTextContent("+$95.00");
+});
