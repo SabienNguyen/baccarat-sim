@@ -7,9 +7,9 @@ function snap(phase: RoundSnapshot["phase"], events: Event[] = []): RoundSnapsho
     player: { cards: [], total: null },
     banker: { cards: [], total: null },
     bets: [],
-    bankroll: 0,
-    table_min: 0,
-    table_max: 0,
+    bankroll: 1_000_000,
+    table_min: 500,
+    table_max: 5_000_000,
     outcome: null,
     payouts: null,
     events,
@@ -24,55 +24,107 @@ function snap(phase: RoundSnapshot["phase"], events: Event[] = []): RoundSnapsho
   };
 }
 
+function text(segs: ReturnType<typeof narrate>): string {
+  return segs.map((s) => s.text).join("");
+}
+
 test("betting phase invites bets", () => {
   expect(narrate(snap("Betting"))).toEqual([{ text: "Place your bets." }]);
 });
 
-test("dealing with no events yet prompts the squeeze", () => {
-  expect(narrate(snap("Dealing"))).toEqual([{ text: "Cards out — squeeze 'em." }]);
+test("betting with chips down announces what's riding", () => {
+  const s = { ...snap("Betting"), bets: [{ kind: { Main: "Player" } as const, amount: 12500 }] };
+  expect(text(narrate(s))).toBe(
+    "Bets down — $125.00 riding. Call the deal when you're ready.",
+  );
+});
+
+test("a felted player is sent to the cage", () => {
+  const s = { ...snap("Betting"), bankroll: 100, table_min: 500 };
+  expect(text(narrate(s))).toContain("reset the bank");
+});
+
+test("dealing with nothing showing calls no more bets", () => {
+  expect(text(narrate(snap("Dealing")))).toBe("No more bets. Cards are out — squeeze 'em.");
+});
+
+test("dealing mid-squeeze encourages the bend", () => {
+  const s = snap("Dealing");
+  s.player.cards = [{ FaceUp: { rank: "Nine", suit: "Hearts" } }, "FaceDown"];
+  s.banker.cards = ["FaceDown", "FaceDown"];
+  expect(text(narrate(s))).toBe("Take your time — bend that corner.");
 });
 
 test("a monkey is called out with a glossary term", () => {
   const segs = narrate(snap("Dealing", [{ Monkey: { hand: "Player", index: 0 } }]));
-  expect(segs).toEqual([
-    { text: "Monkey", term: "monkey" },
-    { text: " for the Player!" },
-  ]);
+  expect(segs[0]).toEqual({ text: "Monkey", term: "monkey" });
+  expect(text(segs)).toBe("Monkey for the Player! Counts for nothing.");
 });
 
 test("a natural is announced with its total", () => {
   const segs = narrate(snap("Dealing", [{ Natural: { side: "Banker", total: 9 } }]));
-  expect(segs).toEqual([
-    { text: "Natural", term: "natural" },
-    { text: " 9 — Banker!" },
-  ]);
+  expect(segs[0]).toEqual({ text: "Natural", term: "natural" });
+  expect(text(segs)).toBe("Natural 9 — Banker! Both hands stand.");
 });
 
-test("a pair tags the pair term", () => {
+test("a pair teaches its payout", () => {
   const segs = narrate(snap("Dealing", [{ Pair: { side: "Player" } }]));
-  expect(segs).toEqual([
-    { text: "Player " },
-    { text: "pair", term: "pair" },
-    { text: "!" },
-  ]);
+  expect(segs[1]).toEqual({ text: "pair", term: "pair" });
+  expect(text(segs)).toBe("Player pair! Eleven to one if you had it.");
+});
+
+test("a third card narrates the tableau reason", () => {
+  const segs = narrate(
+    snap("Dealing", [
+      { ThirdCard: { side: "Player", reason: "Player 4 -> draws a third card (7)." } },
+    ]),
+  );
+  expect(text(segs)).toBe("Card for the Player — drawing on 4, the tableau calls for it.");
+});
+
+test("an unparseable third-card reason still narrates", () => {
+  const segs = narrate(
+    snap("Dealing", [{ ThirdCard: { side: "Banker", reason: "house ruling" } }]),
+  );
+  expect(text(segs)).toBe("Card for the Banker.");
 });
 
 test("the win line is decisive and beats earlier events", () => {
   const segs = narrate(
-    snap("Settled", [
+    snap("Dealing", [
       { Monkey: { hand: "Player", index: 0 } },
       { Win: { result: "BankerWin", player: 5, banker: 7 } },
     ]),
   );
-  expect(segs).toEqual([
-    { text: "Banker", term: "banker" },
-    { text: " wins, 7 over 5." },
-  ]);
+  expect(segs[0]).toEqual({ text: "Banker", term: "banker" });
+  expect(text(segs)).toBe("Banker wins, 7 over 5.");
 });
 
-test("a tie pushes", () => {
-  const segs = narrate(snap("Settled", [{ Win: { result: "Tie", player: 6, banker: 6 } }]));
-  expect(segs).toEqual([{ text: "Tie", term: "tie" }, { text: " — bets push." }]);
+test("a natural win gets the natural call as a prefix", () => {
+  const segs = narrate(
+    snap("Dealing", [
+      { Natural: { side: "Player", total: 9 } },
+      { Win: { result: "PlayerWin", player: 9, banker: 4 } },
+    ]),
+  );
+  expect(text(segs)).toBe("Natural 9! Player wins it, 9 over 4!");
+});
+
+test("a tie calls égalité", () => {
+  const segs = narrate(snap("Dealing", [{ Win: { result: "Tie", player: 6, banker: 6 } }]));
+  expect(text(segs)).toBe("Égalité — tie at 6. Main bets push.");
+});
+
+test("a settled winning round pays the player", () => {
+  const s = snap("Settled", [{ Win: { result: "PlayerWin", player: 8, banker: 3 } }]);
+  s.payouts = [{ bet: { kind: { Main: "Player" }, amount: 2500 }, net: 2500 }];
+  expect(text(narrate(s))).toBe("Player wins it, 8 over 3! You're paid.");
+});
+
+test("a settled losing round thanks you for the donation", () => {
+  const s = snap("Settled", [{ Win: { result: "BankerWin", player: 3, banker: 8 } }]);
+  s.payouts = [{ bet: { kind: { Main: "Player" }, amount: 2500 }, net: -2500 }];
+  expect(text(narrate(s))).toBe("Banker wins, 8 over 3. The house thanks you.");
 });
 
 test("natural outranks a co-occurring monkey", () => {

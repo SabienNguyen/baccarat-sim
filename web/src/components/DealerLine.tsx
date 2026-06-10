@@ -10,11 +10,15 @@ interface DealerLineProps {
   lookup?: (term: string) => GlossaryEntry | undefined;
 }
 
+/** The dealer's dialogue box: he narrates the table as the round unfolds. */
 export function DealerLine({ snapshot, lookup = glossaryEntry }: DealerLineProps) {
   const segments = narrate(snapshot);
+  const lineKey = segments.map((s) => s.text).join("");
   return (
     <section aria-label="Dealer" className="dealer-line">
-      <p aria-live="polite">
+      <span className="dealer-tag">DEALER</span>
+      {/* keyed by the line so the pop-in replays whenever he says something new */}
+      <p aria-live="polite" key={lineKey}>
         {segments.map((seg, i) =>
           seg.term ? (
             <GlossaryTerm key={i} term={seg.term} label={seg.text} entry={lookup(seg.term)} />

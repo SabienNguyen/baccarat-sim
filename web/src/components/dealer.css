@@ -1,16 +1,69 @@
+/* The dealer's dialogue box — a retro speech panel with a name tag. */
 .dealer-line {
+  position: relative;
   width: 100%;
   max-width: 720px;
-  text-align: center;
+  margin-top: 10px;
+}
+.dealer-tag {
+  position: absolute;
+  top: -10px;
+  left: 18px;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #1a1208;
+  background: var(--gold);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  padding: 4px 8px;
+  box-shadow: 2px 2px 0 var(--shadow);
 }
 .dealer-line p {
   margin: 0;
   font-family: var(--font-text);
-  font-size: 24px;
+  font-size: 26px;
+  line-height: 1.25;
+  text-align: left;
   color: #f3eede;
-  background: var(--panel-bevel-lo);
+  background: var(--panel-face);
   border: 3px solid var(--ink);
-  border-radius: 8px;
-  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.06), 3px 3px 0 var(--shadow);
-  padding: 10px 16px;
+  border-radius: 10px;
+  box-shadow:
+    inset 2px 2px 0 var(--panel-bevel-hi),
+    inset -2px -2px 0 var(--panel-bevel-lo),
+    4px 4px 0 var(--shadow);
+  padding: 16px 18px 12px;
+  animation: dealer-say 220ms ease-out;
+}
+/* speech-bubble tail pointing down at the table */
+.dealer-line p::after {
+  content: "";
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--panel-face);
+  border-right: 3px solid var(--ink);
+  border-bottom: 3px solid var(--ink);
+}
+
+@keyframes dealer-say {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dealer-line p {
+    animation: none;
+  }
 }
