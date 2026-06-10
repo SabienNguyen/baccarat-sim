@@ -389,10 +389,21 @@ impl Table {
         Ok(())
     }
 
-    /// The ritual order: Player's two, Banker's two, Player's third, Banker's
-    /// third. A card may only be REVEALED once everything before it is up.
+    /// The ritual runs in stages — Player's two, Banker's two, Player's
+    /// third, Banker's third — but WITHIN your own hand you turn your cards
+    /// in any order you like. A reveal is allowed once every card in all
+    /// earlier stages is up.
     fn check_order(&self, hand: Side, index: usize) -> Result<(), TableError> {
         let Phase::Dealing { reveal, .. } = &self.phase else { return Ok(()) };
+        let stage_of = |h: Side, i: usize| -> u8 {
+            match (h, i) {
+                (Side::Player, 0 | 1) => 1,
+                (Side::Banker, 0 | 1) => 2,
+                (Side::Player, _) => 3,
+                (Side::Banker, _) => 4,
+            }
+        };
+        let target = stage_of(hand, index);
         let sequence: [(Side, usize); 6] = [
             (Side::Player, 0),
             (Side::Player, 1),
@@ -402,14 +413,14 @@ impl Table {
             (Side::Banker, 2),
         ];
         for (h, i) in sequence {
-            if h == hand && i == index {
-                return Ok(());
+            if stage_of(h, i) >= target {
+                continue; // same stage or later: no constraint
             }
             let statuses = match h {
                 Side::Player => &reveal.player,
                 Side::Banker => &reveal.banker,
             };
-            // earlier card exists and isn't face-up yet: not your turn
+            // an earlier-stage card exists and isn't face-up yet
             if i < statuses.len() && statuses[i] != CardStatus::FaceUp {
                 return Err(TableError::OutOfOrder);
             }
@@ -750,6 +761,17 @@ mod tests {
         // each may peek their own
         t.peek(a, Side::Player, 0).unwrap();
         t.peek(b, Side::Banker, 0).unwrap();
+    }
+
+    #[test]
+    fn a_holder_turns_their_own_cards_in_any_order() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        // right card first is fine — it's your hand
+        t.reveal(a, Side::Player, 1).unwrap();
+        t.reveal(a, Side::Player, 0).unwrap();
     }
 
     #[test]
