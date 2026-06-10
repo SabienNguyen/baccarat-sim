@@ -67,6 +67,8 @@ export function createRemoteStore(opts: {
     goal: null,
     goalReached: false,
     dismissGoal: () => set({ goalReached: false }),
+    // the server has no re-buy concept; remote play never busts locally
+    busted: false,
     denoms,
     rack: initial.rack,
     change: initial.change,

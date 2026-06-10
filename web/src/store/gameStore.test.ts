@@ -299,3 +299,19 @@ test("a settle that stays above (or below) the goal does not re-trigger", () => 
   store.getState().settle();
   expect(store.getState().goalReached).toBe(false); // started above; no crossing
 });
+
+test("a settle that leaves the roll under the table minimum busts the run", () => {
+  // table_min is 500 in snapshotWith(); a settle down to 300 can't post it.
+  const broke = snapshotWith({ phase: "Settled", bankroll: 300, payouts: [] });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: broke }));
+  expect(store.getState().busted).toBe(false);
+  store.getState().settle();
+  expect(store.getState().busted).toBe(true);
+});
+
+test("a settle that keeps the roll at or above the minimum does not bust", () => {
+  const alive = snapshotWith({ phase: "Settled", bankroll: 500, payouts: [] });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: alive }));
+  store.getState().settle();
+  expect(store.getState().busted).toBe(false);
+});

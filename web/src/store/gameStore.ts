@@ -62,6 +62,8 @@ export interface GameState {
   /** True right after the bankroll crosses the goal — drives the celebration. */
   goalReached: boolean;
   dismissGoal: () => void;
+  /** True when a settle left the roll below the table minimum — the run is lost. */
+  busted: boolean;
 
   /** The chip denominations this table stocks. */
   denoms: number[];
@@ -161,6 +163,7 @@ export function createGameStore(
       goal,
       goalReached: false,
       dismissGoal: () => set({ goalReached: false }),
+      busted: false,
       denoms,
       rack: initial.rack,
       change: initial.change,
@@ -292,6 +295,8 @@ export function createGameStore(
               goal !== null && before < goal && result.snapshot.bankroll >= goal
                 ? true
                 : get().goalReached,
+            // the run dies when the roll can no longer post the minimum
+            busted: result.snapshot.bankroll < result.snapshot.table_min,
           });
         }
         apply(result);
