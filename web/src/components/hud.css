@@ -3,6 +3,10 @@
   flex-direction: column;
   gap: 12px;
   align-self: center;
+  /* fill the side column so the HUD mirrors the road dock */
+  width: 100%;
+  min-height: 460px;
+  justify-content: center;
 }
 .hud-title {
   font-family: var(--font-display);

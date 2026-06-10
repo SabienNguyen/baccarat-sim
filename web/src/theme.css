@@ -63,11 +63,15 @@ body {
 /* App grid: HUD | center stage | scoreboard dock. */
 .app {
   display: grid;
-  grid-template-columns: 240px 1fr 320px;
+  /* equal side columns keep the stage dead-center on screen */
+  grid-template-columns: 340px minmax(0, 1fr) 340px;
   grid-template-areas: "hud stage board";
-  gap: 16px;
+  gap: 20px;
   min-height: 100vh;
   padding: 16px;
+  /* keep the table, HUD, and roads clustered on big screens */
+  max-width: 1560px;
+  margin: 0 auto;
   /* center each column vertically so the table doesn't pool at the top */
   align-items: center;
 }

@@ -2,6 +2,9 @@
   display: flex;
   gap: 12px;
   justify-content: center;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 900px;
 }
 .controls .btn {
   font-family: var(--font-display);

@@ -113,7 +113,7 @@ export function BetRail({
   const handTotal = hand.reduce((a, b) => a + b, 0);
 
   return (
-    <section aria-label="Bet rail" className="bet-rail panel">
+    <section aria-label="Bet rail" className="bet-rail">
       <div className="felt" aria-label="Spots">
         <div className="side-bets">
           {SIDE_SPOTS.map((spot) => (
