@@ -1,19 +1,20 @@
 .controls {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: center;
-  flex-wrap: wrap;
   width: 100%;
-  max-width: 900px;
+}
+.controls .btn {
+  white-space: nowrap;
 }
 .controls .btn {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   color: #fff;
   background: var(--chip-red);
   border: 3px solid var(--ink);
   border-radius: 8px;
-  padding: 14px 18px;
+  padding: 12px 12px;
   box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.3), 3px 3px 0 var(--shadow);
   cursor: pointer;
   transition: transform 80ms ease;

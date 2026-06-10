@@ -26,19 +26,31 @@ export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal
     <div aria-label={`${side} hand`} className="hand">
       <h3>{side}</h3>
       <ul className="hand-cards">
-        {shown.map((card, i) => (
-          <li key={i}>
-            {dealing ? (
-              <SqueezeCard
-                card={card}
-                onPeek={() => onPeek?.(i)}
-                onReveal={() => onReveal?.(i)}
-              />
-            ) : (
-              <Card card={card} />
-            )}
-          </li>
-        ))}
+        {shown.length === 0 ? (
+          // empty table: dashed slots mark where the cards will land
+          <>
+            <li>
+              <div className="card card-slot" />
+            </li>
+            <li>
+              <div className="card card-slot" />
+            </li>
+          </>
+        ) : (
+          shown.map((card, i) => (
+            <li key={i}>
+              {dealing ? (
+                <SqueezeCard
+                  card={card}
+                  onPeek={() => onPeek?.(i)}
+                  onReveal={() => onReveal?.(i)}
+                />
+              ) : (
+                <Card card={card} />
+              )}
+            </li>
+          ))
+        )}
       </ul>
       {total !== null && (
         // keyed by the value so the slam-in replays whenever the total changes

@@ -22,6 +22,12 @@
 .card-face {
   background: #f6f1e0;
 }
+/* an empty slot on the felt where a card will land */
+.card-slot {
+  background: rgba(0, 0, 0, 0.14);
+  border: 2px dashed rgba(243, 238, 222, 0.4);
+  box-shadow: none;
+}
 .card-face[data-color="red"],
 .card-peel-face[data-color="red"] {
   color: var(--chip-red);

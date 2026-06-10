@@ -4,7 +4,7 @@
   max-width: 900px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   background: linear-gradient(180deg, #1a6e40, #0f4c2a 75%);
   border: 5px solid #6b4423; /* wood rail */
   border-radius: 18px;
@@ -26,8 +26,8 @@
 /* Round, draggable casino chips with a dashed inner ring and a count badge. */
 .chip {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -233,7 +233,7 @@
 /* Main bets: large arched areas. */
 .spot--player,
 .spot--banker {
-  min-height: 128px;
+  min-height: 112px;
   border-radius: 50% 50% 12px 12px / 70% 70% 12px 12px;
 }
 .spot--player {
@@ -245,7 +245,7 @@
   border-color: #ffc6ca;
 }
 .spot--tie {
-  min-height: 128px;
+  min-height: 112px;
   border-radius: 12px;
   background: radial-gradient(circle at 50% 30%, rgba(244, 196, 48, 0.4), rgba(0, 0, 0, 0.15));
   border-color: var(--gold);
