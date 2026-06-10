@@ -1,6 +1,7 @@
 import type { RoundSnapshot, BetKind } from "../engine/types";
 import { formatCents } from "../format";
 import { CHIP_DENOMINATIONS } from "../store/gameStore";
+import "./betrail.css";
 
 interface BetRailProps {
   snapshot: RoundSnapshot;
@@ -43,12 +44,13 @@ export function BetRail({
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
   return (
-    <section aria-label="Bet rail">
-      <div aria-label="Chips">
+    <section aria-label="Bet rail" className="bet-rail panel">
+      <div aria-label="Chips" className="chips">
         {CHIP_DENOMINATIONS.map((cents) => (
           <button
             key={cents}
             type="button"
+            className="chip"
             aria-pressed={selectedChip === cents}
             onClick={() => onSelectChip(cents)}
           >
@@ -57,11 +59,12 @@ export function BetRail({
         ))}
       </div>
 
-      <div aria-label="Spots">
+      <div aria-label="Spots" className="spots">
         {SPOTS.map((spot) => (
           <button
             key={spot.label}
             type="button"
+            className="spot"
             disabled={!betting}
             onClick={() => onPlaceBet(spot.kind)}
           >
@@ -70,7 +73,7 @@ export function BetRail({
         ))}
       </div>
 
-      <ul aria-label="Staged bets">
+      <ul aria-label="Staged bets" className="staged">
         {snapshot.bets.map((bet, i) => (
           <li key={i}>
             <span>{`${describeBet(bet.kind)} ${formatCents(bet.amount)}`}</span>
@@ -78,7 +81,7 @@ export function BetRail({
         ))}
       </ul>
 
-      <button type="button" disabled={!betting} onClick={onClear}>
+      <button type="button" className="clear-bets" disabled={!betting} onClick={onClear}>
         Clear bets
       </button>
     </section>
