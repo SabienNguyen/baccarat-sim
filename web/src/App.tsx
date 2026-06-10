@@ -14,7 +14,7 @@ import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
-import { Dealer } from "./components/Dealer";
+import { ExchangeModal } from "./components/ExchangeModal";
 import { clearBankroll } from "./bankrollStorage";
 
 interface AppProps {
@@ -24,13 +24,21 @@ interface AppProps {
 export function App({ store }: AppProps = {}) {
   const active = store ?? defaultStore();
   const [cutting, setCutting] = useState(false);
+  const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
-  const selectedChip = useStore(active, (s) => s.selectedChip);
   const lastError = useStore(active, (s) => s.lastError);
   const lastDelta = useStore(active, (s) => s.lastDelta);
   const settleSeq = useStore(active, (s) => s.settleSeq);
-  const setSelectedChip = useStore(active, (s) => s.setSelectedChip);
-  const placeSelectedBet = useStore(active, (s) => s.placeSelectedBet);
+  const rack = useStore(active, (s) => s.rack);
+  const change = useStore(active, (s) => s.change);
+  const hand = useStore(active, (s) => s.hand);
+  const stagedChips = useStore(active, (s) => s.stagedChips);
+  const pickChip = useStore(active, (s) => s.pickChip);
+  const returnHand = useStore(active, (s) => s.returnHand);
+  const placeHand = useStore(active, (s) => s.placeHand);
+  const placeChip = useStore(active, (s) => s.placeChip);
+  const exchangeBreak = useStore(active, (s) => s.exchangeBreak);
+  const exchangeColorUp = useStore(active, (s) => s.exchangeColorUp);
   const clearBets = useStore(active, (s) => s.clearBets);
   const deal = useStore(active, (s) => s.deal);
   const peek = useStore(active, (s) => s.peek);
@@ -38,7 +46,6 @@ export function App({ store }: AppProps = {}) {
   const settle = useStore(active, (s) => s.settle);
   const newHand = useStore(active, (s) => s.newHand);
   const newShoe = useStore(active, (s) => s.newShoe);
-  const placeChip = useStore(active, (s) => s.placeChip);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
 
@@ -55,7 +62,7 @@ export function App({ store }: AppProps = {}) {
     <div className="app">
       <Hud snapshot={snapshot} lastError={lastError} />
       <main className="stage">
-        <Dealer phase={snapshot.phase} />
+        <DealerLine snapshot={snapshot} />
         <div className="card-stage">
           <Hand
             side="Player"
@@ -74,7 +81,6 @@ export function App({ store }: AppProps = {}) {
             onReveal={(i) => reveal("Banker", i)}
           />
         </div>
-        <DealerLine snapshot={snapshot} />
         <Controls
           snapshot={snapshot}
           onDeal={deal}
@@ -91,11 +97,16 @@ export function App({ store }: AppProps = {}) {
         />
         <BetRail
           snapshot={snapshot}
-          selectedChip={selectedChip}
-          onSelectChip={setSelectedChip}
-          onPlaceBet={placeSelectedBet}
+          rack={rack}
+          hand={hand}
+          change={change}
+          stagedChips={stagedChips}
+          onPickChip={pickChip}
+          onReturnHand={returnHand}
+          onPlaceHand={placeHand}
           onPlaceChip={placeChip}
           onClear={clearBets}
+          onOpenExchange={() => setExchanging(true)}
         />
       </main>
       <div className="board-dock">
@@ -110,6 +121,15 @@ export function App({ store }: AppProps = {}) {
             setCutting(false);
           }}
           onCancel={() => setCutting(false)}
+        />
+      )}
+      {exchanging && (
+        <ExchangeModal
+          rack={rack}
+          change={change}
+          onBreak={exchangeBreak}
+          onColorUp={exchangeColorUp}
+          onClose={() => setExchanging(false)}
         />
       )}
     </div>

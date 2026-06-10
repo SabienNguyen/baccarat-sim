@@ -1,10 +1,12 @@
 import { formatCents } from "../format";
 
-/** CSS modifier class per denomination, for the chip's colour. */
-const CHIP_COLOR: Record<number, string> = {
-  2500: "chip--red",
-  10000: "chip--green",
-  50000: "chip--blue",
+/** CSS modifier class per denomination — real casino colors. */
+export const CHIP_COLOR: Record<number, string> = {
+  100: "chip--white",
+  500: "chip--red",
+  2500: "chip--green",
+  10000: "chip--black",
+  50000: "chip--purple",
   100000: "chip--gold",
 };
 
@@ -16,26 +18,38 @@ export function chipFace(cents: number): string {
 
 interface ChipProps {
   cents: number;
-  selected: boolean;
-  onSelect: (cents: number) => void;
+  /** How many of this chip are in the rack. */
+  count: number;
+  /** Pick one up into the hand. */
+  onPick: (cents: number) => void;
+  disabled?: boolean;
 }
 
-/** A draggable casino chip. Drag it onto a spot to bet; click to select it. */
-export function Chip({ cents, selected, onSelect }: ChipProps) {
+/** A casino chip in your rack. Click to pick one up; drag one onto a spot. */
+export function Chip({ cents, count, onPick, disabled }: ChipProps) {
+  const empty = count <= 0;
   return (
     <button
       type="button"
       className={`chip ${CHIP_COLOR[cents] ?? ""}`}
       aria-label={`${formatCents(cents)} chip`}
-      aria-pressed={selected}
-      draggable
+      disabled={disabled || empty}
+      draggable={!disabled && !empty}
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", String(cents));
         e.dataTransfer.effectAllowed = "copy";
       }}
-      onClick={() => onSelect(cents)}
+      onClick={() => onPick(cents)}
     >
       <span className="chip-face">{chipFace(cents)}</span>
+      <span className="chip-count">{count}</span>
     </button>
+  );
+}
+
+/** A small read-only chip, for stacks on the felt and the hand tray. */
+export function MiniChip({ cents }: { cents: number }) {
+  return (
+    <span className={`mini-chip ${CHIP_COLOR[cents] ?? ""}`} title={formatCents(cents)} />
   );
 }

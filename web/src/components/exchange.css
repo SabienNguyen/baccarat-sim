@@ -1,0 +1,87 @@
+.exchange-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.exchange-modal {
+  width: min(440px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.exchange-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.exchange-head h3 {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--gold);
+  margin: 0;
+}
+.exchange-modal .btn {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #fff;
+  background: var(--chip-red);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.exchange-modal .btn:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+}
+.exchange-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.exchange-row {
+  display: grid;
+  grid-template-columns: 70px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.exchange-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.exchange-face {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: #f3eede;
+}
+.exchange-count {
+  font-family: var(--font-text);
+  font-size: 18px;
+  color: #f3eede;
+}
+.exchange-change {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 17px;
+  color: var(--gold);
+}
+.exchange-note {
+  color: #b9aee0;
+  font-size: 15px;
+}
