@@ -1,0 +1,16 @@
+.dealer-line {
+  width: 100%;
+  max-width: 720px;
+  text-align: center;
+}
+.dealer-line p {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 24px;
+  color: #f3eede;
+  background: var(--panel-bevel-lo);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.06), 3px 3px 0 var(--shadow);
+  padding: 10px 16px;
+}
