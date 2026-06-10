@@ -5,7 +5,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: linear-gradient(180deg, #1a6e40, #0f4c2a 75%);
+  background: linear-gradient(180deg, #1f7c49, #115530 75%);
   border: 5px solid #6b4423; /* wood rail */
   border-radius: 18px;
   box-shadow:
@@ -120,8 +120,9 @@
 .rail-hint {
   flex: 1;
   margin: 0;
-  font-size: 16px;
-  color: #b9aee0;
+  font-size: 19px;
+  color: #f0ead6;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
 }
 .hand-tray {
   flex: 1;
@@ -209,12 +210,15 @@
   cursor: not-allowed;
 }
 .spot-name {
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 1px;
 }
 .spot-payout {
-  font-size: 7px;
-  opacity: 0.85;
+  font-size: 9px;
+  color: #ffe9a8;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 .spot-chips {
   display: inline-flex;
@@ -255,12 +259,14 @@
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   padding: 4px;
+  background: radial-gradient(circle at 50% 35%, rgba(244, 196, 48, 0.3), rgba(0, 0, 0, 0.4));
+  border: 3px solid var(--gold);
 }
 .spot--side .spot-name {
-  font-size: 8px;
+  font-size: 9px;
 }
 .spot--side .spot-payout {
-  font-size: 7px;
+  font-size: 9px;
 }
 .spot--side .spot-stake {
   font-size: 12px;
