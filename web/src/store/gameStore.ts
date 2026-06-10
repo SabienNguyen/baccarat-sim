@@ -26,6 +26,11 @@ export interface GameState {
   settleSeq: number;
   /** Whether explain-the-rule mode is showing. UI-only. */
   explainOn: boolean;
+  /** Beat-the-table target (cents); null when the table has none. */
+  goal: number | null;
+  /** True right after the bankroll crosses the goal — drives the celebration. */
+  goalReached: boolean;
+  dismissGoal: () => void;
 
   /** The chip denominations this table stocks. */
   denoms: number[];
@@ -66,6 +71,7 @@ export interface GameState {
 export function createGameStore(
   session: GameSession,
   denoms: number[] = CHIP_DENOMINATIONS,
+  goal: number | null = null,
 ): StoreApi<GameState> {
   return createStore<GameState>((set, get) => {
     const apply = (result: CommandResult) => {
@@ -81,6 +87,9 @@ export function createGameStore(
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,
+      goal,
+      goalReached: false,
+      dismissGoal: () => set({ goalReached: false }),
       denoms,
       rack: initial.rack,
       change: initial.change,
@@ -207,6 +216,11 @@ export function createGameStore(
             stagedChips: [],
             lastDelta: result.snapshot.bankroll - before,
             settleSeq: get().settleSeq + 1,
+            // celebrate the moment the roll crosses the table's goal
+            goalReached:
+              goal !== null && before < goal && result.snapshot.bankroll >= goal
+                ? true
+                : get().goalReached,
           });
         }
         apply(result);

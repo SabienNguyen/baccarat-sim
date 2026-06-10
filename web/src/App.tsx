@@ -17,6 +17,7 @@ import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
 import { ExchangeModal } from "./components/ExchangeModal";
+import { VictoryModal } from "./components/VictoryModal";
 import { clearBankroll } from "./bankrollStorage";
 
 interface AppProps {
@@ -67,6 +68,9 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
   const newShoe = useStore(active, (s) => s.newShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
+  const goal = useStore(active, (s) => s.goal);
+  const goalReached = useStore(active, (s) => s.goalReached);
+  const dismissGoal = useStore(active, (s) => s.dismissGoal);
 
   const revealAll = () => {
     for (const i of hiddenIndices(snapshot.player.cards)) reveal("Player", i);
@@ -82,6 +86,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
       <Hud
         snapshot={snapshot}
         lastError={lastError}
+        goal={goal}
         onResetBankroll={() => {
           clearBankroll(tier);
           window.location.reload();
@@ -147,6 +152,17 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
             setCutting(false);
           }}
           onCancel={() => setCutting(false)}
+        />
+      )}
+      {goalReached && goal !== null && (
+        <VictoryModal
+          bankroll={snapshot.bankroll}
+          goal={goal}
+          onKeepPlaying={dismissGoal}
+          onLobby={() => {
+            dismissGoal();
+            onLeave();
+          }}
         />
       )}
       {exchanging && (

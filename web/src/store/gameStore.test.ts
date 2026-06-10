@@ -269,3 +269,33 @@ test("explain mode is off by default and toggles", () => {
   store.getState().toggleExplain();
   expect(store.getState().explainOn).toBe(false);
 });
+
+test("crossing the table goal during a settle triggers the celebration once", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 990_000 });
+  const after = snapshotWith({ phase: "Settled", bankroll: 1_010_000,
+    payouts: [{ bet: { kind: { Main: "Player" }, amount: 20000 }, net: 20000 }] });
+  const session: GameSession = {
+    ...fakeSession({ ok: true, snapshot: after }, before),
+    settle: () => ({ ok: true, snapshot: after }),
+  };
+  const store = createGameStore(session, undefined, 1_000_000);
+  expect(store.getState().goalReached).toBe(false);
+  store.getState().placeChip({ Main: "Player" }, 10000);
+  store.getState().settle();
+  expect(store.getState().goalReached).toBe(true);
+  store.getState().dismissGoal();
+  expect(store.getState().goalReached).toBe(false);
+});
+
+test("a settle that stays above (or below) the goal does not re-trigger", () => {
+  const before = snapshotWith({ phase: "Dealing", bankroll: 1_010_000 });
+  const after = snapshotWith({ phase: "Settled", bankroll: 1_020_000,
+    payouts: [{ bet: { kind: { Main: "Player" }, amount: 10000 }, net: 10000 }] });
+  const session: GameSession = {
+    ...fakeSession({ ok: true, snapshot: after }, before),
+    settle: () => ({ ok: true, snapshot: after }),
+  };
+  const store = createGameStore(session, undefined, 1_000_000);
+  store.getState().settle();
+  expect(store.getState().goalReached).toBe(false); // started above; no crossing
+});

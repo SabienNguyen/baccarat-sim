@@ -41,3 +41,10 @@ test("house actions live in the panel: Reset bank and Lobby fire their handlers"
   await userEvent.click(screen.getByRole("button", { name: "Lobby" }));
   expect(onLeave).toHaveBeenCalledOnce();
 });
+
+test("shows goal progress when the table has a win condition", () => {
+  render(<Hud snapshot={bettingSnapshot()} lastError={null} goal={400_000} />);
+  // betting fixture bankroll is $1,000 of a $4,000 goal -> 25%
+  expect(screen.getByText("Goal $4,000.00")).toBeInTheDocument();
+  expect(screen.getByText("25%")).toBeInTheDocument();
+});

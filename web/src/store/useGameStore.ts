@@ -14,7 +14,8 @@ export function storeFor(tier: TableTier): StoreApi<GameState> {
   let store = stores.get(tier);
   if (!store) {
     const saved = loadBankroll(tier);
-    store = createGameStore(createSession(configFor(tier, saved)), tableSpec(tier).denoms);
+    const spec = tableSpec(tier);
+    store = createGameStore(createSession(configFor(tier, saved)), spec.denoms, spec.goal);
 
     let lastSaved = store.getState().snapshot.bankroll;
     saveBankroll(tier, lastSaved);

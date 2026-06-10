@@ -5,6 +5,8 @@ import "./hud.css";
 interface HudProps {
   snapshot: RoundSnapshot;
   lastError: CommandError | null;
+  /** Beat-the-table target, if this table has one. */
+  goal?: number | null;
   onResetBankroll?: () => void;
   onLeave?: () => void;
 }
@@ -21,7 +23,8 @@ function describeBet(kind: RoundSnapshot["bets"][number]["kind"]): string {
   return Object.keys(kind.Side)[0];
 }
 
-export function Hud({ snapshot, lastError, onResetBankroll, onLeave }: HudProps) {
+export function Hud({ snapshot, lastError, goal, onResetBankroll, onLeave }: HudProps) {
+  const progress = goal ? Math.min(snapshot.bankroll / goal, 1) : 0;
   return (
     <section aria-label="HUD" className="hud panel">
       <h1 className="hud-title">Baccarat Simulator</h1>
@@ -30,6 +33,21 @@ export function Hud({ snapshot, lastError, onResetBankroll, onLeave }: HudProps)
         <span className="hud-box-label">Bankroll</span>
         <span className="hud-box-value">{formatCents(snapshot.bankroll)}</span>
       </div>
+
+      {goal != null && (
+        <div className="hud-box hud-box--goal">
+          <span className="hud-box-label">Goal {formatCents(goal)}</span>
+          <span className="hud-goal-bar" aria-label="Goal progress">
+            <span
+              className="hud-goal-fill"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </span>
+          <span className="hud-goal-pct">
+            {progress >= 1 ? "TABLE BEATEN" : `${Math.floor(progress * 100)}%`}
+          </span>
+        </div>
+      )}
 
       <div className="hud-box" data-phase={snapshot.phase}>
         <span className="hud-box-label">Phase</span>

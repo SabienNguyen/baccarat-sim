@@ -45,3 +45,9 @@ test("each table stocks chips that fit its stakes", () => {
     expect(rackTotal(rack) + change).toBe(t.starting_bankroll);
   }
 });
+
+test("every table's goal is 10x the buy-in", () => {
+  for (const t of TABLES) {
+    expect(t.goal).toBe(t.starting_bankroll * 10);
+  }
+});
