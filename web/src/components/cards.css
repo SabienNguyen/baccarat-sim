@@ -214,6 +214,11 @@
     3px 3px 0 var(--ink),
     6px 6px 0 rgba(0, 0, 0, 0.45);
 }
+/* mid-squeeze running total: slightly dimmed until it's final */
+.hand-total-num--running {
+  color: #d8d2c0;
+  opacity: 0.9;
+}
 .hand-total-num--win {
   color: var(--gold);
   animation: total-glow 900ms ease-in-out infinite alternate;

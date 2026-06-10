@@ -28,8 +28,25 @@ test("in Settled, renders static cards and shows the total", () => {
   expect(screen.getByText("9")).toBeInTheDocument();
 });
 
-test("hides the total until every card is face up", () => {
-  render(<Hand side="Player" hand={dealingSnapshot().player} phase="Dealing" />);
+test("shows a running total of the face-up cards mid-squeeze", () => {
+  // dealing fixture: Nine of Hearts face-up + one still peeked -> running 9
+  const { container } = render(
+    <Hand side="Player" hand={dealingSnapshot().player} phase="Dealing" />,
+  );
+  expect(screen.getByText("Total")).toBeInTheDocument();
+  const num = container.querySelector(".hand-total-num");
+  expect(num).toHaveTextContent("9");
+  expect(num).toHaveClass("hand-total-num--running");
+});
+
+test("shows no total before any card is revealed", () => {
+  render(
+    <Hand
+      side="Banker"
+      hand={{ cards: ["FaceDown", "FaceDown"], total: null }}
+      phase="Dealing"
+    />,
+  );
   expect(screen.queryByText("Total")).not.toBeInTheDocument();
 });
 

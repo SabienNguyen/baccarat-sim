@@ -1,6 +1,7 @@
 import type { Side, HandView, PhaseTag } from "../engine/types";
 import { Card } from "./Card";
 import { SqueezeCard } from "./SqueezeCard";
+import { runningTotal } from "../cards";
 
 interface HandProps {
   side: Side;
@@ -17,6 +18,10 @@ interface HandProps {
 export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal }: HandProps) {
   const dealing = phase === "Dealing";
   const shown = hand.cards.slice(0, visibleCount ?? hand.cards.length);
+  // Run the total live off the face-up cards; the engine's total takes over
+  // (and goes final) once every card is up.
+  const total = hand.total ?? runningTotal(shown);
+  const final = hand.total !== null;
   return (
     <div aria-label={`${side} hand`} className="hand">
       <h3>{side}</h3>
@@ -35,12 +40,20 @@ export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal
           </li>
         ))}
       </ul>
-      {hand.total !== null && (
-        // keyed by the value so the slam-in replays whenever the total lands
-        <p className="hand-total-badge" key={hand.total}>
+      {total !== null && (
+        // keyed by the value so the slam-in replays whenever the total changes
+        <p className="hand-total-badge" key={total}>
           <span className="hand-total-label">Total</span>
-          <span className={`hand-total-num ${winner ? "hand-total-num--win" : ""}`}>
-            {hand.total}
+          <span
+            className={[
+              "hand-total-num",
+              final ? "" : "hand-total-num--running",
+              winner ? "hand-total-num--win" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {total}
           </span>
         </p>
       )}
