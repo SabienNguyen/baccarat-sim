@@ -195,7 +195,7 @@ pub fn error_message(err: &TableError) -> String {
             "Waiting on the table — everyone bets or sits out first.".into()
         }
         TableError::NotYourSqueeze { side } => {
-            format!("The {side:?} cards are in another player's hands.")
+            format!("The {side:?} hand's cards are in another player's hands.")
         }
         TableError::OutOfOrder => "Order, order — Player hand first, then Banker.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {

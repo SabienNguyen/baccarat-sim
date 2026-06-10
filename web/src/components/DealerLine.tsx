@@ -38,13 +38,16 @@ export function DealerLine({
       <span className="dealer-tag">DEALER</span>
       {/* keyed by the line so the pop-in replays whenever he says something new */}
       <p aria-live="polite" key={lineKey}>
-        {segments.map((seg, i) =>
-          seg.term ? (
-            <GlossaryTerm key={i} term={seg.term} label={seg.text} entry={lookup(seg.term)} />
-          ) : (
-            <span key={i}>{seg.text}</span>
-          ),
-        )}
+        {/* one inline run, so multi-segment lines flow as a sentence */}
+        <span className="dealer-text">
+          {segments.map((seg, i) =>
+            seg.term ? (
+              <GlossaryTerm key={i} term={seg.term} label={seg.text} entry={lookup(seg.term)} />
+            ) : (
+              <span key={i}>{seg.text}</span>
+            ),
+          )}
+        </span>
       </p>
     </section>
   );

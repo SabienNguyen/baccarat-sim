@@ -58,3 +58,13 @@ test("a refused bet overrides the narration with the dealer's explanation", () =
     "Too rich for this table — the max is $5,000.00.",
   );
 });
+
+test("multi-segment lines flow as one sentence, not stacked rows", () => {
+  const { container } = render(
+    <DealerLine snapshot={snap()} lookup={lookup} />,
+  );
+  // all segments live inside a single inline run
+  const runs = container.querySelectorAll(".dealer-text");
+  expect(runs).toHaveLength(1);
+  expect(runs[0]).toHaveTextContent("Monkey for the Player! Counts for nothing.");
+});
