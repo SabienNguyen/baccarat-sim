@@ -10,6 +10,8 @@ import { BetRail } from "./components/BetRail";
 import { Controls } from "./components/Controls";
 import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
+import { DealerLine } from "./components/DealerLine";
+import { ExplainPanel } from "./components/ExplainPanel";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -30,6 +32,8 @@ export function App({ store }: AppProps = {}) {
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
   const newShoe = useStore(active, (s) => s.newShoe);
+  const explainOn = useStore(active, (s) => s.explainOn);
+  const toggleExplain = useStore(active, (s) => s.toggleExplain);
 
   const revealAll = () => {
     for (const i of hiddenIndices(snapshot.player.cards)) reveal("Player", i);
@@ -62,12 +66,15 @@ export function App({ store }: AppProps = {}) {
             onReveal={(i) => reveal("Banker", i)}
           />
         </div>
+        <DealerLine snapshot={snapshot} />
         <Controls
           snapshot={snapshot}
           onDeal={deal}
           onRevealAll={revealAll}
           onSettle={settle}
           onNewShoe={newShoe}
+          explainOn={explainOn}
+          onToggleExplain={toggleExplain}
         />
         <BetRail
           snapshot={snapshot}
@@ -77,7 +84,10 @@ export function App({ store }: AppProps = {}) {
           onClear={clearBets}
         />
       </main>
-      <Scoreboard scoreboard={snapshot.scoreboard} />
+      <div className="board-dock">
+        <Scoreboard scoreboard={snapshot.scoreboard} />
+        {explainOn && <ExplainPanel snapshot={snapshot} />}
+      </div>
       <WinPopup key={settleSeq} amount={lastDelta} />
     </div>
   );

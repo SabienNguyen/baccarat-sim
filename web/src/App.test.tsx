@@ -90,3 +90,18 @@ test("hides the Player's third card until the initial four are revealed (no coun
   render(<App store={store} />);
   expect(screen.queryByLabelText("King of Spades")).toBeNull();
 });
+
+test("renders the dealer line for the current phase", () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<App store={store} />);
+  const dealer = screen.getByLabelText("Dealer");
+  expect(dealer).toHaveTextContent("Place your bets.");
+});
+
+test("explain panel appears only when explain mode is on", async () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<App store={store} />);
+  expect(screen.queryByLabelText("Explain")).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Explain" }));
+  expect(screen.getByLabelText("Explain")).toBeInTheDocument();
+});

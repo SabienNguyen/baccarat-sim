@@ -111,3 +111,12 @@ test("a failed settle leaves lastDelta untouched", () => {
   expect(store.getState().lastDelta).toBeNull();
   expect(store.getState().settleSeq).toBe(0);
 });
+
+test("explain mode is off by default and toggles", () => {
+  const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
+  expect(store.getState().explainOn).toBe(false);
+  store.getState().toggleExplain();
+  expect(store.getState().explainOn).toBe(true);
+  store.getState().toggleExplain();
+  expect(store.getState().explainOn).toBe(false);
+});

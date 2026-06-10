@@ -1,0 +1,33 @@
+.explain-panel {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.explain-panel h4 {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--gold);
+  margin: 6px 0 2px;
+  letter-spacing: 1px;
+}
+.explain-trace,
+.explain-edges {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 18px;
+}
+.explain-trace li {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--panel-bevel-lo);
+}
+.explain-edges .basis {
+  color: #b9aee0;
+  font-size: 15px;
+}
+.explain-hint {
+  margin: 0;
+  font-size: 16px;
+  color: #b9aee0;
+}

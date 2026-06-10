@@ -13,6 +13,9 @@ export interface GameState {
   lastDelta: number | null;
   /** Increments on each settle so the win pop-up can remount via React key. */
   settleSeq: number;
+  /** Whether explain-the-rule mode is showing. UI-only. */
+  explainOn: boolean;
+  toggleExplain: () => void;
   setSelectedChip: (cents: number) => void;
   placeSelectedBet: (kind: BetKind) => void;
   clearBets: () => void;
@@ -35,6 +38,8 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       lastError: null,
       lastDelta: null,
       settleSeq: 0,
+      explainOn: false,
+      toggleExplain: () => set({ explainOn: !get().explainOn }),
       setSelectedChip: (cents) => set({ selectedChip: cents }),
       placeSelectedBet: (kind) => apply(session.placeBet(kind, get().selectedChip)),
       clearBets: () => {

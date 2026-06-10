@@ -7,6 +7,8 @@ interface ControlsProps {
   onRevealAll: () => void;
   onSettle: () => void;
   onNewShoe: () => void;
+  explainOn?: boolean;
+  onToggleExplain?: () => void;
 }
 
 export function Controls({
@@ -15,6 +17,8 @@ export function Controls({
   onRevealAll,
   onSettle,
   onNewShoe,
+  explainOn,
+  onToggleExplain,
 }: ControlsProps) {
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
@@ -33,6 +37,14 @@ export function Controls({
       </button>
       <button type="button" className="btn" onClick={onNewShoe}>
         New Shoe
+      </button>
+      <button
+        type="button"
+        className="btn"
+        aria-pressed={!!explainOn}
+        onClick={onToggleExplain}
+      >
+        Explain
       </button>
     </section>
   );

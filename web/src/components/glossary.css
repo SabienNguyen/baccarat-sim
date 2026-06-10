@@ -1,0 +1,40 @@
+.glossary-term {
+  position: relative;
+  display: inline-block;
+}
+.term {
+  font: inherit;
+  color: var(--gold);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: help;
+  text-decoration: underline dotted;
+}
+.term-plain {
+  font-style: italic;
+}
+.term-popover {
+  position: absolute;
+  left: 0;
+  bottom: 125%;
+  z-index: 60;
+  width: max-content;
+  max-width: 220px;
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: 1.2;
+  color: #f3eede;
+  background: var(--panel-face);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 3px 3px 0 var(--shadow);
+  padding: 8px 10px;
+}
+.term-popover strong {
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: 9px;
+  display: block;
+  margin-bottom: 4px;
+}
