@@ -14,6 +14,7 @@ import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
+import { Dealer } from "./components/Dealer";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -53,6 +54,7 @@ export function App({ store }: AppProps = {}) {
     <div className="app">
       <Hud snapshot={snapshot} lastError={lastError} />
       <main className="stage">
+        <Dealer phase={snapshot.phase} />
         <div className="card-stage">
           <Hand
             side="Player"
