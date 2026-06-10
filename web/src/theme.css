@@ -68,9 +68,12 @@ body {
   gap: 16px;
   min-height: 100vh;
   padding: 16px;
+  /* center each column vertically so the table doesn't pool at the top */
+  align-items: center;
 }
 .app > .hud {
   grid-area: hud;
+  align-self: center;
 }
 .app > .stage {
   grid-area: stage;
@@ -78,6 +81,7 @@ body {
   flex-direction: column;
   gap: 16px;
   align-items: center;
+  justify-content: center;
 }
 .app > .board {
   grid-area: board;

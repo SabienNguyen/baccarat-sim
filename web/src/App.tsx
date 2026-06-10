@@ -69,6 +69,7 @@ export function App({ store }: AppProps = {}) {
             hand={snapshot.player}
             phase={snapshot.phase}
             visibleCount={playerVisible}
+            winner={snapshot.outcome === "PlayerWin"}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
           />
@@ -77,6 +78,7 @@ export function App({ store }: AppProps = {}) {
             hand={snapshot.banker}
             phase={snapshot.phase}
             visibleCount={bankerVisible}
+            winner={snapshot.outcome === "BankerWin"}
             onPeek={(i) => peek("Banker", i)}
             onReveal={(i) => reveal("Banker", i)}
           />

@@ -4,7 +4,7 @@ import { SqueezeCard } from "./SqueezeCard";
 import type { CardView } from "../engine/types";
 
 const faceDown: CardView = "FaceDown";
-const peeked: CardView = { Peeked: { sliver: { suit: "Spades" } } };
+const peeked: CardView = { Peeked: { sliver: { suit: "Spades", rank: "Nine" } } };
 const faceUp: CardView = { FaceUp: { rank: "Nine", suit: "Hearts" } };
 
 test("click fallback: a face-down card peeks", async () => {

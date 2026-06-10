@@ -14,12 +14,13 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
   expect(screen.queryByText(/[♠♥♦♣]/)).not.toBeInTheDocument();
 });
 
-test("renders a peeked card showing only the suit sliver", () => {
-  const card: CardView = { Peeked: { sliver: { suit: "Spades" } } };
-  render(<Card card={card} />);
+test("a peeked card folds back to show the real face under the corner", () => {
+  const card: CardView = { Peeked: { sliver: { suit: "Spades", rank: "Nine" } } };
+  const { container } = render(<Card card={card} />);
   expect(screen.getByLabelText("peeked card, Spades")).toBeInTheDocument();
-  expect(screen.getAllByText("♠").length).toBeGreaterThan(0);
-  expect(screen.queryByText(/^(A|[2-9]|10|J|Q|K)$/)).not.toBeInTheDocument();
+  // the genuine printed face (pip edges, index) sits under the fold
+  expect(container.querySelector(".card-peel-face")).not.toBeNull();
+  expect(container.querySelectorAll(".card-pip")).toHaveLength(9);
 });
 
 test("renders a face-up card with corner indices, pips, and color", () => {

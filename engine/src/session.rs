@@ -1,4 +1,4 @@
-use crate::card::{Card, Suit};
+use crate::card::{Card, Rank, Suit};
 use crate::hand::Hand;
 use crate::round::{play_round, Outcome, RoundResult};
 use crate::shoe::Shoe;
@@ -47,11 +47,15 @@ pub struct BetPayout {
 }
 
 /// The corner-squeeze hint: only the card's suit shows first.
+/// What a squeeze exposes. The full identity rides along so the front-end can
+/// draw the real card face under the fold (pip edges, "legs", the index) the
+/// way a physical squeeze would; how much of it shows is the UI's business.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub struct Pip {
     pub suit: Suit,
+    pub rank: Rank,
 }
 
 /// A card as the front-end may see it. Unrevealed cards hide their identity.
@@ -379,7 +383,7 @@ fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
         .zip(status)
         .map(|(c, s)| match s {
             CardStatus::FaceDown => CardView::FaceDown,
-            CardStatus::Peeked => CardView::Peeked { sliver: Pip { suit: c.suit } },
+            CardStatus::Peeked => CardView::Peeked { sliver: Pip { suit: c.suit, rank: c.rank } },
             CardStatus::FaceUp => CardView::FaceUp(*c),
         })
         .collect();

@@ -109,6 +109,49 @@ function suitColor(suit: Suit): "red" | "black" {
   return suit === "Hearts" || suit === "Diamonds" ? "red" : "black";
 }
 
+/** The printed face of a card: corner indices plus pips or a court figure. */
+function FaceContent({ rank, suit }: { rank: Rank; suit: Suit }) {
+  const pips = PIP_LAYOUT[rank];
+  const court = COURT_GLYPH[rank];
+  return (
+    <>
+      <span className="card-index card-index--tl">
+        <span className="card-rank">{RANK_SHORT[rank]}</span>
+        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
+      </span>
+      <span className="card-index card-index--br">
+        <span className="card-rank">{RANK_SHORT[rank]}</span>
+        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
+      </span>
+      {pips && (
+        <span className="card-pips">
+          {pips.map(([x, y], i) => (
+            <span
+              key={i}
+              className={[
+                "card-pip",
+                rank === "Ace" ? "card-pip--ace" : "",
+                y > 50 ? "card-pip--flip" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={{ left: `${x}%`, top: `${y}%` }}
+            >
+              {SUIT_GLYPH[suit]}
+            </span>
+          ))}
+        </span>
+      )}
+      {court && (
+        <span className="card-court">
+          <span className="card-court-half">{court}</span>
+          <span className="card-court-half card-court-half--flip">{court}</span>
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Which corner of the card is being squeezed. */
 export type PeelCorner = "tl" | "tr" | "bl" | "br";
 
@@ -155,6 +198,8 @@ function Peel({
       style={{ clipPath: foldClip(corner, size) }}
     >
       {children}
+      {/* curvature shading toward the crease */}
+      <span className={`card-peel-shade card-peel-shade--${corner}`} />
     </span>
   );
 }
@@ -178,18 +223,14 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
   }
 
   if ("Peeked" in card) {
-    const suit = card.Peeked.sliver.suit;
+    const { suit, rank } = card.Peeked.sliver;
     const held = Math.max(bend, 0.35);
     return (
       <div className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
         <Peel bend={held} corner={corner}>
-          <span
-            className={`card-sliver card-sliver--${corner}`}
-            data-color={suitColor(suit)}
-            style={{ fontSize: `${Math.round(16 + held * 14)}px` }}
-          >
-            {SUIT_GLYPH[suit]}
-            <span className="card-sliver-echo">{SUIT_GLYPH[suit]}</span>
+          {/* the real printed face under the fold: pip edges, legs, the index */}
+          <span className="card-peel-face" data-color={suitColor(suit)}>
+            <FaceContent rank={rank} suit={suit} />
           </span>
         </Peel>
       </div>
@@ -197,44 +238,9 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
   }
 
   const { rank, suit } = card.FaceUp;
-  const color = suitColor(suit);
-  const pips = PIP_LAYOUT[rank];
-  const court = COURT_GLYPH[rank];
   return (
-    <div className="card card-face" aria-label={`${rank} of ${suit}`} data-color={color}>
-      <span className="card-index card-index--tl">
-        <span className="card-rank">{RANK_SHORT[rank]}</span>
-        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
-      </span>
-      <span className="card-index card-index--br">
-        <span className="card-rank">{RANK_SHORT[rank]}</span>
-        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
-      </span>
-      {pips && (
-        <span className="card-pips">
-          {pips.map(([x, y], i) => (
-            <span
-              key={i}
-              className={[
-                "card-pip",
-                rank === "Ace" ? "card-pip--ace" : "",
-                y > 50 ? "card-pip--flip" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              style={{ left: `${x}%`, top: `${y}%` }}
-            >
-              {SUIT_GLYPH[suit]}
-            </span>
-          ))}
-        </span>
-      )}
-      {court && (
-        <span className="card-court">
-          <span className="card-court-half">{court}</span>
-          <span className="card-court-half card-court-half--flip">{court}</span>
-        </span>
-      )}
+    <div className="card card-face" aria-label={`${rank} of ${suit}`} data-color={suitColor(suit)}>
+      <FaceContent rank={rank} suit={suit} />
     </div>
   );
 }

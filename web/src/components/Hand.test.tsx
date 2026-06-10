@@ -24,12 +24,13 @@ test("in Dealing, renders cards and a peeked card reveals at its index", async (
 test("in Settled, renders static cards and shows the total", () => {
   render(<Hand side="Player" hand={settledSnapshot().player} phase="Settled" />);
   expect(screen.getByLabelText("Four of Clubs")).toBeInTheDocument();
-  expect(screen.getByText("Total: 9")).toBeInTheDocument();
+  expect(screen.getByText("Total")).toBeInTheDocument();
+  expect(screen.getByText("9")).toBeInTheDocument();
 });
 
 test("hides the total until every card is face up", () => {
   render(<Hand side="Player" hand={dealingSnapshot().player} phase="Dealing" />);
-  expect(screen.queryByText(/Total:/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Total")).not.toBeInTheDocument();
 });
 
 test("renders only the first `visibleCount` cards, hiding an ungated third", () => {

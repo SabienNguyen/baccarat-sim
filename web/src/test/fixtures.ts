@@ -31,7 +31,7 @@ export function dealingSnapshot(): RoundSnapshot {
     player: {
       cards: [
         { FaceUp: { rank: "Nine", suit: "Hearts" } },
-        { Peeked: { sliver: { suit: "Spades" } } },
+        { Peeked: { sliver: { suit: "Spades", rank: "Nine" } } },
       ],
       total: null,
     },
