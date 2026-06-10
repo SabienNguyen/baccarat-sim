@@ -32,6 +32,15 @@ interface MultiplayerProps {
   connect?: () => WebSocket;
 }
 
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type Stage =
   | { at: "connecting" }
   | { at: "lobby" }
@@ -39,6 +48,7 @@ type Stage =
   | { at: "dead"; why: string };
 
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
+  const [copied, setCopied] = useState(false);
   const ws = useRef<WebSocket | null>(null);
   const storeRef = useRef<RemoteStore | null>(null);
   const [stage, setStage] = useState<Stage>({ at: "connecting" });
@@ -138,9 +148,20 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   if (stage.at === "table") {
     return (
       <div className="mp-table">
-        <div className="mp-roomtag">
-          Table <strong>{stage.room}</strong> — share this code
-        </div>
+        <button
+          type="button"
+          className="mp-roomtag"
+          title="Copy the invite code"
+          onClick={async () => {
+            if (await copyText(stage.room)) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1600);
+            }
+          }}
+        >
+          Table <strong>{stage.room}</strong>
+          <span className="mp-copyhint">{copied ? "✓ copied" : "copy"}</span>
+        </button>
         <GameTable
           store={stage.store}
           onLeave={() => {

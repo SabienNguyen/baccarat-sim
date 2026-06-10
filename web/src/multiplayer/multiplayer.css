@@ -204,6 +204,9 @@
   top: 8px;
   right: 12px;
   z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-text);
   font-size: 16px;
   color: #f3eede;
@@ -212,6 +215,20 @@
   border-radius: 8px;
   padding: 4px 10px;
   box-shadow: 2px 2px 0 var(--shadow);
+  cursor: pointer;
+}
+.mp-roomtag:hover {
+  filter: brightness(1.15);
+}
+.mp-roomtag:hover .mp-copyhint {
+  color: var(--gold);
+}
+.mp-copyhint {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: #b9aee0;
+  text-transform: uppercase;
 }
 .mp-roomtag strong {
   font-family: var(--font-display);
@@ -223,41 +240,66 @@
 /* seats strip on the table */
 .seats-strip {
   display: flex;
-  gap: 10px;
+  gap: 14px;
   justify-content: center;
   flex-wrap: wrap;
   width: 100%;
+  padding-top: 12px;
 }
 .seat-chip {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  min-width: 130px;
   background: var(--panel-face);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  padding: 12px 18px;
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+/* this player is holding a hand's cards */
+.seat-chip--holding {
+  border-color: var(--gold);
+  box-shadow:
+    0 0 0 2px rgba(244, 196, 48, 0.35),
+    3px 3px 0 var(--shadow);
+}
+.seat-cards {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 8px;
+  color: #1a1208;
+  background: var(--gold);
   border: 2px solid var(--ink);
-  border-radius: 8px;
-  padding: 6px 12px;
+  border-radius: 6px;
+  padding: 3px 8px;
   box-shadow: 2px 2px 0 var(--shadow);
 }
 .seat-name {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 12px;
   color: var(--gold);
 }
 .seat-money {
   font-family: var(--font-text);
-  font-size: 15px;
+  font-size: 19px;
   color: #f3eede;
 }
 .seat-staked {
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 17px;
   color: #7ec8ff;
 }
 
 .seat-status {
   font-family: var(--font-display);
-  font-size: 7px;
+  font-size: 9px;
   color: #b9aee0;
   letter-spacing: 1px;
 }
@@ -283,5 +325,42 @@
     display: block;
     width: fit-content;
     margin: 8px auto 0;
+  }
+}
+
+/* phones: the lobby stacks comfortably */
+@media (max-width: 520px) {
+  .mp-lobby {
+    padding: 20px 12px 32px;
+    gap: 14px;
+  }
+  .mp-title {
+    font-size: 18px;
+  }
+  .mp-panel {
+    padding: 10px;
+  }
+  .mp-tier {
+    min-width: 100%;
+  }
+  .mp-joinrow {
+    flex-wrap: wrap;
+  }
+  .mp-joinrow .mp-code {
+    flex: 1;
+    min-width: 0;
+  }
+  .mp-rooms li {
+    flex-wrap: wrap;
+  }
+  .seat-chip {
+    padding: 8px 12px;
+    min-width: 104px;
+  }
+  .seat-money {
+    font-size: 15px;
+  }
+  .seat-name {
+    font-size: 10px;
   }
 }

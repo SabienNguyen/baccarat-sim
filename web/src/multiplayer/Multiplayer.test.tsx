@@ -92,3 +92,45 @@ test("a join error before seating shows in the lobby", () => {
   socket.push({ type: "error", message: "No table by that code." });
   expect(screen.getByText("No table by that code.")).toBeInTheDocument();
 });
+
+test("the room code copies to the clipboard", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
+  const { socket } = mount();
+  socket.open();
+  socket.push({
+    type: "joined",
+    room: "COPYME",
+    player: 0,
+    tier: "low",
+    view: {
+      phase: "Betting",
+      player: { cards: [], total: null },
+      banker: { cards: [], total: null },
+      bets: [],
+      bankroll: 50_000,
+      table_min: 100,
+      table_max: 50_000,
+      outcome: null,
+      payouts: null,
+      events: [],
+      scoreboard: {
+        bead_plate: { cells: [] },
+        big_road: { columns: [] },
+        big_eye_boy: { columns: [] },
+        small_road: { columns: [] },
+        cockroach_pig: { columns: [] },
+      },
+      explain: [],
+      seats: [{ id: 0, name: "me", bankroll: 50_000, staked: 0, sitting_out: false, decided: false }],
+      player_squeezer: null,
+      banker_squeezer: null,
+    },
+  });
+  await userEvent.click(screen.getByRole("button", { name: /COPYME/ }));
+  expect(writeText).toHaveBeenCalledWith("COPYME");
+  expect(await screen.findByText("✓ copied")).toBeInTheDocument();
+});
