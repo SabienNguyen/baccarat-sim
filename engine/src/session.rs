@@ -262,7 +262,8 @@ impl Session {
             }
         };
 
-        if self.shoe.remaining() < 6 {
+        // Past the cut card: this shoe is done, the coup comes from a fresh one.
+        if self.shoe.remaining() <= crate::shoe::CUT_CARD {
             self.reshuffle();
         }
 

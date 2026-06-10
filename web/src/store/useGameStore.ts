@@ -4,6 +4,16 @@ import type { SessionConfig } from "../engine/types";
 import type { StoreApi } from "zustand/vanilla";
 import { loadBankroll, saveBankroll } from "../bankrollStorage";
 
+/** 52 bits of OS entropy for the shoe — Math.random is not a casino shuffle. */
+function strongSeed(): number {
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    const buf = new Uint32Array(2);
+    crypto.getRandomValues(buf);
+    return buf[0] * 0x100000 + (buf[1] >>> 12); // 32 + 20 bits, < 2^53
+  }
+  return Math.floor(Math.random() * 0xffffffff);
+}
+
 const DEFAULT_CONFIG: SessionConfig = {
   // $10,000 starting bank, $5 min / $50,000 max — so every chip ($25–$1,000)
   // is bettable and the table has realistic room.
@@ -11,7 +21,7 @@ const DEFAULT_CONFIG: SessionConfig = {
   table_min: 500,
   table_max: 5_000_000,
   ruleset: "Commission",
-  seed: Math.floor(Math.random() * 0xffffffff),
+  seed: strongSeed(),
 };
 
 let store: StoreApi<GameState> | null = null;

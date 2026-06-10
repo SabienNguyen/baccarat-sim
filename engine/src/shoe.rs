@@ -13,8 +13,14 @@ const RANKS: [Rank; 13] = [
 const SUITS: [Suit; 4] = [Suit::Clubs, Suit::Diamonds, Suit::Hearts, Suit::Spades];
 const DECKS: usize = 8;
 
+/// The cut card sits this many cards from the back of the shoe; once play
+/// reaches it the next coup comes from a fresh shoe, as in a real pit.
+pub const CUT_CARD: usize = 14;
+
 impl Shoe {
-    /// Build and shuffle an 8-deck shoe from a fixed seed.
+    /// Build and shuffle an 8-deck shoe from a fixed seed, then perform the
+    /// casino burn ritual: the first card is turned and that many more cards
+    /// (face cards counting ten) are discarded before play.
     pub fn new_seeded(seed: u64) -> Self {
         let mut cards = Vec::with_capacity(DECKS * 52);
         for _ in 0..DECKS {
@@ -26,7 +32,21 @@ impl Shoe {
         }
         let mut rng = StdRng::seed_from_u64(seed);
         cards.shuffle(&mut rng);
-        Shoe { cards }
+        let mut shoe = Shoe { cards };
+        shoe.burn();
+        shoe
+    }
+
+    /// Burn the turned card plus its face value in cards (10/J/Q/K burn ten).
+    fn burn(&mut self) {
+        let turned = self.draw();
+        let count = match turned.value() {
+            0 => 10,
+            v => v as usize,
+        };
+        for _ in 0..count.min(self.remaining()) {
+            let _ = self.draw();
+        }
     }
 
     /// Cards left in the shoe.
@@ -52,16 +72,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fresh_shoe_has_416_cards() {
+    fn fresh_shoe_is_eight_decks_minus_the_burn() {
         let shoe = Shoe::new_seeded(42);
-        assert_eq!(shoe.remaining(), 416);
+        // 416 cards less the turned card and 1-10 burned behind it.
+        assert!(shoe.remaining() >= 405 && shoe.remaining() <= 414, "got {}", shoe.remaining());
     }
 
     #[test]
     fn drawing_reduces_remaining() {
         let mut shoe = Shoe::new_seeded(42);
+        let before = shoe.remaining();
         let _ = shoe.draw();
-        assert_eq!(shoe.remaining(), 415);
+        assert_eq!(shoe.remaining(), before - 1);
     }
 
     #[test]
