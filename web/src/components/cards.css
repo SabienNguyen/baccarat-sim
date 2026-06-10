@@ -2,43 +2,58 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 72px;
-  border: 2px solid #222;
-  border-radius: 6px;
-  margin: 2px;
-  font-weight: bold;
+  width: 72px;
+  height: 104px;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  margin: 4px;
+  font-family: var(--font-display);
   user-select: none;
   position: relative;
+  box-shadow: 3px 3px 0 var(--shadow);
   transition: transform 120ms ease;
 }
 .card-back {
-  background: repeating-linear-gradient(45deg, #334, #334 4px, #445 4px, #445 8px);
+  background:
+    repeating-linear-gradient(45deg, #3a2a55, #3a2a55 6px, #4a3a6a 6px, #4a3a6a 12px);
+  box-shadow:
+    inset 2px 2px 0 var(--panel-bevel-hi),
+    inset -2px -2px 0 var(--panel-bevel-lo),
+    3px 3px 0 var(--shadow);
 }
 .card-face {
-  background: #fefefe;
+  background: #f6f1e0;
   flex-direction: column;
+  gap: 2px;
 }
 .card-face[data-color="red"],
 .card-sliver[data-color="red"] {
-  color: #c0202a;
+  color: var(--chip-red);
 }
 .card-face[data-color="black"],
 .card-sliver[data-color="black"] {
-  color: #111;
+  color: #1a1a1a;
 }
 .card-sliver {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  background: #fefefe;
-  padding: 1px 3px;
-  font-size: 12px;
+  top: 3px;
+  left: 3px;
+  background: #f6f1e0;
+  padding: 2px 4px;
+  font-size: 14px;
   line-height: 1;
+  border-radius: 2px;
 }
 .card-rank {
   font-size: 18px;
 }
 .card-suit {
-  font-size: 16px;
+  font-size: 18px;
+}
+
+/* Player/Banker hands sit side by side on the felt stage. */
+.card-stage {
+  display: flex;
+  gap: 48px;
+  justify-content: center;
 }
