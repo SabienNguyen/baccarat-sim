@@ -30,3 +30,6 @@
   filter: grayscale(0.7) brightness(0.7);
   cursor: not-allowed;
 }
+.controls .btn--leave {
+  background: var(--panel-bevel-hi);
+}

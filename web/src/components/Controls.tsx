@@ -11,6 +11,7 @@ interface ControlsProps {
   explainOn?: boolean;
   onToggleExplain?: () => void;
   onResetBankroll?: () => void;
+  onLeave?: () => void;
 }
 
 export function Controls({
@@ -23,6 +24,7 @@ export function Controls({
   explainOn,
   onToggleExplain,
   onResetBankroll,
+  onLeave,
 }: ControlsProps) {
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
@@ -57,6 +59,11 @@ export function Controls({
       {onResetBankroll && (
         <button type="button" className="btn" onClick={onResetBankroll}>
           Reset bank
+        </button>
+      )}
+      {onLeave && (
+        <button type="button" className="btn btn--leave" onClick={onLeave}>
+          Lobby
         </button>
       )}
     </section>

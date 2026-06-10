@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
-import { defaultStore } from "./store/useGameStore";
+import { storeFor } from "./store/useGameStore";
+import { HomeScreen } from "./components/HomeScreen";
+import type { TableTier } from "./tables";
 import { hiddenIndices } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { Hud } from "./components/Hud";
@@ -21,8 +23,24 @@ interface AppProps {
   store?: StoreApi<GameState>;
 }
 
+/** Shell: home screen first; a chosen table mounts the game. An injected
+ *  store (tests) goes straight to the table. */
 export function App({ store }: AppProps = {}) {
-  const active = store ?? defaultStore();
+  const [tier, setTier] = useState<TableTier | null>(store ? "mid" : null);
+  if (tier === null) {
+    return <HomeScreen onPlay={setTier} />;
+  }
+  const active = store ?? storeFor(tier);
+  return <GameTable store={active} tier={tier} onLeave={() => setTier(null)} />;
+}
+
+interface GameTableProps {
+  store: StoreApi<GameState>;
+  tier: TableTier;
+  onLeave: () => void;
+}
+
+function GameTable({ store: active, tier, onLeave }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
@@ -93,9 +111,10 @@ export function App({ store }: AppProps = {}) {
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onResetBankroll={() => {
-            clearBankroll();
+            clearBankroll(tier);
             window.location.reload();
           }}
+          onLeave={onLeave}
         />
         <BetRail
           snapshot={snapshot}

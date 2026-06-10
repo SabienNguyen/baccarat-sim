@@ -35,6 +35,13 @@ Effort: one short plan. No code restructuring required.
 
 ## Phase 2 — Multiplayer foundation: authoritative server
 
+**Product decision (2026-06-09):** multiplayer is the headline mode once
+live — the home screen already structures this. Single player remains the
+offline/practice mode. The home screen ships now with mode select and three
+single-player stake tiers (Low/Mid/High Roller, per-tier bankrolls); the
+multiplayer entry shows the public/private-table lobby as a teaser that
+Phase 2-3 activates with real data.
+
 **Architecture decision:** the server is the casino. A native Rust service
 (axum + tokio + WebSocket) embeds `baccarat-engine` directly — the same
 `Session`/`RoundSnapshot` types, serialized with the serde derives they
