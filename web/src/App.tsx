@@ -8,6 +8,7 @@ import { Hand } from "./components/Hand";
 import { BetRail } from "./components/BetRail";
 import { Controls } from "./components/Controls";
 import { Scoreboard } from "./components/Scoreboard";
+import { WinPopup } from "./components/WinPopup";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -18,6 +19,8 @@ export function App({ store }: AppProps = {}) {
   const snapshot = useStore(active, (s) => s.snapshot);
   const selectedChip = useStore(active, (s) => s.selectedChip);
   const lastError = useStore(active, (s) => s.lastError);
+  const lastDelta = useStore(active, (s) => s.lastDelta);
+  const settleSeq = useStore(active, (s) => s.settleSeq);
   const setSelectedChip = useStore(active, (s) => s.setSelectedChip);
   const placeSelectedBet = useStore(active, (s) => s.placeSelectedBet);
   const clearBets = useStore(active, (s) => s.clearBets);
@@ -33,11 +36,10 @@ export function App({ store }: AppProps = {}) {
   };
 
   return (
-    <main>
-      <h1>Baccarat Simulator</h1>
-      <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-        <Hud snapshot={snapshot} lastError={lastError} />
-        <div>
+    <div className="app">
+      <Hud snapshot={snapshot} lastError={lastError} />
+      <main className="stage">
+        <div className="card-stage">
           <Hand
             side="Player"
             hand={snapshot.player}
@@ -52,23 +54,24 @@ export function App({ store }: AppProps = {}) {
             onPeek={(i) => peek("Banker", i)}
             onReveal={(i) => reveal("Banker", i)}
           />
-          <Controls
-            snapshot={snapshot}
-            onDeal={deal}
-            onRevealAll={revealAll}
-            onSettle={settle}
-            onNewShoe={newShoe}
-          />
-          <BetRail
-            snapshot={snapshot}
-            selectedChip={selectedChip}
-            onSelectChip={setSelectedChip}
-            onPlaceBet={placeSelectedBet}
-            onClear={clearBets}
-          />
         </div>
-        <Scoreboard scoreboard={snapshot.scoreboard} />
-      </div>
-    </main>
+        <Controls
+          snapshot={snapshot}
+          onDeal={deal}
+          onRevealAll={revealAll}
+          onSettle={settle}
+          onNewShoe={newShoe}
+        />
+        <BetRail
+          snapshot={snapshot}
+          selectedChip={selectedChip}
+          onSelectChip={setSelectedChip}
+          onPlaceBet={placeSelectedBet}
+          onClear={clearBets}
+        />
+      </main>
+      <Scoreboard scoreboard={snapshot.scoreboard} />
+      <WinPopup key={settleSeq} amount={lastDelta} />
+    </div>
   );
 }
