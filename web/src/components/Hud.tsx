@@ -1,5 +1,6 @@
 import type { RoundSnapshot, CommandError } from "../engine/types";
 import { formatCents } from "../format";
+import "./hud.css";
 
 interface HudProps {
   snapshot: RoundSnapshot;
@@ -20,8 +21,9 @@ function describeBet(kind: RoundSnapshot["bets"][number]["kind"]): string {
 
 export function Hud({ snapshot, lastError }: HudProps) {
   return (
-    <section aria-label="HUD">
-      <dl>
+    <section aria-label="HUD" className="hud panel">
+      <h1 className="hud-title">Baccarat Simulator</h1>
+      <dl className="hud-stats">
         <dt>Bankroll</dt>
         <dd>{formatCents(snapshot.bankroll)}</dd>
         <dt>Phase</dt>
@@ -32,10 +34,10 @@ export function Hud({ snapshot, lastError }: HudProps) {
         </dd>
       </dl>
 
-      {snapshot.outcome !== null && <p>Outcome: {snapshot.outcome}</p>}
+      {snapshot.outcome !== null && <p className="hud-outcome">Outcome: {snapshot.outcome}</p>}
 
       {snapshot.payouts !== null && (
-        <ul aria-label="payouts">
+        <ul aria-label="payouts" className="hud-payouts">
           {snapshot.payouts.map((p, i) => (
             <li key={i}>
               {describeBet(p.bet.kind)}: <span>{formatNet(p.net)}</span>
@@ -44,7 +46,11 @@ export function Hud({ snapshot, lastError }: HudProps) {
         </ul>
       )}
 
-      {lastError !== null && <p role="alert">{JSON.stringify(lastError)}</p>}
+      {lastError !== null && (
+        <p role="alert" className="hud-error">
+          {JSON.stringify(lastError)}
+        </p>
+      )}
     </section>
   );
 }
