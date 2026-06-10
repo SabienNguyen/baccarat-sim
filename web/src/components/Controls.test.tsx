@@ -75,3 +75,22 @@ test("Settle is enabled in Dealing; no per-card Reveal buttons exist", () => {
   expect(screen.getByRole("button", { name: "Settle" })).toBeEnabled();
   expect(screen.queryByRole("button", { name: /^Reveal (Player|Banker) / })).toBeNull();
 });
+
+test("the Explain button reflects and toggles explain mode", async () => {
+  const onToggleExplain = vi.fn();
+  render(
+    <Controls
+      snapshot={bettingSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={vi.fn()}
+      onSettle={vi.fn()}
+      onNewShoe={vi.fn()}
+      explainOn={true}
+      onToggleExplain={onToggleExplain}
+    />,
+  );
+  const btn = screen.getByRole("button", { name: "Explain" });
+  expect(btn).toHaveAttribute("aria-pressed", "true");
+  await userEvent.click(btn);
+  expect(onToggleExplain).toHaveBeenCalledOnce();
+});

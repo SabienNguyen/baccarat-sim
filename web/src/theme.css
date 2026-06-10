@@ -82,3 +82,9 @@ body {
 .app > .board {
   grid-area: board;
 }
+.app > .board-dock {
+  grid-area: board;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
