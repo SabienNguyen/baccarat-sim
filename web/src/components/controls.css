@@ -3,6 +3,8 @@
   gap: 10px;
   justify-content: center;
   width: 100%;
+  /* never spill over the side panels — wrap when the column is tight */
+  flex-wrap: wrap;
 }
 .controls .btn {
   white-space: nowrap;
@@ -34,9 +36,9 @@
   background: var(--panel-bevel-hi);
 }
 
-@media (max-width: 700px) {
+/* squeezed three-column band: slimmer buttons so one row usually fits */
+@media (max-width: 1480px) {
   .controls {
-    flex-wrap: wrap;
     gap: 8px;
   }
   .controls .btn {
