@@ -32,6 +32,12 @@ validated against published casino probabilities.
   Bonus, and the Tiger family, all documented in-game.
 - **Explain mode** — see *why* each third card was drawn and the house edge of
   every bet you placed.
+- **Multiplayer** — public and private tables (6-character invite codes) on an
+  authoritative Rust server. Real squeeze rights: the biggest Player bettor
+  holds the Player cards, the biggest Banker bettor holds the Banker cards, and
+  the house dealer turns any hand nobody bet — one card per beat, announced.
+  Every coup is opt-in: bet or sit out, and the deal waits for the table.
+  Single player runs the **same table rules** with one seat.
 
 ## Fair by construction
 
@@ -46,16 +52,18 @@ shuffle fails the build.
 ## Architecture
 
 ```
-engine/        Rust — the rules. Pure logic, no UI. 119 tests.
-engine-wasm/   wasm-bindgen boundary: commands in, RoundSnapshot out.
-web/           React + TypeScript — the whole table. 160+ tests.
+engine/        Rust — the rules, incl. the multiplayer Table. Pure logic, no UI. 137 tests.
+engine-wasm/   wasm-bindgen boundary: commands in, snapshots out.
+server/        Rust — axum WebSocket table server. Authoritative shoe, rooms, invite codes.
+web/           React + TypeScript — the whole table. 190+ tests.
 ```
 
 The engine knows nothing about rendering; the front-end contains zero game
-logic. Everything the UI shows comes from engine snapshots — which is also the
-multiplayer plan: the same Rust crate compiles natively for an authoritative
-table server, and the client just renders snapshots it didn't compute
-(see `docs/superpowers/specs/2026-06-09-deploy-multiplayer-roadmap.md`).
+logic. Everything the UI shows comes from engine snapshots, locally (wasm) or
+over a WebSocket (the server) — the components can't tell the difference. The
+server owns the shoe and every view it pushes is per-seat: a face-down card
+never includes its rank, so nothing about the deck order ever reaches a
+client that shouldn't see it.
 
 ## Running it
 
@@ -64,13 +72,23 @@ Prereqs: Rust (with the `wasm32-unknown-unknown` target), [`wasm-pack`](https://
 ```sh
 npm run build:wasm        # compile the engine to wasm (regenerates engine-wasm/pkg)
 npm install
-npm --workspace web run dev
+npm --workspace web run dev    # from the repo root
 ```
+
+For multiplayer, run the table server alongside the dev server (the Vite dev
+server proxies `/ws` to it):
+
+```sh
+cargo run -p baccarat-server   # listens on PORT (default 8788)
+```
+
+In production the server serves the built site itself (`SPA_DIR`, default
+`web/dist`) — a `Dockerfile` and `fly.toml` are included.
 
 Tests:
 
 ```sh
-cargo test                          # engine, incl. the statistical validation
+cargo test                          # engine + server, incl. the statistical validation
 npm --workspace web run test -- --run
 ```
 
@@ -78,6 +96,7 @@ Every push runs both suites in CI and deploys the site to GitHub Pages.
 
 ## Status
 
-Single-player is complete and playable. Up next, in order: live deployment,
-then **multiplayer** — public and private tables on an authoritative Rust
-server, where the biggest bet earns the right to squeeze for the table.
+Complete and playable: single player (three tables, win goals, persistent
+bankrolls) and multiplayer (public/private rooms, authentic squeeze rights, a
+paced house dealer). The GitHub Pages deployment is the single-player build;
+multiplayer needs the Rust server running.
