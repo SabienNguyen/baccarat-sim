@@ -13,11 +13,10 @@
   max-width: 920px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.2fr 1fr;
   grid-template-areas:
     "title title"
-    "name notice"
-    "create join"
+    "create side"
     "rooms rooms"
     "back back";
   align-items: start;
@@ -27,18 +26,14 @@
   grid-area: title;
   justify-self: center;
 }
-.mp-lobby > .mp-field {
-  grid-area: name;
-}
-.mp-lobby > .mp-notice {
-  grid-area: notice;
-  align-self: end;
+.mp-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 .mp-panel--create {
   grid-area: create;
-}
-.mp-panel--join {
-  grid-area: join;
 }
 .mp-panel--rooms {
   grid-area: rooms;
@@ -47,15 +42,19 @@
   grid-area: back;
   justify-self: center;
 }
+.mp-help {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 16px;
+  color: #b9aee0;
+}
 @media (max-width: 760px) {
   .mp-lobby {
     grid-template-columns: 1fr;
     grid-template-areas:
       "title"
-      "name"
-      "notice"
+      "side"
       "create"
-      "join"
       "rooms"
       "back";
   }
@@ -112,9 +111,8 @@
   font-size: 14px;
 }
 
-.mp-panel {
+ .mp-panel {
   width: 100%;
-  height: 100%;
   background: var(--panel-face);
   border: 3px solid var(--ink);
   border-radius: 10px;

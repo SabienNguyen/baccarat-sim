@@ -179,18 +179,42 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     <div className="mp-screen mp-lobby" aria-label="Multiplayer lobby">
       <h2 className="mp-title">Live Tables</h2>
 
-      <label className="mp-field">
-        Your name
-        <input
-          className="mp-input"
-          value={name}
-          maxLength={24}
-          placeholder="guest"
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
+      <div className="mp-side">
+        <section className="mp-panel">
+          <h3>Your name</h3>
+          <input
+            className="mp-input"
+            value={name}
+            maxLength={24}
+            placeholder="guest"
+            aria-label="Your name"
+            onChange={(e) => setName(e.target.value)}
+          />
+          {notice && <p className="mp-notice">{notice}</p>}
+        </section>
 
-      {notice && <p className="mp-notice">{notice}</p>}
+        <section className="mp-panel mp-panel--join">
+          <h3>Join with a code</h3>
+          <p className="mp-help">Got a code from a friend? Punch it in.</p>
+          <div className="mp-joinrow">
+            <input
+              className="mp-input mp-code"
+              value={code}
+              maxLength={6}
+              placeholder="ABC123"
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+            />
+            <button
+              type="button"
+              className="mp-cta"
+              disabled={code.trim().length < 6}
+              onClick={() => send({ type: "join_room", room: code.trim(), name: rememberName() })}
+            >
+              Join
+            </button>
+          </div>
+        </section>
+      </div>
 
       <section className="mp-panel mp-panel--create">
         <h3>Open a table</h3>
@@ -223,27 +247,6 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         >
           Create table
         </button>
-      </section>
-
-      <section className="mp-panel mp-panel--join">
-        <h3>Join with a code</h3>
-        <div className="mp-joinrow">
-          <input
-            className="mp-input mp-code"
-            value={code}
-            maxLength={6}
-            placeholder="ABC123"
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-          />
-          <button
-            type="button"
-            className="mp-cta"
-            disabled={code.trim().length < 6}
-            onClick={() => send({ type: "join_room", room: code.trim(), name: rememberName() })}
-          >
-            Join
-          </button>
-        </div>
       </section>
 
       <section className="mp-panel mp-panel--rooms">

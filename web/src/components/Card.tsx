@@ -215,7 +215,7 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
 
   if (card === "FaceDown") {
     return (
-      <div className="card card-back" aria-label="face-down card" style={squeeze}>
+      <div key="back" className="card card-back" aria-label="face-down card" style={squeeze}>
         {/* the corner folds, but reveals nothing yet */}
         <Peel bend={bend} corner={corner} />
       </div>
@@ -226,7 +226,7 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
     const { suit, rank } = card.Peeked.sliver;
     const held = Math.max(bend, 0.35);
     return (
-      <div className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
+      <div key="back" className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
         <Peel bend={held} corner={corner}>
           {/* the real printed face under the fold: pip edges, legs, the index */}
           <span className="card-peel-face" data-color={suitColor(suit)}>
@@ -239,7 +239,8 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
 
   const { rank, suit } = card.FaceUp;
   return (
-    <div className="card card-face" aria-label={`${rank} of ${suit}`} data-color={suitColor(suit)}>
+    // a fresh element on the flip so the turn animation always plays
+    <div key="face" className="card card-face" aria-label={`${rank} of ${suit}`} data-color={suitColor(suit)}>
       <FaceContent rank={rank} suit={suit} />
     </div>
   );
