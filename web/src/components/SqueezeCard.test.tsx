@@ -24,7 +24,7 @@ test("click fallback: a peeked card reveals", async () => {
   expect(onReveal).toHaveBeenCalledOnce();
 });
 
-test("drag: crossing the peek threshold peeks, crossing reveal threshold reveals", () => {
+test("drag: dragging only peeks; the flip commits on release", () => {
   const onPeek = vi.fn();
   const onReveal = vi.fn();
   render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
@@ -33,8 +33,21 @@ test("drag: crossing the peek threshold peeks, crossing reveal threshold reveals
   fireEvent.pointerMove(el, { pointerId: 1, clientY: 264 }); // progress 0.30 -> peek
   expect(onPeek).toHaveBeenCalledOnce();
   expect(onReveal).not.toHaveBeenCalled();
-  fireEvent.pointerMove(el, { pointerId: 1, clientY: 204 }); // progress 0.80 -> reveal
+  fireEvent.pointerMove(el, { pointerId: 1, clientY: 204 }); // 0.80 -> still only peek, no mid-drag flip
+  expect(onReveal).not.toHaveBeenCalled();
+  fireEvent.pointerUp(el, { pointerId: 1, clientY: 204 }); // release while held up -> reveal
   expect(onReveal).toHaveBeenCalledOnce();
+});
+
+test("drag: a fast jump past the reveal threshold still peeks first, and waits for release to flip", () => {
+  const onPeek = vi.fn();
+  const onReveal = vi.fn();
+  render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
+  const el = screen.getByRole("button");
+  fireEvent.pointerDown(el, { pointerId: 1, clientY: 300 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientY: 180 }); // single jump straight to progress 1.0
+  expect(onPeek).toHaveBeenCalledOnce(); // peek must not be skipped by the jump
+  expect(onReveal).not.toHaveBeenCalled(); // flip waits for release
 });
 
 test("drag: releasing after a started peek commits the reveal", () => {

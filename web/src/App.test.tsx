@@ -72,3 +72,21 @@ test("shows the win pop-up after a winning settle", () => {
   rerender(<App store={store} />);
   expect(screen.getByRole("status")).toHaveTextContent("+$95.00");
 });
+
+test("hides the Player's third card until the initial four are revealed (no count leak)", () => {
+  const snap: RoundSnapshot = {
+    ...dealingSnapshot(),
+    player: {
+      cards: [
+        { FaceUp: { rank: "Two", suit: "Clubs" } },
+        "FaceDown", // an initial card is still down
+        { FaceUp: { rank: "King", suit: "Spades" } }, // the third card must stay hidden
+      ],
+      total: null,
+    },
+    banker: { cards: ["FaceDown", "FaceDown"], total: null },
+  };
+  const store = createGameStore(fakeSession(snap));
+  render(<App store={store} />);
+  expect(screen.queryByLabelText("King of Spades")).toBeNull();
+});

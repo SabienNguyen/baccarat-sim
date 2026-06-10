@@ -3,6 +3,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
 import { defaultStore } from "./store/useGameStore";
 import { hiddenIndices } from "./cards";
+import { visibleCardCount } from "./squeezeOrder";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail } from "./components/BetRail";
@@ -35,6 +36,10 @@ export function App({ store }: AppProps = {}) {
     for (const i of hiddenIndices(snapshot.banker.cards)) reveal("Banker", i);
   };
 
+  // Gate the third card so the 2-vs-3 count can't leak whether a hand drew one.
+  const playerVisible = visibleCardCount("Player", snapshot.player.cards, snapshot.banker.cards);
+  const bankerVisible = visibleCardCount("Banker", snapshot.player.cards, snapshot.banker.cards);
+
   return (
     <div className="app">
       <Hud snapshot={snapshot} lastError={lastError} />
@@ -44,6 +49,7 @@ export function App({ store }: AppProps = {}) {
             side="Player"
             hand={snapshot.player}
             phase={snapshot.phase}
+            visibleCount={playerVisible}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
           />
@@ -51,6 +57,7 @@ export function App({ store }: AppProps = {}) {
             side="Banker"
             hand={snapshot.banker}
             phase={snapshot.phase}
+            visibleCount={bankerVisible}
             onPeek={(i) => peek("Banker", i)}
             onReveal={(i) => reveal("Banker", i)}
           />

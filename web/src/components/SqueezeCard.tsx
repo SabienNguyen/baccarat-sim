@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardE
 import type { CardView } from "../engine/types";
 import { Card } from "./Card";
 import { isFaceUp } from "../cards";
-import { actionForProgress, PEEK_AT } from "../squeeze";
+import { PEEK_AT } from "../squeeze";
 
 const DRAG_DISTANCE_PX = 120;
 /** Pointer travel (px) above which a gesture counts as a drag, not a tap. */
@@ -52,14 +52,14 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     }
     const progress = progressFrom(e.clientY);
     setBend(progress);
-    const action = actionForProgress(progress);
-    if (action === "peek" && !peekedThisGesture.current) {
+    // Dragging only ever peeks — it grows the corner sliver. The full flip is
+    // committed on release (handlePointerUp), so the player can squeeze and
+    // linger on the sliver instead of the card snapping face-up mid-drag.
+    // Fire peek as soon as progress crosses the threshold, even if a single
+    // fast move jumps well past it, so a quick drag never skips the peek.
+    if (progress >= PEEK_AT && !peekedThisGesture.current) {
       peekedThisGesture.current = true;
       if (!isPeeked(card)) onPeek();
-    }
-    if (action === "reveal" && !revealedThisGesture.current) {
-      revealedThisGesture.current = true;
-      onReveal();
     }
   }
 
