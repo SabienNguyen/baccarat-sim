@@ -1,0 +1,104 @@
+.bonus-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.bonus-modal {
+  width: min(560px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bonus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.bonus-head h3 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--gold);
+  margin: 0;
+}
+.bonus-modal .btn {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: #fff;
+  background: var(--chip-red);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.bonus-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.bonus-row {
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.bonus-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.bonus-name {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 1px;
+}
+.bonus-payout {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #1a1208;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.bonus-text {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 17px;
+  line-height: 1.25;
+  color: #f3eede;
+}
+
+/* the ⓘ on the felt that opens this menu */
+.bonus-info-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 11px;
+  line-height: 1;
+  color: #1a1208;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  cursor: help;
+  padding: 0;
+  box-shadow: 2px 2px 0 var(--shadow);
+  z-index: 2;
+}

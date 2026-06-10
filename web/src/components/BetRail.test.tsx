@@ -105,3 +105,15 @@ test("bet spots are disabled outside the Betting phase", () => {
   render(<BetRail snapshot={dealingSnapshot()} {...noopProps} />);
   expect(screen.getByRole("button", { name: "Bet Player" })).toBeDisabled();
 });
+
+test("the felt's info icon opens the bonus-bets explainer", async () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  expect(screen.queryByRole("dialog", { name: "Bonus bets" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "What are the bonus bets?" }));
+  const dialog = screen.getByRole("dialog", { name: "Bonus bets" });
+  expect(dialog).toHaveTextContent(/Dragon 7/);
+  expect(dialog).toHaveTextContent(/40:1/);
+  expect(dialog).toHaveTextContent(/Tiger Tie/);
+  await userEvent.click(screen.getByRole("button", { name: "Close bonus info" }));
+  expect(screen.queryByRole("dialog", { name: "Bonus bets" })).toBeNull();
+});

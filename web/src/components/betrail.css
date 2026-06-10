@@ -173,6 +173,7 @@
 
 /* --- baccarat felt betting layout (cream table markings on the felt) --- */
 .felt {
+  position: relative;
   border: 3px solid rgba(243, 238, 222, 0.7);
   border-radius: 14px;
   padding: 18px;

@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { RoundSnapshot, BetKind, PlacedBet } from "../engine/types";
 import { formatCents } from "../format";
 import { CHIP_DENOMINATIONS, type Rack } from "../chips";
 import { Chip, MiniChip } from "./Chip";
+import { BonusInfoModal } from "./BonusInfoModal";
 import "./betrail.css";
 
 interface BetRailProps {
@@ -111,10 +113,19 @@ export function BetRail({
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
   const handTotal = hand.reduce((a, b) => a + b, 0);
+  const [showBonusInfo, setShowBonusInfo] = useState(false);
 
   return (
     <section aria-label="Bet rail" className="bet-rail">
       <div className="felt" aria-label="Spots">
+        <button
+          type="button"
+          className="bonus-info-btn"
+          aria-label="What are the bonus bets?"
+          onClick={() => setShowBonusInfo(true)}
+        >
+          i
+        </button>
         <div className="side-bets">
           {SIDE_SPOTS.map((spot) => (
             <BetSpot
@@ -179,6 +190,8 @@ export function BetRail({
         ))}
         {change > 0 && <span className="change-note">+{formatCents(change)} change</span>}
       </div>
+
+      {showBonusInfo && <BonusInfoModal onClose={() => setShowBonusInfo(false)} />}
     </section>
   );
 }
