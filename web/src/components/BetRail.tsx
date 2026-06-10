@@ -168,7 +168,11 @@ export function BetRail({
             </button>
           </div>
         ) : (
-          <p className="rail-hint">Tap chips to pick up a stack, then tap a spot. Or drag a chip.</p>
+          <p className="rail-hint">
+            {betting
+              ? "Tap chips to pick up a stack, then tap a spot. Or drag a chip."
+              : "Bets are locked — squeeze the cards."}
+          </p>
         )}
         <button type="button" className="clear-bets" disabled={!betting} onClick={onClear}>
           Clear bets
