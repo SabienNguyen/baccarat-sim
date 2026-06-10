@@ -44,3 +44,7 @@
     padding: 10px 10px;
   }
 }
+
+.controls .btn--sitout {
+  background: var(--panel-bevel-hi);
+}

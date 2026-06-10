@@ -9,10 +9,17 @@ export interface SeatView {
   name: string;
   bankroll: number;
   staked: number;
+  sitting_out: boolean;
+  /** Bet down or sitting out — the deal waits for everyone to decide. */
+  decided: boolean;
 }
 
-/** The player's snapshot plus everyone's seat summaries. */
-export type TableViewMsg = RoundSnapshot & { seats: SeatView[] };
+/** The player's snapshot plus everyone's seat summaries and squeeze rights. */
+export type TableViewMsg = RoundSnapshot & {
+  seats: SeatView[];
+  player_squeezer: number | null;
+  banker_squeezer: number | null;
+};
 
 export interface RoomInfo {
   id: string;
@@ -27,6 +34,7 @@ export type ClientMsg =
   | { type: "join_room"; room: string; name: string }
   | { type: "leave" }
   | { type: "bet"; kind: BetKind; amount: number }
+  | { type: "sit_out" }
   | { type: "clear_bets" }
   | { type: "deal" }
   | { type: "peek"; hand: Side; index: number }

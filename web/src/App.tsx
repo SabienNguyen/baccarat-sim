@@ -86,6 +86,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
+  const squeezers = useStore(active, (s) => s.squeezers);
+  const sitOut = useStore(active, (s) => s.sitOut);
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
@@ -108,7 +110,9 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         onLeave={onLeave}
       />
       <main className="stage">
-        {seats !== null && <SeatsStrip seats={seats} />}
+        {seats !== null && (
+          <SeatsStrip seats={seats} squeezers={squeezers} betting={snapshot.phase !== "Dealing"} />
+        )}
         <DealerLine snapshot={snapshot} lastError={lastError} />
         <div className="card-stage">
           <Hand
@@ -139,6 +143,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
+          onSitOut={seats !== null ? sitOut : undefined}
         />
         <BetRail
           snapshot={snapshot}

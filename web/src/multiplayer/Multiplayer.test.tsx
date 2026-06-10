@@ -72,7 +72,11 @@ test("creating a table sends the choice and joining mounts the live table", asyn
         cockroach_pig: { columns: [] },
       },
       explain: [],
-      seats: [{ id: 0, name: "sabien", bankroll: 25_000_000, staked: 0 }],
+      seats: [
+        { id: 0, name: "sabien", bankroll: 25_000_000, staked: 0, sitting_out: false, decided: false },
+      ],
+      player_squeezer: null,
+      banker_squeezer: null,
     },
   });
   // the real table is on screen: room tag, felt, and the seat strip

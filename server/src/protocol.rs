@@ -34,6 +34,7 @@ pub enum ClientMsg {
     JoinRoom { room: String, name: String },
     Leave,
     Bet { kind: BetKind, amount: i64 },
+    SitOut,
     ClearBets,
     Deal,
     Peek { hand: Side, index: usize },

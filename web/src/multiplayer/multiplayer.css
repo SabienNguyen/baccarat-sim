@@ -254,3 +254,34 @@
   font-size: 14px;
   color: #7ec8ff;
 }
+
+.seat-status {
+  font-family: var(--font-display);
+  font-size: 7px;
+  color: #b9aee0;
+  letter-spacing: 1px;
+}
+.seat-status--wait {
+  color: var(--gold);
+  animation: seat-wait 1.2s ease-in-out infinite;
+}
+.seat-status--squeeze {
+  color: #7ec8ff;
+}
+@keyframes seat-wait {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seat-status--wait { animation: none; }
+}
+
+/* in-between widths and phones: the room tag joins the flow, no overlap */
+@media (max-width: 1180px) {
+  .mp-roomtag {
+    position: static;
+    display: block;
+    width: fit-content;
+    margin: 8px auto 0;
+  }
+}

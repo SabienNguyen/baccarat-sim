@@ -19,22 +19,37 @@ function isPeeked(card: CardView): boolean {
   return card !== "FaceDown" && typeof card === "object" && "Peeked" in card;
 }
 
-/** Which corner of the card the pointer grabbed (falls back to top-left). */
-function grabbedCorner(e: ReactPointerEvent): PeelCorner {
+/** Drag geometry: which corner was grabbed and the direction that peels. */
+interface Grip {
+  corner: PeelCorner;
+  /** Unit vector from the grabbed corner toward the opposite corner. */
+  dirX: number;
+  dirY: number;
+  /** How far along that diagonal counts as a full peel. */
+  reach: number;
+}
+
+function gripFrom(e: ReactPointerEvent): Grip {
   const rect = e.currentTarget.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return "tl"; // jsdom / degenerate
+  if (rect.width === 0 || rect.height === 0) {
+    // jsdom / degenerate: distance-based fallback
+    return { corner: "tl", dirX: 0, dirY: 0, reach: 0 };
+  }
   const right = e.clientX > rect.left + rect.width / 2;
   const bottom = e.clientY > rect.top + rect.height / 2;
-  if (right && bottom) return "br";
-  if (right) return "tr";
-  if (bottom) return "bl";
-  return "tl";
+  const corner: PeelCorner = right && bottom ? "br" : right ? "tr" : bottom ? "bl" : "tl";
+  const diag = Math.hypot(rect.width, rect.height);
+  // toward the opposite corner: the fold chases the finger across the card
+  const dirX = (right ? -rect.width : rect.width) / diag;
+  const dirY = (bottom ? -rect.height : rect.height) / diag;
+  return { corner, dirX, dirY, reach: diag * 0.8 };
 }
 
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const [bend, setBend] = useState(0);
   const [corner, setCorner] = useState<PeelCorner>("tl");
   const start = useRef<{ x: number; y: number } | null>(null);
+  const grip = useRef<Grip | null>(null);
   const peekedThisGesture = useRef(false);
   const revealedThisGesture = useRef(false);
   const draggedThisGesture = useRef(false);
@@ -44,17 +59,26 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
 
   const faceUp = isFaceUp(card);
 
-  /** Progress is plain drag distance, so the peel works whichever way you pull. */
+  /** Progress tracks the pointer: movement INTO the card peels, retreating
+   *  un-peels, and the fold chases the finger across the diagonal. Without
+   *  real geometry (tests) it falls back to plain drag distance. */
   function progressFrom(clientX: number, clientY: number): number {
     if (start.current === null) return 0;
-    const dist = Math.hypot(clientX - start.current.x, clientY - start.current.y);
-    return Math.min(dist / DRAG_DISTANCE_PX, 1);
+    const dx = clientX - start.current.x;
+    const dy = clientY - start.current.y;
+    const g = grip.current;
+    if (g && g.reach > 0) {
+      const along = dx * g.dirX + dy * g.dirY;
+      return Math.min(Math.max(along / g.reach, 0), 1);
+    }
+    return Math.min(Math.hypot(dx, dy) / DRAG_DISTANCE_PX, 1);
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
     if (faceUp) return;
     start.current = { x: e.clientX, y: e.clientY };
-    setCorner(grabbedCorner(e));
+    grip.current = gripFrom(e);
+    setCorner(grip.current.corner);
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;
     draggedThisGesture.current = false;

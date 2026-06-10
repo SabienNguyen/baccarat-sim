@@ -26,6 +26,10 @@ export interface GameState {
   lastError: DealerError | null;
   /** Everyone at the table (multiplayer); null at a single-player table. */
   seats: SeatView[] | null;
+  /** Who holds each hand's cards (multiplayer squeeze rights). */
+  squeezers: { player: number | null; banker: number | null } | null;
+  /** Skip this coup (multiplayer); no-op alone at a single-player table. */
+  sitOut: () => void;
   /** Bankroll change across the last settle, in cents; null until/after a settle. */
   lastDelta: number | null;
   /** Increments on each settle so the win pop-up can remount via React key. */
@@ -91,6 +95,8 @@ export function createGameStore(
       snapshot: session.snapshot(),
       lastError: null,
       seats: null,
+      squeezers: null,
+      sitOut: () => {},
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,

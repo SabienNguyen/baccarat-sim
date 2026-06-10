@@ -135,10 +135,11 @@ async fn handle_command(
             let mut room = room.lock().await;
             let result = match table_cmd {
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
+                ClientMsg::SitOut => room.table.sit_out(pid),
                 ClientMsg::ClearBets => room.table.clear_bets(pid),
                 ClientMsg::Deal => room.table.deal(),
-                ClientMsg::Peek { hand, index } => room.table.peek(hand, index),
-                ClientMsg::Reveal { hand, index } => room.table.reveal(hand, index),
+                ClientMsg::Peek { hand, index } => room.table.peek(pid, hand, index),
+                ClientMsg::Reveal { hand, index } => room.table.reveal(pid, hand, index),
                 ClientMsg::Settle => room.table.settle(),
                 ClientMsg::NewShoe => room.table.new_shoe(),
                 _ => unreachable!("non-table commands handled above"),

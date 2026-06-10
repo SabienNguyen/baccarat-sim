@@ -30,6 +30,12 @@ pub struct TableConfig {
 pub enum TableError {
     TableFull,
     NoSuchPlayer,
+    /// Deal is gated until every seat has bet or sat out.
+    WaitingOnPlayers,
+    /// Those cards are in another player's hands.
+    NotYourSqueeze { side: Side },
+    /// The ritual exposes cards in order: Player hand, Banker hand, thirds.
+    OutOfOrder,
     Command(CommandError),
 }
 
@@ -44,13 +50,28 @@ struct Player {
     name: String,
     bankroll: i64,
     bets: Vec<PlacedBet>,
+    /// Chose to skip this coup.
+    sitting_out: bool,
     /// Last round's payouts, kept until the next deal.
     payouts: Option<Vec<crate::session::BetPayout>>,
 }
 
+impl Player {
+    /// Bet down or sitting out — ready for the deal.
+    fn decided(&self) -> bool {
+        self.sitting_out || !self.bets.is_empty()
+    }
+}
+
 enum Phase {
     Betting,
-    Dealing { round: RoundResult, reveal: RevealState },
+    Dealing {
+        round: RoundResult,
+        reveal: RevealState,
+        /// Biggest Player-bettor squeezes the Player hand (None: dealer flips).
+        player_squeezer: Option<PlayerId>,
+        banker_squeezer: Option<PlayerId>,
+    },
 }
 
 /// What one seated player sees. Cards and events are shared; money is theirs.
@@ -69,6 +90,9 @@ pub struct TableView {
     pub scoreboard: ScoreboardSnapshot,
     pub explain: Vec<String>,
     pub seats: Vec<SeatView>,
+    /// Who holds each hand's cards this coup (None: anyone may flip).
+    pub player_squeezer: Option<PlayerId>,
+    pub banker_squeezer: Option<PlayerId>,
 }
 
 /// The public face of every seat, shown to the whole table.
@@ -78,6 +102,9 @@ pub struct SeatView {
     pub name: String,
     pub bankroll: i64,
     pub staked: i64,
+    pub sitting_out: bool,
+    /// Bet down or sitting out — the deal waits for everyone to decide.
+    pub decided: bool,
 }
 
 pub struct Table {
@@ -124,6 +151,7 @@ impl Table {
             name: name.to_string(),
             bankroll: buy_in,
             bets: Vec::new(),
+            sitting_out: false,
             payouts: None,
         });
         Ok(id)
@@ -134,7 +162,13 @@ impl Table {
     pub fn leave(&mut self, pid: PlayerId) -> Result<(), TableError> {
         // Mid-deal departures forfeit nothing: settle their bets now against
         // the in-flight round so money conserves.
-        if let Phase::Dealing { round, .. } = &self.phase {
+        if let Phase::Dealing { round, player_squeezer, banker_squeezer, .. } = &mut self.phase {
+            if *player_squeezer == Some(pid) {
+                *player_squeezer = None;
+            }
+            if *banker_squeezer == Some(pid) {
+                *banker_squeezer = None;
+            }
             let round = round.clone();
             if let Some(p) = self.players.iter_mut().find(|p| p.id == pid) {
                 for bet in p.bets.clone() {
@@ -182,7 +216,23 @@ impl Table {
             }
             .into());
         }
+        player.sitting_out = false;
         player.bets.push(PlacedBet { kind, amount });
+        Ok(())
+    }
+
+    /// Skip this coup: bets come back and the table stops waiting on you.
+    pub fn sit_out(&mut self, pid: PlayerId) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing,
+            }
+            .into());
+        }
+        let player = self.player_mut(pid)?;
+        player.bets.clear();
+        player.sitting_out = true;
         Ok(())
     }
 
@@ -210,6 +260,10 @@ impl Table {
         if self.players.iter().all(|p| p.bets.is_empty()) {
             return Err(CommandError::NoBetsPlaced.into());
         }
+        // The pit waits for the whole table: everyone bets or sits out.
+        if self.players.iter().any(|p| !p.decided()) {
+            return Err(TableError::WaitingOnPlayers);
+        }
         if self.shoe.remaining() <= CUT_CARD {
             self.reshuffle();
         }
@@ -222,16 +276,83 @@ impl Table {
         for p in &mut self.players {
             p.payouts = None;
         }
-        self.phase = Phase::Dealing { round, reveal };
+        let player_squeezer = self.biggest_bettor(crate::settle::BetSpot::Player);
+        let banker_squeezer = self.biggest_bettor(crate::settle::BetSpot::Banker);
+        self.phase = Phase::Dealing { round, reveal, player_squeezer, banker_squeezer };
         Ok(())
     }
 
-    pub fn peek(&mut self, hand: Side, index: usize) -> Result<(), TableError> {
+    /// The biggest main-bet wager on a side earns the squeeze (ties: first seated).
+    fn biggest_bettor(&self, spot: crate::settle::BetSpot) -> Option<PlayerId> {
+        self.players
+            .iter()
+            .map(|p| {
+                let staked: i64 = p
+                    .bets
+                    .iter()
+                    .filter(|b| matches!(b.kind, BetKind::Main(s) if s == spot))
+                    .map(|b| b.amount)
+                    .sum();
+                (p.id, staked)
+            })
+            .filter(|(_, staked)| *staked > 0)
+            .max_by_key(|(_, staked)| *staked)
+            .map(|(id, _)| id)
+    }
+
+    pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
+        self.check_rights(pid, hand)?;
         self.set_status(hand, index, CardStatus::Peeked)
     }
 
-    pub fn reveal(&mut self, hand: Side, index: usize) -> Result<(), TableError> {
+    pub fn reveal(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
+        self.check_rights(pid, hand)?;
+        self.check_order(hand, index)?;
         self.set_status(hand, index, CardStatus::FaceUp)
+    }
+
+    /// The squeeze belongs to the biggest bettor on that side, when there is one.
+    fn check_rights(&self, pid: PlayerId, hand: Side) -> Result<(), TableError> {
+        if let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &self.phase {
+            let holder = match hand {
+                Side::Player => player_squeezer,
+                Side::Banker => banker_squeezer,
+            };
+            if let Some(holder) = holder {
+                if *holder != pid {
+                    return Err(TableError::NotYourSqueeze { side: hand });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The ritual order: Player's two, Banker's two, Player's third, Banker's
+    /// third. A card may only be REVEALED once everything before it is up.
+    fn check_order(&self, hand: Side, index: usize) -> Result<(), TableError> {
+        let Phase::Dealing { reveal, .. } = &self.phase else { return Ok(()) };
+        let sequence: [(Side, usize); 6] = [
+            (Side::Player, 0),
+            (Side::Player, 1),
+            (Side::Banker, 0),
+            (Side::Banker, 1),
+            (Side::Player, 2),
+            (Side::Banker, 2),
+        ];
+        for (h, i) in sequence {
+            if h == hand && i == index {
+                return Ok(());
+            }
+            let statuses = match h {
+                Side::Player => &reveal.player,
+                Side::Banker => &reveal.banker,
+            };
+            // earlier card exists and isn't face-up yet: not your turn
+            if i < statuses.len() && statuses[i] != CardStatus::FaceUp {
+                return Err(TableError::OutOfOrder);
+            }
+        }
+        Ok(())
     }
 
     fn set_status(&mut self, hand: Side, index: usize, to: CardStatus) -> Result<(), TableError> {
@@ -281,6 +402,7 @@ impl Table {
             p.bankroll += payouts.iter().map(|x| x.net).sum::<i64>();
             p.payouts = Some(payouts);
             p.bets.clear();
+            p.sitting_out = false; // fresh decision every coup
         }
         self.last_outcome = Some(round.outcome);
         self.history.push(RoundRecord::from_round(&round));
@@ -321,8 +443,16 @@ impl Table {
                 name: p.name.clone(),
                 bankroll: p.bankroll,
                 staked: p.bets.iter().map(|b| b.amount).sum(),
+                sitting_out: p.sitting_out,
+                decided: p.decided(),
             })
             .collect();
+        let (player_squeezer, banker_squeezer) = match &self.phase {
+            Phase::Dealing { player_squeezer, banker_squeezer, .. } => {
+                (*player_squeezer, *banker_squeezer)
+            }
+            Phase::Betting => (None, None),
+        };
 
         let view = match &self.phase {
             Phase::Betting => TableView {
@@ -343,8 +473,10 @@ impl Table {
                 scoreboard: derive_scoreboard(&self.history),
                 explain: Vec::new(),
                 seats,
+                player_squeezer,
+                banker_squeezer,
             },
-            Phase::Dealing { round, reveal } => TableView {
+            Phase::Dealing { round, reveal, .. } => TableView {
                 phase: PhaseTag::Dealing,
                 player: hand_view(&round.player, &reveal.player),
                 banker: hand_view(&round.banker, &reveal.banker),
@@ -358,6 +490,8 @@ impl Table {
                 scoreboard: derive_scoreboard(&self.history),
                 explain: round.trace.clone(),
                 seats,
+                player_squeezer,
+                banker_squeezer,
             },
         };
         Ok(view)
@@ -441,6 +575,7 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         let b = t.join("b", 50_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.sit_out(b).unwrap();
         t.deal().unwrap();
 
         let va = t.view_for(a).unwrap();
@@ -475,8 +610,11 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.sit_out(b).unwrap();
         t.deal().unwrap();
-        t.reveal(Side::Player, 0).unwrap(); // anyone may turn a card
+        // a bet Player, so the Player hand is HIS squeeze
+        assert!(matches!(t.reveal(b, Side::Player, 0), Err(TableError::NotYourSqueeze { .. })));
+        t.reveal(a, Side::Player, 0).unwrap();
         let vb = t.view_for(b).unwrap();
         assert!(matches!(vb.player.cards[0], crate::session::CardView::FaceUp(_)));
     }
@@ -501,6 +639,86 @@ mod tests {
         assert_eq!(t.seats(), 0);
         // the round can still settle for everyone else without panicking
         t.settle().unwrap();
+    }
+
+    #[test]
+    fn the_deal_waits_for_every_seat_to_decide() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+        t.sit_out(b).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        // decisions reset every coup
+        let vb = t.view_for(b).unwrap();
+        assert!(!vb.seats[1].sitting_out);
+        assert!(!vb.seats[1].decided);
+    }
+
+    #[test]
+    fn sitting_out_returns_your_bets() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
+        t.sit_out(a).unwrap();
+        let v = t.view_for(a).unwrap();
+        assert!(v.bets.is_empty());
+        assert!(v.seats[0].sitting_out && v.seats[0].decided);
+        // betting again puts you back in the coup
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        assert!(!t.view_for(a).unwrap().seats[0].sitting_out);
+    }
+
+    #[test]
+    fn each_side_is_squeezed_by_its_biggest_bettor() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.deal().unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.player_squeezer, Some(a));
+        assert_eq!(v.banker_squeezer, Some(b));
+        // b cannot touch the Player hand, a cannot touch the Banker hand
+        assert!(matches!(t.peek(b, Side::Player, 0), Err(TableError::NotYourSqueeze { .. })));
+        assert!(matches!(t.peek(a, Side::Banker, 0), Err(TableError::NotYourSqueeze { .. })));
+        // each may peek their own
+        t.peek(a, Side::Player, 0).unwrap();
+        t.peek(b, Side::Banker, 0).unwrap();
+    }
+
+    #[test]
+    fn cards_are_exposed_in_ritual_order() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        // Banker's first card may not be revealed before the Player hand is up
+        assert_eq!(t.reveal(a, Side::Banker, 0), Err(TableError::OutOfOrder));
+        t.reveal(a, Side::Player, 0).unwrap();
+        assert_eq!(t.reveal(a, Side::Banker, 0), Err(TableError::OutOfOrder));
+        t.reveal(a, Side::Player, 1).unwrap();
+        t.reveal(a, Side::Banker, 0).unwrap();
+        t.reveal(a, Side::Banker, 1).unwrap();
+        // but peeking ahead is allowed — squeezers fiddle their cards early
+        // (only rights gate peeks, not order)
+    }
+
+    #[test]
+    fn an_unbet_side_may_be_flipped_by_anyone() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.sit_out(b).unwrap();
+        t.deal().unwrap();
+        t.reveal(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 1).unwrap();
+        // nobody bet Banker: even the sitting-out player may flip it
+        t.reveal(b, Side::Banker, 0).unwrap();
     }
 
     #[test]

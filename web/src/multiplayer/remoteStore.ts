@@ -26,8 +26,12 @@ export interface RemoteStore extends StoreApi<GameState> {
 }
 
 function stripView(view: TableViewMsg): RoundSnapshot {
-  const { seats: _seats, ...snapshot } = view;
+  const { seats: _s, player_squeezer: _p, banker_squeezer: _b, ...snapshot } = view;
   return snapshot;
+}
+
+function squeezersOf(view: TableViewMsg): { player: number | null; banker: number | null } {
+  return { player: view.player_squeezer, banker: view.banker_squeezer };
 }
 
 export function createRemoteStore(opts: {
@@ -49,6 +53,11 @@ export function createRemoteStore(opts: {
     snapshot: initialSnapshot,
     lastError: null,
     seats: opts.view.seats,
+    squeezers: squeezersOf(opts.view),
+    sitOut: () => {
+      get().returnHand();
+      send({ type: "sit_out" });
+    },
     lastDelta: null,
     settleSeq: 0,
     explainOn: false,
@@ -216,6 +225,7 @@ export function createRemoteStore(opts: {
     set({
       snapshot: next,
       seats: view.seats,
+      squeezers: squeezersOf(view),
       rack,
       change,
       hand,

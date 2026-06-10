@@ -132,6 +132,13 @@ pub fn error_message(err: &TableError) -> String {
     match err {
         TableError::TableFull => "Table's full, friend — try another.".into(),
         TableError::NoSuchPlayer => "You're not seated at this table.".into(),
+        TableError::WaitingOnPlayers => {
+            "Waiting on the table — everyone bets or sits out first.".into()
+        }
+        TableError::NotYourSqueeze { side } => {
+            format!("The {side:?} cards are in another player's hands.")
+        }
+        TableError::OutOfOrder => "Order, order — Player hand first, then Banker.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {
             format!("Too rich for this table — the max is ${}.{:02}.", max / 100, max % 100)
         }

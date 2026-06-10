@@ -22,7 +22,9 @@ function view(over: Partial<TableViewMsg> = {}): TableViewMsg {
       cockroach_pig: { columns: [] },
     },
     explain: [],
-    seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 0 }],
+    seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 0, sitting_out: false, decided: false }],
+    player_squeezer: null,
+    banker_squeezer: null,
     ...over,
   };
 }
@@ -91,7 +93,7 @@ test("a settle push pays the rack and fires the win pop-up", () => {
       phase: "Settled",
       bankroll: 1_010_000,
       payouts: [{ bet: { kind: { Main: "Player" }, amount: 10000 }, net: 10000 }],
-      seats: [{ id: 0, name: "me", bankroll: 1_010_000, staked: 0 }],
+      seats: [{ id: 0, name: "me", bankroll: 1_010_000, staked: 0, sitting_out: false, decided: false }],
     }),
   });
   expect(held(store)).toBe(1_010_000);
@@ -104,7 +106,7 @@ test("the drift guard re-racks if the client ever disagrees with the server", ()
   // server says we suddenly have a different bankroll (e.g. missed pushes)
   store.handle({
     type: "state",
-    view: view({ bankroll: 750_000, seats: [{ id: 0, name: "me", bankroll: 750_000, staked: 0 }] }),
+    view: view({ bankroll: 750_000, seats: [{ id: 0, name: "me", bankroll: 750_000, staked: 0, sitting_out: false, decided: false }] }),
   });
   expect(held(store)).toBe(750_000);
 });
@@ -115,11 +117,20 @@ test("other players' actions arrive as seat updates without touching my chips", 
     type: "state",
     view: view({
       seats: [
-        { id: 0, name: "me", bankroll: 1_000_000, staked: 0 },
-        { id: 1, name: "friend", bankroll: 1_000_000, staked: 50_000 },
+        { id: 0, name: "me", bankroll: 1_000_000, staked: 0, sitting_out: false, decided: false },
+        { id: 1, name: "friend", bankroll: 1_000_000, staked: 50_000, sitting_out: false, decided: true },
       ],
     }),
   });
   expect(store.getState().seats).toHaveLength(2);
   expect(held(store)).toBe(1_000_000);
+});
+
+test("sitting out sends the choice and returns any held chips", () => {
+  const { store, sent } = setup();
+  store.getState().pickChip(10000);
+  store.getState().sitOut();
+  expect(store.getState().hand).toEqual([]);
+  expect(held(store)).toBe(1_000_000);
+  expect(sent.at(-1)).toEqual({ type: "sit_out" });
 });
