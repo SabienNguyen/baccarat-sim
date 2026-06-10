@@ -1,5 +1,6 @@
 import type { RoundSnapshot } from "../engine/types";
 import { formatCents } from "../format";
+import { VolumeControl } from "./VolumeControl";
 import "./hud.css";
 
 interface HudProps {
@@ -79,6 +80,8 @@ export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
           ))}
         </ul>
       )}
+
+      <VolumeControl />
 
       {(onResetBankroll || onLeave) && (
         <div className="hud-actions">

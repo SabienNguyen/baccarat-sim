@@ -1,0 +1,20 @@
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.volume-mute {
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 6px;
+  background: var(--panel-bevel-hi);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.volume-slider {
+  flex: 1;
+  min-width: 70px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
