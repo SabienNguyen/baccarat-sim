@@ -31,7 +31,9 @@ export function App({ store }: AppProps = {}) {
   const peek = useStore(active, (s) => s.peek);
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
+  const newHand = useStore(active, (s) => s.newHand);
   const newShoe = useStore(active, (s) => s.newShoe);
+  const placeChip = useStore(active, (s) => s.placeChip);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
 
@@ -72,6 +74,7 @@ export function App({ store }: AppProps = {}) {
           onDeal={deal}
           onRevealAll={revealAll}
           onSettle={settle}
+          onNewHand={newHand}
           onNewShoe={newShoe}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
@@ -81,6 +84,7 @@ export function App({ store }: AppProps = {}) {
           selectedChip={selectedChip}
           onSelectChip={setSelectedChip}
           onPlaceBet={placeSelectedBet}
+          onPlaceChip={placeChip}
           onClear={clearBets}
         />
       </main>

@@ -1,6 +1,7 @@
 import type { RoundSnapshot, BetKind } from "../engine/types";
 import { formatCents } from "../format";
 import { CHIP_DENOMINATIONS } from "../store/gameStore";
+import { Chip } from "./Chip";
 import "./betrail.css";
 
 interface BetRailProps {
@@ -8,6 +9,7 @@ interface BetRailProps {
   selectedChip: number;
   onSelectChip: (cents: number) => void;
   onPlaceBet: (kind: BetKind) => void;
+  onPlaceChip: (kind: BetKind, cents: number) => void;
   onClear: () => void;
 }
 
@@ -40,6 +42,7 @@ export function BetRail({
   selectedChip,
   onSelectChip,
   onPlaceBet,
+  onPlaceChip,
   onClear,
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
@@ -47,15 +50,12 @@ export function BetRail({
     <section aria-label="Bet rail" className="bet-rail panel">
       <div aria-label="Chips" className="chips">
         {CHIP_DENOMINATIONS.map((cents) => (
-          <button
+          <Chip
             key={cents}
-            type="button"
-            className="chip"
-            aria-pressed={selectedChip === cents}
-            onClick={() => onSelectChip(cents)}
-          >
-            {formatCents(cents)} chip
-          </button>
+            cents={cents}
+            selected={selectedChip === cents}
+            onSelect={onSelectChip}
+          />
         ))}
       </div>
 
@@ -67,6 +67,16 @@ export function BetRail({
             className="spot"
             disabled={!betting}
             onClick={() => onPlaceBet(spot.kind)}
+            onDragOver={(e) => {
+              if (betting) e.preventDefault(); // allow the chip to drop here
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const cents = Number(e.dataTransfer.getData("text/plain"));
+              if (betting && Number.isFinite(cents) && cents > 0) {
+                onPlaceChip(spot.kind, cents);
+              }
+            }}
           >
             Bet {spot.label}
           </button>

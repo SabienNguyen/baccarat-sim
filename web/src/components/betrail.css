@@ -7,24 +7,59 @@
 }
 .chips {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
+/* Round, draggable casino chips with a dashed inner ring. */
 .chip {
-  font-family: var(--font-display);
-  font-size: 9px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #fff;
   background: var(--chip-blue);
   border: 3px solid var(--ink);
-  border-radius: 999px;
-  padding: 10px 12px;
-  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.3), 2px 2px 0 var(--shadow);
-  cursor: pointer;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.35),
+    inset 0 0 0 5px rgba(0, 0, 0, 0.18),
+    2px 3px 0 var(--shadow);
+  cursor: grab;
   transition: transform 80ms ease;
 }
-.chip[aria-pressed="true"] {
+.chip:active {
+  cursor: grabbing;
+}
+.chip-face {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 1px 1px 0 var(--ink);
+}
+.chip--red {
   background: var(--chip-red);
-  transform: translateY(-4px) scale(1.06);
+}
+.chip--green {
+  background: #1d7a3a;
+}
+.chip--blue {
+  background: var(--chip-blue);
+}
+.chip--gold {
+  background: var(--gold);
+}
+.chip--gold .chip-face {
+  color: #1a1208;
+  text-shadow: none;
+}
+.chip[aria-pressed="true"] {
+  transform: translateY(-6px) scale(1.08);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.5),
+    0 0 0 3px var(--gold),
+    2px 3px 0 var(--shadow);
 }
 .spots {
   display: grid;

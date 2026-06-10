@@ -18,11 +18,15 @@ export interface GameState {
   toggleExplain: () => void;
   setSelectedChip: (cents: number) => void;
   placeSelectedBet: (kind: BetKind) => void;
+  /** Place a specific chip amount on a spot (used by drag-and-drop). */
+  placeChip: (kind: BetKind, cents: number) => void;
   clearBets: () => void;
   deal: () => void;
   peek: (side: Side, index: number) => void;
   reveal: (side: Side, index: number) => void;
   settle: () => void;
+  /** Start the next hand from the same shoe after a settled round. */
+  newHand: () => void;
   newShoe: () => void;
 }
 
@@ -42,6 +46,7 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       toggleExplain: () => set({ explainOn: !get().explainOn }),
       setSelectedChip: (cents) => set({ selectedChip: cents }),
       placeSelectedBet: (kind) => apply(session.placeBet(kind, get().selectedChip)),
+      placeChip: (kind, cents) => apply(session.placeBet(kind, cents)),
       clearBets: () => {
         set({ lastDelta: null });
         apply(session.clearBets());
@@ -66,6 +71,10 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
         }
         apply(result);
       },
+      // After a settled round the engine is already back in Betting; refresh the
+      // snapshot to a clean Betting view so the player can bet and deal the next
+      // hand from the SAME shoe (no reshuffle).
+      newHand: () => set({ snapshot: session.snapshot(), lastError: null, lastDelta: null }),
       newShoe: () => apply(session.newShoe()),
     };
   });
