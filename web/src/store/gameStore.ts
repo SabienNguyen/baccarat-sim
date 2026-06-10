@@ -105,9 +105,18 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       placeChip: (kind, denom) => {
         const taken = removeChips(get().rack, [denom]);
         if (taken === null) return;
-        const result = session.placeBet(kind, denom);
+        // A dragged chip brings the picked-up hand along with it, so "grab a
+        // stack, drag one on top" stakes everything you're holding.
+        const hand = get().hand;
+        const chips = [...hand, denom];
+        const amount = chips.reduce((a, b) => a + b, 0);
+        const result = session.placeBet(kind, amount);
         if (result.ok) {
-          set({ rack: taken, stagedChips: [...get().stagedChips, [denom]] });
+          set({
+            rack: taken,
+            hand: [],
+            stagedChips: [...get().stagedChips, chips],
+          });
         }
         apply(result);
       },

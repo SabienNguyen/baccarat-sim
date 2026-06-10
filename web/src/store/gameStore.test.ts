@@ -117,6 +117,21 @@ test("placeChip stakes a single chip straight from the rack (drag-and-drop)", ()
   expect(chipsTotal(store)).toBe(1_000_000);
 });
 
+test("a dragged chip brings the picked-up hand along (the whole $300 rides)", () => {
+  const placeBet = vi.fn(
+    (): CommandResult => ({ ok: true, snapshot: snapshotWith() }),
+  );
+  const session = { ...fakeSession({ ok: true, snapshot: snapshotWith() }), placeBet };
+  const store = createGameStore(session);
+  store.getState().pickChip(10000);
+  store.getState().pickChip(10000);
+  store.getState().placeChip({ Main: "Player" }, 10000); // drag a third $100 on top
+  expect(placeBet).toHaveBeenCalledWith({ Main: "Player" }, 30000);
+  expect(store.getState().hand).toEqual([]);
+  expect(store.getState().stagedChips).toEqual([[10000, 10000, 10000]]);
+  expect(chipsTotal(store)).toBe(1_000_000);
+});
+
 test("clearBets returns every staged chip to the rack", () => {
   const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
   store.getState().placeChip({ Main: "Player" }, 10000);
