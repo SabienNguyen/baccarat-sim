@@ -24,6 +24,12 @@
   font-family: var(--font-text);
   font-size: 26px;
   line-height: 1.25;
+  /* two lines' worth of height, reserved — the stage never re-centers
+     when his line wraps or shortens */
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   text-align: left;
   color: #f3eede;
   background: var(--panel-face);
@@ -71,5 +77,6 @@
   .dealer-line p {
     font-size: 19px;
     padding: 12px 12px 10px;
+    min-height: 70px;
   }
 }
