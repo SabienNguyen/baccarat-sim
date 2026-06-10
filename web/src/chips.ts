@@ -42,26 +42,27 @@ export function toChips(cents: number): { chips: number[]; remainder: number } {
 }
 
 /**
- * The cage's buy-in: turn a bankroll into a playable spread of chips.
- * Mostly big chips with enough small ones to actually bet; conserves the
- * total exactly (sub-$1 cents end up in `change`).
+ * The cage's buy-in: turn a bankroll into a playable spread of chips the way
+ * a real cage racks it — the roll lives in big chips, with a capped working
+ * stack of small ones for table change (nobody gets 300 singles). Conserves
+ * the total exactly (sub-$1 cents end up in `change`).
  */
 export function buyIn(cents: number): { rack: Rack; change: number } {
   const rack = emptyRack();
   let left = Math.max(0, Math.floor(cents));
 
-  // Target spread (fractions of the bankroll per denomination).
-  const SPREAD: Array<[number, number]> = [
-    [100000, 0.3],
-    [50000, 0.25],
-    [10000, 0.25],
-    [2500, 0.12],
-    [500, 0.05],
-    [100, 0.03],
+  // [denomination, fraction of the roll, max chips of this kind]
+  const SPREAD: Array<[number, number, number]> = [
+    [100000, 0.3, Infinity],
+    [50000, 0.3, Infinity],
+    [10000, 0.3, Infinity],
+    [2500, 0.08, 40],
+    [500, 0.018, 36],
+    [100, 0.002, 20],
   ];
-  for (const [denom, frac] of SPREAD) {
-    const count = Math.floor((cents * frac) / denom);
-    const affordable = Math.min(count, Math.floor(left / denom));
+  for (const [denom, frac, cap] of SPREAD) {
+    const target = Math.min(Math.floor((cents * frac) / denom), cap);
+    const affordable = Math.min(target, Math.floor(left / denom));
     rack[denom] += affordable;
     left -= affordable * denom;
   }

@@ -42,6 +42,16 @@ test("buyIn of the default bankroll yields a playable spread of every chip", () 
   }
 });
 
+test("buyIn racks like a real cage: big chips carry the roll, small stacks stay sane", () => {
+  const { rack } = buyIn(1_000_000); // $10,000
+  expect(rack[100]).toBeLessThanOrEqual(20); // a sleeve of singles, not a bucket
+  expect(rack[500]).toBeLessThanOrEqual(36);
+  expect(rack[2500]).toBeLessThanOrEqual(40);
+  // at least 85% of the roll's value sits in $100+ chips
+  const big = rack[100000] * 100000 + rack[50000] * 50000 + rack[10000] * 10000;
+  expect(big).toBeGreaterThanOrEqual(850_000);
+});
+
 test("add/remove chips round-trip; removing a chip you lack fails", () => {
   const start = buyIn(1_000_000).rack;
   const added = addChips(start, [2500, 2500]);
