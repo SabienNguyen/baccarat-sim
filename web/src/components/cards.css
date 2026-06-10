@@ -250,3 +250,44 @@
     animation: none;
   }
 }
+
+/* --- responsive card sizes --- */
+@media (max-width: 1240px) {
+  .card {
+    width: 84px;
+    height: 120px;
+  }
+  .card-stage {
+    gap: 40px;
+  }
+  .card-pip {
+    font-size: 15px;
+  }
+  .card-pip--ace {
+    font-size: 42px;
+  }
+  .card-court-half {
+    font-size: 26px;
+  }
+}
+@media (max-width: 840px) {
+  .card {
+    width: 68px;
+    height: 97px;
+  }
+  .card-stage {
+    gap: 20px;
+  }
+  .card-pip {
+    font-size: 12px;
+  }
+  .card-pip--ace {
+    font-size: 34px;
+  }
+  .card-court-half {
+    font-size: 22px;
+  }
+  .hand-total-num {
+    font-size: 30px;
+  }
+}

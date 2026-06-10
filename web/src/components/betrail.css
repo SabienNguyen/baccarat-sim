@@ -265,3 +265,25 @@
 .spot--side .spot-stake {
   font-size: 12px;
 }
+
+/* --- responsive felt --- */
+@media (max-width: 900px) {
+  .bet-rail {
+    padding: 12px;
+  }
+  .felt {
+    padding: 12px;
+    gap: 12px;
+  }
+  .side-bets {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .spot--player,
+  .spot--banker,
+  .spot--tie {
+    min-height: 100px;
+  }
+  .spot-name {
+    font-size: 11px;
+  }
+}

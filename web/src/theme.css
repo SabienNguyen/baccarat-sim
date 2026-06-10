@@ -96,3 +96,27 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+
+/* --- responsive: shrink the side columns first --- */
+@media (max-width: 1340px) {
+  .app {
+    grid-template-columns: 260px minmax(0, 1fr) 260px;
+    gap: 14px;
+  }
+}
+
+/* --- half-screen and below: table on top, panels side by side under it --- */
+@media (max-width: 1040px) {
+  .app {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "stage stage"
+      "hud board";
+    align-items: start;
+  }
+  .app .hud,
+  .app .board {
+    min-height: 0;
+    justify-content: flex-start;
+  }
+}
