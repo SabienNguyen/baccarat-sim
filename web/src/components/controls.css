@@ -1,0 +1,28 @@
+.controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.controls .btn {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: #fff;
+  background: var(--chip-red);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 14px 18px;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.3), 3px 3px 0 var(--shadow);
+  cursor: pointer;
+  transition: transform 80ms ease;
+}
+.controls .btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.controls .btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+}
+.controls .btn:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+}
