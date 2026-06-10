@@ -50,6 +50,11 @@ jobs:
       - name: Build site
         run: npm --workspace web run build
 
+      - name: Enable Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
