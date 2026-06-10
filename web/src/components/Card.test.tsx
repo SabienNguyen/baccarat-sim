@@ -18,7 +18,7 @@ test("renders a peeked card showing only the suit sliver", () => {
   const card: CardView = { Peeked: { sliver: { suit: "Spades" } } };
   render(<Card card={card} />);
   expect(screen.getByLabelText("peeked card, Spades")).toBeInTheDocument();
-  expect(screen.getByText("♠")).toBeInTheDocument();
+  expect(screen.getAllByText("♠").length).toBeGreaterThan(0);
   expect(screen.queryByText(/^(A|[2-9]|10|J|Q|K)$/)).not.toBeInTheDocument();
 });
 

@@ -110,21 +110,62 @@
   transform: rotate(180deg);
 }
 
-/* --- the squeeze peel: the corner folding back as you bend it --- */
+/* --- the squeeze peel: the corner curling back as you bend it --- */
 .card-peel-under {
   position: absolute;
   inset: 0;
-  background: #f6f1e0;
-  border-radius: 5px 0 0 0;
-  box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.3);
+  /* card stock: bright at the lifted corner, rolling into shadow at the crease */
+  filter: drop-shadow(2px 2px 3px rgba(0, 0, 0, 0.45));
 }
+.card-peel-under--tl {
+  background: linear-gradient(135deg, #fdfaee 55%, #e4dcc4 78%, #a89f86 96%);
+  border-radius: 5px 0 0 0;
+}
+.card-peel-under--tr {
+  background: linear-gradient(225deg, #fdfaee 55%, #e4dcc4 78%, #a89f86 96%);
+  border-radius: 0 5px 0 0;
+}
+.card-peel-under--bl {
+  background: linear-gradient(45deg, #fdfaee 55%, #e4dcc4 78%, #a89f86 96%);
+  border-radius: 0 0 0 5px;
+}
+.card-peel-under--br {
+  background: linear-gradient(315deg, #fdfaee 55%, #e4dcc4 78%, #a89f86 96%);
+  border-radius: 0 0 5px 0;
+}
+
+/* the face content showing through the fold */
 .card-sliver {
   position: absolute;
-  top: 4px;
-  left: 4px;
   font-family: var(--font-text);
-  font-size: 18px;
   line-height: 1;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.card-sliver--tl {
+  top: 5px;
+  left: 6px;
+}
+.card-sliver--tr {
+  top: 5px;
+  right: 6px;
+  align-items: flex-end;
+}
+.card-sliver--bl {
+  bottom: 5px;
+  left: 6px;
+  transform: rotate(180deg);
+}
+.card-sliver--br {
+  bottom: 5px;
+  right: 6px;
+  transform: rotate(180deg);
+  align-items: flex-end;
+}
+.card-sliver-echo {
+  font-size: 0.6em;
+  opacity: 0.85;
 }
 .card-sliver[data-color="red"] {
   color: var(--chip-red);

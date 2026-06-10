@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { CardView } from "../engine/types";
-import { Card } from "./Card";
+import { Card, type PeelCorner } from "./Card";
 import { isFaceUp } from "../cards";
 import { PEEK_AT } from "../squeeze";
 
@@ -19,9 +19,22 @@ function isPeeked(card: CardView): boolean {
   return card !== "FaceDown" && typeof card === "object" && "Peeked" in card;
 }
 
+/** Which corner of the card the pointer grabbed (falls back to top-left). */
+function grabbedCorner(e: ReactPointerEvent): PeelCorner {
+  const rect = e.currentTarget.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return "tl"; // jsdom / degenerate
+  const right = e.clientX > rect.left + rect.width / 2;
+  const bottom = e.clientY > rect.top + rect.height / 2;
+  if (right && bottom) return "br";
+  if (right) return "tr";
+  if (bottom) return "bl";
+  return "tl";
+}
+
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const [bend, setBend] = useState(0);
-  const startY = useRef<number | null>(null);
+  const [corner, setCorner] = useState<PeelCorner>("tl");
+  const start = useRef<{ x: number; y: number } | null>(null);
   const peekedThisGesture = useRef(false);
   const revealedThisGesture = useRef(false);
   const draggedThisGesture = useRef(false);
@@ -31,14 +44,17 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
 
   const faceUp = isFaceUp(card);
 
-  function progressFrom(clientY: number): number {
-    if (startY.current === null) return 0;
-    return Math.min(Math.max((startY.current - clientY) / DRAG_DISTANCE_PX, 0), 1);
+  /** Progress is plain drag distance, so the peel works whichever way you pull. */
+  function progressFrom(clientX: number, clientY: number): number {
+    if (start.current === null) return 0;
+    const dist = Math.hypot(clientX - start.current.x, clientY - start.current.y);
+    return Math.min(dist / DRAG_DISTANCE_PX, 1);
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
     if (faceUp) return;
-    startY.current = e.clientY;
+    start.current = { x: e.clientX, y: e.clientY };
+    setCorner(grabbedCorner(e));
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;
     draggedThisGesture.current = false;
@@ -46,15 +62,16 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   }
 
   function handlePointerMove(e: ReactPointerEvent) {
-    if (faceUp || startY.current === null) return;
-    if (Math.abs(startY.current - e.clientY) > TAP_SLOP_PX) {
+    if (faceUp || start.current === null) return;
+    const dist = Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y);
+    if (dist > TAP_SLOP_PX) {
       draggedThisGesture.current = true;
     }
-    const progress = progressFrom(e.clientY);
+    const progress = progressFrom(e.clientX, e.clientY);
     setBend(progress);
-    // Dragging only ever peeks — it grows the corner sliver. The full flip is
+    // Dragging only ever peeks — it grows the corner fold. The full flip is
     // committed on release (handlePointerUp), so the player can squeeze and
-    // linger on the sliver instead of the card snapping face-up mid-drag.
+    // linger on the peek instead of the card snapping face-up mid-drag.
     // Fire peek as soon as progress crosses the threshold, even if a single
     // fast move jumps well past it, so a quick drag never skips the peek.
     if (progress >= PEEK_AT && !peekedThisGesture.current) {
@@ -64,8 +81,8 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   }
 
   function handlePointerUp(e: ReactPointerEvent) {
-    if (faceUp || startY.current === null) return;
-    const progress = progressFrom(e.clientY);
+    if (faceUp || start.current === null) return;
+    const progress = progressFrom(e.clientX, e.clientY);
     // Releasing a started squeeze past the peek point commits the flip.
     if (!revealedThisGesture.current && progress >= PEEK_AT) {
       revealedThisGesture.current = true;
@@ -78,7 +95,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       draggedThisGesture.current ||
       peekedThisGesture.current ||
       revealedThisGesture.current;
-    startY.current = null;
+    start.current = null;
     setBend(0);
   }
 
@@ -95,7 +112,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       return;
     }
     // Only treat as a tap when no drag gesture is in progress.
-    if (startY.current !== null) return;
+    if (start.current !== null) return;
     advanceOneStep();
   }
 
@@ -116,7 +133,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <Card card={card} bend={bend} />
+      <Card card={card} bend={bend} corner={corner} />
     </div>
   );
 }

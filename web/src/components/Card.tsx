@@ -109,34 +109,62 @@ function suitColor(suit: Suit): "red" | "black" {
   return suit === "Hearts" || suit === "Diamonds" ? "red" : "black";
 }
 
+/** Which corner of the card is being squeezed. */
+export type PeelCorner = "tl" | "tr" | "bl" | "br";
+
 interface CardProps {
   card: CardView;
   /** 0..1 corner-bend progress while squeezing; drives the visible peel. */
   bend?: number;
+  /** The corner the player grabbed; the peel folds from there. */
+  corner?: PeelCorner;
 }
 
-/** The squeezed corner: the card stock folding back as you bend it. */
-function Peel({ bend, children }: { bend: number; children?: ReactNode }) {
+/** Clip-path triangle for a fold of `size` starting at `corner`. */
+function foldClip(corner: PeelCorner, size: string): string {
+  switch (corner) {
+    case "tl":
+      return `polygon(0 0, ${size} 0, 0 ${size})`;
+    case "tr":
+      return `polygon(calc(100% - ${size}) 0, 100% 0, 100% ${size})`;
+    case "bl":
+      return `polygon(0 calc(100% - ${size}), 0 100%, ${size} 100%)`;
+    case "br":
+      return `polygon(100% calc(100% - ${size}), 100% 100%, calc(100% - ${size}) 100%)`;
+  }
+}
+
+/** Tilt direction so the grabbed corner visibly lifts. */
+const TILT: Record<PeelCorner, number> = { tl: -4, tr: 4, bl: 3, br: -3 };
+
+/** The squeezed corner: the card stock curling back as you bend it. */
+function Peel({
+  bend,
+  corner,
+  children,
+}: {
+  bend: number;
+  corner: PeelCorner;
+  children?: ReactNode;
+}) {
   if (bend <= 0) return null;
-  const size = `${Math.round(18 + bend * 58)}%`;
+  const size = `${Math.round(16 + bend * 70)}%`;
   return (
-    <>
-      <span
-        className="card-peel-under"
-        style={{ clipPath: `polygon(0 0, ${size} 0, 0 ${size})` }}
-      >
-        {children}
-      </span>
-    </>
+    <span
+      className={`card-peel-under card-peel-under--${corner}`}
+      style={{ clipPath: foldClip(corner, size) }}
+    >
+      {children}
+    </span>
   );
 }
 
-export function Card({ card, bend = 0 }: CardProps) {
+export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
   // The whole card tilts and lifts a little while it's being squeezed.
   const squeeze =
     bend > 0
       ? {
-          transform: `rotate(${(-bend * 4).toFixed(2)}deg) translateY(${(-bend * 6).toFixed(1)}px)`,
+          transform: `rotate(${(TILT[corner] * bend).toFixed(2)}deg) translateY(${(-bend * 6).toFixed(1)}px)`,
         }
       : undefined;
 
@@ -144,18 +172,24 @@ export function Card({ card, bend = 0 }: CardProps) {
     return (
       <div className="card card-back" aria-label="face-down card" style={squeeze}>
         {/* the corner folds, but reveals nothing yet */}
-        <Peel bend={bend} />
+        <Peel bend={bend} corner={corner} />
       </div>
     );
   }
 
   if ("Peeked" in card) {
     const suit = card.Peeked.sliver.suit;
+    const held = Math.max(bend, 0.35);
     return (
       <div className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
-        <Peel bend={Math.max(bend, 0.35)}>
-          <span className="card-sliver" data-color={suitColor(suit)}>
+        <Peel bend={held} corner={corner}>
+          <span
+            className={`card-sliver card-sliver--${corner}`}
+            data-color={suitColor(suit)}
+            style={{ fontSize: `${Math.round(16 + held * 14)}px` }}
+          >
             {SUIT_GLYPH[suit]}
+            <span className="card-sliver-echo">{SUIT_GLYPH[suit]}</span>
           </span>
         </Peel>
       </div>

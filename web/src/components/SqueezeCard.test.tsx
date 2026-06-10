@@ -39,6 +39,27 @@ test("drag: dragging only peeks; the flip commits on release", () => {
   expect(onReveal).toHaveBeenCalledOnce();
 });
 
+test("drag: peeling works in any direction (downward drag also peeks)", () => {
+  const onPeek = vi.fn();
+  const onReveal = vi.fn();
+  render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
+  const el = screen.getByRole("button");
+  fireEvent.pointerDown(el, { pointerId: 1, clientY: 300 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientY: 336 }); // 36px DOWN -> progress 0.30
+  expect(onPeek).toHaveBeenCalledOnce();
+  expect(onReveal).not.toHaveBeenCalled();
+});
+
+test("drag: a sideways drag peeks too (distance-based progress)", () => {
+  const onPeek = vi.fn();
+  const onReveal = vi.fn();
+  render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
+  const el = screen.getByRole("button");
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: 100, clientY: 300 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: 136, clientY: 300 }); // 36px RIGHT
+  expect(onPeek).toHaveBeenCalledOnce();
+});
+
 test("drag: a fast jump past the reveal threshold still peeks first, and waits for release to flip", () => {
   const onPeek = vi.fn();
   const onReveal = vi.fn();
