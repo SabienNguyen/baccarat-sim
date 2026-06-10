@@ -12,6 +12,9 @@ use tokio::sync::{mpsc, Mutex};
 
 pub const MAX_SEATS: usize = 7;
 
+/// The house dealer's rhythm: one card flip per beat.
+pub const DEALER_FLIP_MS: u64 = 1100;
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -19,6 +22,8 @@ pub struct Room {
     pub table: Table,
     /// Outbound channel per seated player.
     pub conns: HashMap<PlayerId, mpsc::UnboundedSender<ServerMsg>>,
+    /// A dealer-flip pacer task is already running for this room.
+    pub pacing: bool,
 }
 
 impl Room {
@@ -34,6 +39,7 @@ impl Room {
                 seed,
             ),
             conns: HashMap::new(),
+            pacing: false,
         }
     }
 
@@ -124,6 +130,31 @@ impl Registry {
             rooms.remove(&id);
         }
     }
+}
+
+/// When the table has house cards waiting, start a pacer task that flips
+/// them one per beat so the whole table watches the dealer work.
+pub fn maybe_pace(room: Arc<Mutex<Room>>) {
+    tokio::spawn(async move {
+        {
+            let mut guard = room.lock().await;
+            if guard.pacing || !guard.table.dealer_flip_pending() {
+                return;
+            }
+            guard.pacing = true;
+        }
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(DEALER_FLIP_MS)).await;
+            let mut guard = room.lock().await;
+            if guard.table.dealer_flip_one() {
+                guard.broadcast();
+            }
+            if !guard.table.dealer_flip_pending() {
+                guard.pacing = false;
+                return;
+            }
+        }
+    });
 }
 
 /// Human dealer speech for refusals, mirrored from the web's narrateError.

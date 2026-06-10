@@ -182,7 +182,6 @@ impl Table {
         if self.players.len() == before {
             return Err(TableError::NoSuchPlayer);
         }
-        self.dealer_flips();
         Ok(())
     }
 
@@ -283,8 +282,6 @@ impl Table {
         let player_squeezer = self.biggest_bettor(crate::settle::BetSpot::Player);
         let banker_squeezer = self.biggest_bettor(crate::settle::BetSpot::Banker);
         self.phase = Phase::Dealing { round, reveal, player_squeezer, banker_squeezer };
-        // sides nobody bet are the dealer's to flip, in order
-        self.dealer_flips();
         Ok(())
     }
 
@@ -306,49 +303,58 @@ impl Table {
             .map(|(id, _)| id)
     }
 
-    /// The house dealer's hands: any next-in-order card belonging to a side
-    /// nobody bet gets flipped by the dealer himself, cascading until a
-    /// player-held card is reached. (A Tie-only coup flips everything.)
-    fn dealer_flips(&mut self) {
-        loop {
-            let Phase::Dealing { reveal, player_squeezer, banker_squeezer, .. } = &mut self.phase
-            else {
-                return;
+    /// The next card in ritual order that belongs to the house (a side
+    /// nobody bet), if it's that card's turn to be exposed.
+    fn next_dealer_card(&self) -> Option<(Side, usize)> {
+        let Phase::Dealing { reveal, player_squeezer, banker_squeezer, .. } = &self.phase else {
+            return None;
+        };
+        let sequence: [(Side, usize); 6] = [
+            (Side::Player, 0),
+            (Side::Player, 1),
+            (Side::Banker, 0),
+            (Side::Banker, 1),
+            (Side::Player, 2),
+            (Side::Banker, 2),
+        ];
+        for (h, i) in sequence {
+            let owner = match h {
+                Side::Player => *player_squeezer,
+                Side::Banker => *banker_squeezer,
             };
-            let sequence: [(Side, usize); 6] = [
-                (Side::Player, 0),
-                (Side::Player, 1),
-                (Side::Banker, 0),
-                (Side::Banker, 1),
-                (Side::Player, 2),
-                (Side::Banker, 2),
-            ];
-            let mut flipped = false;
-            for (h, i) in sequence {
-                let owner = match h {
-                    Side::Player => *player_squeezer,
-                    Side::Banker => *banker_squeezer,
-                };
-                let statuses = match h {
-                    Side::Player => &mut reveal.player,
-                    Side::Banker => &mut reveal.banker,
-                };
-                if i >= statuses.len() {
-                    continue; // that card wasn't drawn this coup
-                }
-                if statuses[i] == CardStatus::FaceUp {
-                    continue; // already exposed, next in order
-                }
-                if owner.is_none() {
-                    statuses[i] = CardStatus::FaceUp;
-                    flipped = true;
-                }
-                break; // stop at the first unexposed card either way
+            let statuses = match h {
+                Side::Player => &reveal.player,
+                Side::Banker => &reveal.banker,
+            };
+            if i >= statuses.len() {
+                continue; // that card wasn't drawn this coup
             }
-            if !flipped {
-                return;
+            if statuses[i] == CardStatus::FaceUp {
+                continue; // already exposed, next in order
             }
+            return if owner.is_none() { Some((h, i)) } else { None };
         }
+        None
+    }
+
+    /// Is the house dealer due to turn a card?
+    pub fn dealer_flip_pending(&self) -> bool {
+        self.next_dealer_card().is_some()
+    }
+
+    /// The house dealer turns ONE card — the caller paces the rhythm so the
+    /// whole table watches him flip card by card.
+    pub fn dealer_flip_one(&mut self) -> bool {
+        let Some((h, i)) = self.next_dealer_card() else { return false };
+        if let Phase::Dealing { reveal, .. } = &mut self.phase {
+            let statuses = match h {
+                Side::Player => &mut reveal.player,
+                Side::Banker => &mut reveal.banker,
+            };
+            statuses[i] = CardStatus::FaceUp;
+            return true;
+        }
+        false
     }
 
     pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
@@ -359,10 +365,7 @@ impl Table {
     pub fn reveal(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
         self.check_rights(pid, hand)?;
         self.check_order(hand, index)?;
-        self.set_status(hand, index, CardStatus::FaceUp)?;
-        // a player's reveal can put house cards next in order
-        self.dealer_flips();
-        Ok(())
+        self.set_status(hand, index, CardStatus::FaceUp)
     }
 
     /// The squeeze belongs to the biggest bettor on that side, when there is one.
@@ -803,13 +806,21 @@ mod tests {
         // a holds the Player hand, so nothing is exposed yet
         let v = t.view_for(a).unwrap();
         assert!(matches!(v.player.cards[0], crate::session::CardView::FaceDown));
-        // a exposes the Player hand; the dealer immediately flips the
-        // (unbet) Banker hand, since it's next in the ritual
+        // a exposes the Player hand; the (unbet) Banker hand becomes the
+        // dealer's to flip — one card at a time, paced by the server
         t.reveal(a, Side::Player, 0).unwrap();
+        assert!(!t.dealer_flip_pending()); // Player's second card is still a's
         t.reveal(a, Side::Player, 1).unwrap();
+        assert!(t.dealer_flip_pending());
+        assert!(t.dealer_flip_one());
         let v = t.view_for(a).unwrap();
         assert!(matches!(v.banker.cards[0], crate::session::CardView::FaceUp(_)));
-        assert!(matches!(v.banker.cards[1], crate::session::CardView::FaceUp(_)));
+        assert!(matches!(v.banker.cards[1], crate::session::CardView::FaceDown)); // one at a time
+        assert!(t.dealer_flip_one());
+        assert!(matches!(
+            t.view_for(a).unwrap().banker.cards[1],
+            crate::session::CardView::FaceUp(_)
+        ));
     }
 
     #[test]
@@ -818,7 +829,12 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
         t.deal().unwrap();
-        // nobody owns either hand: the dealer exposes the whole coup at once
+        // nobody owns either hand: the dealer flips the whole coup, in order
+        let mut flips = 0;
+        while t.dealer_flip_one() {
+            flips += 1;
+        }
+        assert!(flips >= 4);
         let v = t.view_for(a).unwrap();
         assert!(v.player.total.is_some());
         assert!(v.banker.total.is_some());

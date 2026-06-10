@@ -12,7 +12,7 @@ use axum::routing::get;
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use protocol::{ClientMsg, ServerMsg};
-use rooms::{error_message, Registry, Room};
+use rooms::{error_message, maybe_pace, Registry, Room};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tower_http::services::{ServeDir, ServeFile};
@@ -83,11 +83,13 @@ async fn handle_socket(socket: WebSocket, registry: Registry) {
 
     // Connection gone: stand up and tell the table.
     if let Some(Seat { room, pid }) = seat.take() {
-        let mut room = room.lock().await;
-        room.conns.remove(&pid);
-        let _ = room.table.leave(pid);
-        room.broadcast();
-        drop(room);
+        {
+            let mut guard = room.lock().await;
+            guard.conns.remove(&pid);
+            let _ = guard.table.leave(pid);
+            guard.broadcast();
+        }
+        maybe_pace(room);
         registry.sweep().await;
     }
     writer.abort();
@@ -116,11 +118,13 @@ async fn handle_command(
         },
         ClientMsg::Leave => {
             if let Some(Seat { room, pid }) = seat.take() {
-                let mut room = room.lock().await;
-                room.conns.remove(&pid);
-                let _ = room.table.leave(pid);
-                room.broadcast();
-                drop(room);
+                {
+                    let mut guard = room.lock().await;
+                    guard.conns.remove(&pid);
+                    let _ = guard.table.leave(pid);
+                    guard.broadcast();
+                }
+                maybe_pace(room);
                 registry.sweep().await;
                 let _ = tx.send(ServerMsg::Left);
             }
@@ -145,7 +149,13 @@ async fn handle_command(
                 _ => unreachable!("non-table commands handled above"),
             };
             match result {
-                Ok(()) => room.broadcast(),
+                Ok(()) => {
+                    room.broadcast();
+                    drop(room);
+                    if let Some(Seat { room, .. }) = seat.as_ref() {
+                        maybe_pace(room.clone());
+                    }
+                }
                 Err(e) => {
                     let _ = tx.send(ServerMsg::Error { message: error_message(&e) });
                 }

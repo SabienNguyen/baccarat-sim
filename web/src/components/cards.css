@@ -182,15 +182,19 @@
   }
 }
 .card-face {
-  animation: flip-in 240ms ease-out;
+  animation: flip-in 460ms ease-out;
 }
 @keyframes flip-in {
   0% {
-    transform: scaleX(0.08);
-    filter: brightness(1.6);
+    transform: scaleX(0.06) translateY(-6px);
+    filter: brightness(1.7);
+  }
+  55% {
+    transform: scaleX(1.08);
+    filter: brightness(1.25);
   }
   100% {
-    transform: scaleX(1);
+    transform: scaleX(1) translateY(0);
     filter: brightness(1);
   }
 }

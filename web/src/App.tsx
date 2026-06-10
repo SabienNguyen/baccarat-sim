@@ -7,7 +7,7 @@ import { HomeScreen } from "./components/HomeScreen";
 import { Multiplayer } from "./multiplayer/Multiplayer";
 import { SeatsStrip } from "./multiplayer/SeatsStrip";
 import type { TableTier } from "./tables";
-import { hiddenIndices } from "./cards";
+import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
@@ -93,9 +93,33 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
 
+  // The dealer flips for you — one card per beat, in ritual order.
   const revealAll = () => {
-    for (const i of hiddenIndices(snapshot.player.cards)) reveal("Player", i);
-    for (const i of hiddenIndices(snapshot.banker.cards)) reveal("Banker", i);
+    const order: Array<["Player" | "Banker", number]> = [
+      ["Player", 0],
+      ["Player", 1],
+      ["Banker", 0],
+      ["Banker", 1],
+      ["Player", 2],
+      ["Banker", 2],
+    ];
+    const flipNext = (): boolean => {
+      const snap = active.getState().snapshot;
+      if (snap.phase !== "Dealing") return false;
+      for (const [side, idx] of order) {
+        const cards = side === "Player" ? snap.player.cards : snap.banker.cards;
+        const card = cards[idx];
+        if (card !== undefined && !isFaceUp(card)) {
+          reveal(side, idx);
+          return true;
+        }
+      }
+      return false;
+    };
+    if (!flipNext()) return;
+    const timer = setInterval(() => {
+      if (!flipNext()) clearInterval(timer);
+    }, 900);
   };
 
   // Gate the third card so the 2-vs-3 count can't leak whether a hand drew one.

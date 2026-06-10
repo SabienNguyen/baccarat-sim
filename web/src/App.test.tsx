@@ -45,15 +45,36 @@ test("in Dealing, clicking a face-down card peeks it at (side, index)", async ()
   expect(peek).toHaveBeenCalledWith("Banker", 0);
 });
 
-test("Reveal all reveals every hidden card in both hands", async () => {
-  const reveal = vi.fn(() => okResult(dealingSnapshot()));
-  const store = createGameStore(fakeSession(dealingSnapshot(), { reveal }));
-  render(<App store={store} />);
-  await userEvent.click(screen.getByRole("button", { name: "Reveal all" }));
-  expect(reveal).toHaveBeenCalledTimes(3);
-  expect(reveal).toHaveBeenCalledWith("Player", 1);
-  expect(reveal).toHaveBeenCalledWith("Banker", 0);
-  expect(reveal).toHaveBeenCalledWith("Banker", 1);
+test("Reveal all flips the hidden cards one per beat, in ritual order", () => {
+  vi.useFakeTimers();
+  try {
+    // a stateful table: each reveal actually turns that card
+    let snap = dealingSnapshot();
+    const reveal = vi.fn((side: "Player" | "Banker", i: number) => {
+      const next = structuredClone(snap);
+      const cards = side === "Player" ? next.player.cards : next.banker.cards;
+      cards[i] = { FaceUp: { rank: "Two", suit: "Clubs" } };
+      snap = next;
+      return okResult(next);
+    });
+    const store = createGameStore(fakeSession(dealingSnapshot(), {
+      snapshot: () => snap,
+      reveal: reveal as never,
+    }));
+    render(<App store={store} />);
+    fireEvent.click(screen.getByRole("button", { name: "Reveal all" }));
+    // the first flip is immediate; the rest follow one per beat, in order
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenNthCalledWith(1, "Player", 1);
+    vi.advanceTimersByTime(900);
+    expect(reveal).toHaveBeenNthCalledWith(2, "Banker", 0);
+    vi.advanceTimersByTime(900);
+    expect(reveal).toHaveBeenNthCalledWith(3, "Banker", 1);
+    vi.advanceTimersByTime(2000);
+    expect(reveal).toHaveBeenCalledTimes(3); // table clear, pacer stopped
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("shows the win pop-up after a winning settle", () => {

@@ -189,7 +189,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
 
       {notice && <p className="mp-notice">{notice}</p>}
 
-      <section className="mp-panel">
+      <section className="mp-panel mp-panel--create">
         <h3>Open a table</h3>
         <div className="mp-tiers">
           {TABLES.map((t) => (
@@ -222,7 +222,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         </button>
       </section>
 
-      <section className="mp-panel">
+      <section className="mp-panel mp-panel--join">
         <h3>Join with a code</h3>
         <div className="mp-joinrow">
           <input
@@ -243,7 +243,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         </div>
       </section>
 
-      <section className="mp-panel">
+      <section className="mp-panel mp-panel--rooms">
         <h3>Public tables</h3>
         {rooms.length === 0 ? (
           <p className="mp-empty">No tables open — start one.</p>
