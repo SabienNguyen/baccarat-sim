@@ -134,16 +134,16 @@ pub enum CommandError {
 
 /// Per-card reveal status during the squeeze.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CardStatus {
+pub(crate) enum CardStatus {
     FaceDown,
     Peeked,
     FaceUp,
 }
 
 /// Reveal status for both hands, indexed to match each hand's cards.
-struct RevealState {
-    player: Vec<CardStatus>,
-    banker: Vec<CardStatus>,
+pub(crate) struct RevealState {
+    pub(crate) player: Vec<CardStatus>,
+    pub(crate) banker: Vec<CardStatus>,
 }
 
 /// In-flight round state.
@@ -377,7 +377,7 @@ impl Session {
     }
 }
 
-fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
+pub(crate) fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
     let cards = hand
         .cards
         .iter()
@@ -392,7 +392,7 @@ fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
     HandView { cards, total: if all_up { Some(hand.total()) } else { None } }
 }
 
-fn derive_events(round: &RoundResult, reveal: &RevealState) -> Vec<Event> {
+pub(crate) fn derive_events(round: &RoundResult, reveal: &RevealState) -> Vec<Event> {
     let mut events = Vec::new();
 
     for (side, hand, status) in [
