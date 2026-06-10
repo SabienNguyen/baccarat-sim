@@ -1,160 +1,151 @@
 .dealer-figure {
-  position: relative;
-  width: 200px;
-  height: 150px;
+  width: 210px;
   margin: 0 auto;
-  --skin: #d9a87a;
-  --suit: #20202c;
-  --suit-hi: #313143;
+  filter: drop-shadow(3px 4px 0 rgba(0, 0, 0, 0.35));
+}
+.dealer-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+/* --- fills (themed) --- */
+.d-shadow {
+  fill: rgba(0, 0, 0, 0.4);
+}
+.d-suit {
+  fill: url(#d-suit);
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+.d-shirt {
+  fill: #f3eede;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.d-lapel {
+  fill: #2a2a3a;
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+.d-bowtie {
+  fill: var(--gold);
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.d-skin {
+  fill: #d9a87a;
+}
+.d-faceshape {
+  fill: url(#d-face);
+  stroke: var(--ink);
+  stroke-width: 2.5;
+}
+.d-ear {
+  fill: #d9a87a;
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+.d-hair {
+  fill: #2b2230;
+  stroke: var(--ink);
+  stroke-width: 2.5;
+}
+.d-eye {
+  fill: #1a1a1a;
+}
+.d-brow {
+  fill: none;
+  stroke: #2b2230;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.d-stache {
+  fill: #2b2230;
+}
+.d-smile {
+  fill: none;
+  stroke: #8a5a3a;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.d-sleeve {
+  fill: none;
+  stroke: url(#d-arm);
+  stroke-width: 15;
+  stroke-linecap: round;
+}
+.d-hand {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+.d-card {
+  fill: #f9f4e6;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+/* --- motion --- */
+.d-body {
+  transform-box: view-box;
+  transform-origin: 110px 120px;
   animation: dealer-breathe 4s ease-in-out infinite;
 }
+.d-arm {
+  transform-box: view-box;
+}
+.d-arm--left {
+  transform-origin: 74px 104px;
+}
+.d-arm--right {
+  transform-origin: 146px 104px;
+}
+.d-cards {
+  transform-box: view-box;
+  transform-origin: 110px 140px;
+}
 
-/* The croupier leans in and works the cards while a hand is out. */
-.dealer-figure.is-dealing {
+.is-dealing .d-body {
   animation: dealer-lean 1.4s ease-in-out infinite;
 }
-
-.dealer-shadow {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  width: 170px;
-  height: 22px;
-  transform: translateX(-50%);
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.45), transparent 70%);
-}
-
-.dealer-head {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 56px;
-  height: 60px;
-  transform: translateX(-50%);
-  z-index: 3;
-}
-.dealer-face {
-  position: absolute;
-  inset: 8px 6px 0 6px;
-  background: var(--skin);
-  border: 3px solid var(--ink);
-  border-radius: 40% 40% 45% 45%;
-}
-.dealer-hair {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 22px;
-  background: #2b2230;
-  border: 3px solid var(--ink);
-  border-radius: 40% 40% 0 0;
-  z-index: 1;
-}
-
-.dealer-torso {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  width: 130px;
-  height: 92px;
-  transform: translateX(-50%);
-  background: var(--suit);
-  border: 3px solid var(--ink);
-  border-radius: 60px 60px 16px 16px;
-  z-index: 2;
-}
-.dealer-lapel {
-  position: absolute;
-  top: 6px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-}
-.dealer-lapel--left {
-  left: 44px;
-  border-width: 56px 18px 0 0;
-  border-color: var(--suit-hi) transparent transparent transparent;
-}
-.dealer-lapel--right {
-  right: 44px;
-  border-width: 56px 0 0 18px;
-  border-color: var(--suit-hi) transparent transparent transparent;
-}
-.dealer-bowtie {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  width: 26px;
-  height: 14px;
-  transform: translateX(-50%);
-  background: var(--gold);
-  border: 2px solid var(--ink);
-  clip-path: polygon(0 0, 45% 50%, 0 100%, 100% 100%, 55% 50%, 100% 0);
-}
-
-.dealer-arm {
-  position: absolute;
-  bottom: 18px;
-  width: 30px;
-  height: 70px;
-  background: var(--suit-hi);
-  border: 3px solid var(--ink);
-  border-radius: 16px;
-  z-index: 1;
-}
-.dealer-arm::after {
-  /* a gloved/bare hand at the wrist */
-  content: "";
-  position: absolute;
-  bottom: -10px;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  transform: translateX(-50%);
-  background: var(--skin);
-  border: 3px solid var(--ink);
-  border-radius: 50%;
-}
-.dealer-arm--left {
-  left: 8px;
-  transform-origin: top center;
-  transform: rotate(18deg);
-}
-.dealer-arm--right {
-  right: 8px;
-  transform-origin: top center;
-  transform: rotate(-18deg);
-}
-.is-dealing .dealer-arm--left {
+.is-dealing .d-arm--left {
   animation: deal-left 0.9s ease-in-out infinite;
 }
-.is-dealing .dealer-arm--right {
+.is-dealing .d-arm--right {
   animation: deal-right 0.9s ease-in-out infinite;
+}
+.is-dealing .d-cards {
+  animation: deal-cards 0.9s ease-in-out infinite;
 }
 
 @keyframes dealer-breathe {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-2px) scaleY(1.012); }
 }
 @keyframes dealer-lean {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(4px) scale(1.02); }
+  50% { transform: translateY(3px) scale(1.015); }
 }
 @keyframes deal-left {
-  0%, 100% { transform: rotate(18deg); }
-  50% { transform: rotate(40deg); }
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-13deg); }
 }
 @keyframes deal-right {
-  0%, 100% { transform: rotate(-18deg); }
-  50% { transform: rotate(-40deg); }
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(13deg); }
+}
+@keyframes deal-cards {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(-6deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dealer-figure,
-  .dealer-figure.is-dealing,
-  .is-dealing .dealer-arm--left,
-  .is-dealing .dealer-arm--right {
+  .d-body,
+  .is-dealing .d-body,
+  .is-dealing .d-arm--left,
+  .is-dealing .d-arm--right,
+  .is-dealing .d-cards {
     animation: none;
   }
 }
