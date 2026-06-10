@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "./App";
 import { createGameStore } from "./store/gameStore";
@@ -104,4 +104,17 @@ test("explain panel appears only when explain mode is on", async () => {
   expect(screen.queryByLabelText("Explain")).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "Explain" }));
   expect(screen.getByLabelText("Explain")).toBeInTheDocument();
+});
+
+test("New Shoe opens the cut-the-deck ritual and only shuffles after the cut", async () => {
+  const newShoe = vi.fn(() => okResult(bettingSnapshot()));
+  const store = createGameStore(fakeSession(bettingSnapshot(), { newShoe }));
+  render(<App store={store} />);
+  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
+  expect(screen.getByRole("dialog", { name: "Cut the deck" })).toBeInTheDocument();
+  expect(newShoe).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
+  await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
+  expect(newShoe).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("dialog", { name: "Cut the deck" })).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
@@ -12,6 +13,7 @@ import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
+import { CutDeckModal } from "./components/CutDeckModal";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -19,6 +21,7 @@ interface AppProps {
 
 export function App({ store }: AppProps = {}) {
   const active = store ?? defaultStore();
+  const [cutting, setCutting] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
   const selectedChip = useStore(active, (s) => s.selectedChip);
   const lastError = useStore(active, (s) => s.lastError);
@@ -75,7 +78,7 @@ export function App({ store }: AppProps = {}) {
           onRevealAll={revealAll}
           onSettle={settle}
           onNewHand={newHand}
-          onNewShoe={newShoe}
+          onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
         />
@@ -93,6 +96,15 @@ export function App({ store }: AppProps = {}) {
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
       <WinPopup key={settleSeq} amount={lastDelta} />
+      {cutting && (
+        <CutDeckModal
+          onCut={() => {
+            newShoe();
+            setCutting(false);
+          }}
+          onCancel={() => setCutting(false)}
+        />
+      )}
     </div>
   );
 }
