@@ -57,3 +57,10 @@
   padding: 0;
   vertical-align: middle;
 }
+/* portal variant: fixed to the viewport, floats over modals */
+.term-popover--portal {
+  position: fixed;
+  bottom: auto;
+  transform: translateX(-50%);
+  z-index: 200;
+}

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
+import type { MouseEvent as ReactMouseEvent, FocusEvent as ReactFocusEvent } from "react";
 import type {
   BeadPlate,
   BeadCell,
@@ -10,29 +12,48 @@ import type {
 import { glossaryEntry } from "../glossaryData";
 import "./glossary.css";
 
-/** A "?" beside a road heading that explains what the road tracks. */
+/**
+ * A "?" beside a road heading that explains what the road tracks. The popover
+ * portals to <body> as a fixed layer, so it floats over the full-roads window
+ * instead of being clipped by its scroll container.
+ */
 function RoadInfo({ term }: { term: string }) {
-  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const entry = glossaryEntry(term);
   if (!entry) return null;
+
+  const show = (e: ReactMouseEvent | ReactFocusEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // clamp so a tip near the screen edge stays fully on screen
+    const x = Math.min(Math.max(r.left + r.width / 2, 170), window.innerWidth - 170);
+    setPos({ x, y: r.bottom + 8 });
+  };
+  const hide = () => setPos(null);
+
   return (
-    <span className="glossary-term road-info">
+    <span className="road-info">
       <button
         type="button"
         className="road-info-btn"
         aria-label={`What is the ${entry.label}?`}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
       >
         ?
       </button>
-      {open && (
-        <span role="tooltip" className="term-popover term-popover--wide">
-          <strong>{entry.label}</strong> {entry.long}
-        </span>
-      )}
+      {pos &&
+        createPortal(
+          <span
+            role="tooltip"
+            className="term-popover term-popover--wide term-popover--portal"
+            style={{ left: pos.x, top: pos.y }}
+          >
+            <strong>{entry.label}</strong> {entry.long}
+          </span>,
+          document.body,
+        )}
     </span>
   );
 }
