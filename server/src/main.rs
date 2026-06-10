@@ -31,7 +31,7 @@ async fn main() {
         .fallback_service(spa)
         .with_state(registry);
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8788".into());
     let addr = format!("0.0.0.0:{port}");
     tracing::info!("table service listening on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await.expect("bind");

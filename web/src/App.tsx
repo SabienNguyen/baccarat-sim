@@ -4,6 +4,8 @@ import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
 import { storeFor, resetStore } from "./store/useGameStore";
 import { HomeScreen } from "./components/HomeScreen";
+import { Multiplayer } from "./multiplayer/Multiplayer";
+import { SeatsStrip } from "./multiplayer/SeatsStrip";
 import type { TableTier } from "./tables";
 import { hiddenIndices } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
@@ -27,9 +29,13 @@ interface AppProps {
  *  store (tests) goes straight to the table. */
 export function App({ store }: AppProps = {}) {
   const [tier, setTier] = useState<TableTier | null>(store ? "mid" : null);
+  const [multi, setMulti] = useState(false);
   const [resetSeq, setResetSeq] = useState(0);
+  if (multi) {
+    return <Multiplayer onExit={() => setMulti(false)} />;
+  }
   if (tier === null) {
-    return <HomeScreen onPlay={setTier} />;
+    return <HomeScreen onPlay={setTier} onMultiplayer={() => setMulti(true)} />;
   }
   const active = store ?? storeFor(tier);
   return (
@@ -48,10 +54,11 @@ export function App({ store }: AppProps = {}) {
 interface GameTableProps {
   store: StoreApi<GameState>;
   onLeave: () => void;
-  onReset: () => void;
+  /** Reset the buy-in (single player only). */
+  onReset?: () => void;
 }
 
-function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
+export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
@@ -78,6 +85,7 @@ function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const newShoe = useStore(active, (s) => s.newShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
+  const seats = useStore(active, (s) => s.seats);
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
@@ -100,6 +108,7 @@ function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         onLeave={onLeave}
       />
       <main className="stage">
+        {seats !== null && <SeatsStrip seats={seats} />}
         <DealerLine snapshot={snapshot} lastError={lastError} />
         <div className="card-stage">
           <Hand

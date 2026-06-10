@@ -5,12 +5,13 @@ import "./home.css";
 
 interface HomeScreenProps {
   onPlay: (tier: TableTier) => void;
+  onMultiplayer?: () => void;
 }
 
 type Mode = "menu" | "single" | "multi";
 
 /** Title screen: pick a mode, pick a table, sit down. */
-export function HomeScreen({ onPlay }: HomeScreenProps) {
+export function HomeScreen({ onPlay, onMultiplayer }: HomeScreenProps) {
   const [mode, setMode] = useState<Mode>("menu");
 
   return (
@@ -26,10 +27,14 @@ export function HomeScreen({ onPlay }: HomeScreenProps) {
             <span className="mode-name">Single Player</span>
             <span className="mode-blurb">You against the shoe</span>
           </button>
-          <button type="button" className="mode-card" onClick={() => setMode("multi")}>
+          <button
+            type="button"
+            className="mode-card"
+            onClick={() => (onMultiplayer ? onMultiplayer() : setMode("multi"))}
+          >
             <span className="mode-name">Multiplayer</span>
             <span className="mode-blurb">Live tables with friends</span>
-            <span className="mode-ribbon">Coming soon</span>
+            {!onMultiplayer && <span className="mode-ribbon">Coming soon</span>}
           </button>
         </div>
       )}

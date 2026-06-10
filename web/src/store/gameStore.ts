@@ -1,5 +1,9 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { RoundSnapshot, BetKind, CommandError, Side } from "../engine/types";
+import type { SeatView } from "../multiplayer/protocol";
+
+/** What the dealer can refuse with: an engine error or server speech. */
+export type DealerError = CommandError | { Message: string };
 import type { GameSession, CommandResult } from "../engine/adapter";
 import {
   CHIP_DENOMINATIONS,
@@ -19,7 +23,9 @@ export { CHIP_DENOMINATIONS };
 
 export interface GameState {
   snapshot: RoundSnapshot;
-  lastError: CommandError | null;
+  lastError: DealerError | null;
+  /** Everyone at the table (multiplayer); null at a single-player table. */
+  seats: SeatView[] | null;
   /** Bankroll change across the last settle, in cents; null until/after a settle. */
   lastDelta: number | null;
   /** Increments on each settle so the win pop-up can remount via React key. */
@@ -84,6 +90,7 @@ export function createGameStore(
     return {
       snapshot: session.snapshot(),
       lastError: null,
+      seats: null,
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,

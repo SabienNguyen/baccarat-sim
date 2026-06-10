@@ -1,4 +1,6 @@
 import type { RoundSnapshot, GlossaryEntry, CommandError } from "../engine/types";
+
+type DealerError = CommandError | { Message: string };
 import { narrate, narrateError } from "../narrate";
 import { glossaryEntry } from "../glossaryData";
 import { GlossaryTerm } from "./GlossaryTerm";
@@ -7,7 +9,7 @@ import "./dealer.css";
 interface DealerLineProps {
   snapshot: RoundSnapshot;
   /** A refused command; the dealer explains it instead of narrating. */
-  lastError?: CommandError | null;
+  lastError?: DealerError | null;
   /** Term→entry lookup; defaults to the real (wasm-backed) glossary. Injectable for tests. */
   lookup?: (term: string) => GlossaryEntry | undefined;
 }
