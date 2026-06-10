@@ -15,6 +15,7 @@ import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
 import { Dealer } from "./components/Dealer";
+import { clearBankroll } from "./bankrollStorage";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -83,6 +84,10 @@ export function App({ store }: AppProps = {}) {
           onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
+          onResetBankroll={() => {
+            clearBankroll();
+            window.location.reload();
+          }}
         />
         <BetRail
           snapshot={snapshot}

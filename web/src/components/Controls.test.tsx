@@ -94,3 +94,30 @@ test("the Explain button reflects and toggles explain mode", async () => {
   await userEvent.click(btn);
   expect(onToggleExplain).toHaveBeenCalledOnce();
 });
+
+test("Reset bank appears only with a handler and fires it", async () => {
+  const onResetBankroll = vi.fn();
+  const { rerender } = render(
+    <Controls
+      snapshot={bettingSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={vi.fn()}
+      onSettle={vi.fn()}
+      onNewShoe={vi.fn()}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Reset bank" })).toBeNull();
+
+  rerender(
+    <Controls
+      snapshot={bettingSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={vi.fn()}
+      onSettle={vi.fn()}
+      onNewShoe={vi.fn()}
+      onResetBankroll={onResetBankroll}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Reset bank" }));
+  expect(onResetBankroll).toHaveBeenCalledOnce();
+});
