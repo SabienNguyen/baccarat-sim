@@ -4,35 +4,45 @@
  * The engine's bankroll (cents) stays the source of truth; the rack is the
  * table-side representation of it as chips. Invariant the store maintains:
  * rackTotal(rack) + change + sum(staged bets) === bankroll.
+ *
+ * Every function takes the table's denomination set, because each table
+ * stocks different chips (a high-roller salon has no dollar chips).
  */
 
-/** Real casino denominations, in cents: $1, $5, $25, $100, $500, $1,000. */
+/** The classic main-floor denominations: $1, $5, $25, $100, $500, $1,000. */
 export const CHIP_DENOMINATIONS = [100, 500, 2500, 10000, 50000, 100000];
 
 /** Chips you own, keyed by denomination (cents) -> count. */
 export type Rack = Record<number, number>;
 
-/** Largest-first denominations, for greedy change-making. */
-const DESC = [...CHIP_DENOMINATIONS].sort((a, b) => b - a);
+function desc(denoms: number[]): number[] {
+  return [...denoms].sort((a, b) => b - a);
+}
+function asc(denoms: number[]): number[] {
+  return [...denoms].sort((a, b) => a - b);
+}
 
-export function emptyRack(): Rack {
+export function emptyRack(denoms: number[] = CHIP_DENOMINATIONS): Rack {
   const rack: Rack = {};
-  for (const d of CHIP_DENOMINATIONS) rack[d] = 0;
+  for (const d of denoms) rack[d] = 0;
   return rack;
 }
 
 export function rackTotal(rack: Rack): number {
-  return CHIP_DENOMINATIONS.reduce((sum, d) => sum + d * (rack[d] ?? 0), 0);
+  return Object.entries(rack).reduce((sum, [d, n]) => sum + Number(d) * n, 0);
 }
 
 /**
  * Break an amount into chips, largest denomination first (how a dealer pays).
- * Whatever can't form a whole chip is returned as `remainder` (< $1).
+ * Whatever can't form a whole chip is returned as `remainder`.
  */
-export function toChips(cents: number): { chips: number[]; remainder: number } {
+export function toChips(
+  cents: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): { chips: number[]; remainder: number } {
   const chips: number[] = [];
   let left = Math.max(0, Math.floor(cents));
-  for (const d of DESC) {
+  for (const d of desc(denoms)) {
     while (left >= d) {
       chips.push(d);
       left -= d;
@@ -44,30 +54,41 @@ export function toChips(cents: number): { chips: number[]; remainder: number } {
 /**
  * The cage's buy-in: turn a bankroll into a playable spread of chips the way
  * a real cage racks it — the roll lives in big chips, with a capped working
- * stack of small ones for table change (nobody gets 300 singles). Conserves
- * the total exactly (sub-$1 cents end up in `change`).
+ * stack of the table's three smallest denominations for change (nobody gets
+ * 300 of the smallest chip). Conserves the total exactly (whatever can't
+ * form a chip ends up in `change`).
  */
-export function buyIn(cents: number): { rack: Rack; change: number } {
-  const rack = emptyRack();
+export function buyIn(
+  cents: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): { rack: Rack; change: number } {
+  const rack = emptyRack(denoms);
   let left = Math.max(0, Math.floor(cents));
 
-  // [denomination, fraction of the roll, max chips of this kind]
-  const SPREAD: Array<[number, number, number]> = [
-    [100000, 0.3, Infinity],
-    [50000, 0.3, Infinity],
-    [10000, 0.3, Infinity],
-    [2500, 0.08, 40],
-    [500, 0.018, 36],
-    [100, 0.002, 20],
-  ];
-  for (const [denom, frac, cap] of SPREAD) {
-    const target = Math.min(Math.floor((cents * frac) / denom), cap);
+  const ordered = asc(denoms);
+  const smalls = ordered.slice(0, 3); // the working stack
+  const bigs = ordered.slice(3); // the roll
+  const CAPS = [20, 36, 40]; // a sleeve, a stack, a rack
+  const FRACS = [0.002, 0.018, 0.08];
+
+  // big chips carry ~90% of the roll, split evenly
+  const bigFrac = bigs.length > 0 ? 0.9 / bigs.length : 0;
+  for (const denom of desc(bigs)) {
+    const target = Math.floor((cents * bigFrac) / denom);
     const affordable = Math.min(target, Math.floor(left / denom));
     rack[denom] += affordable;
     left -= affordable * denom;
   }
-  // Whatever the spread left over goes in as chips, largest-first.
-  const { chips, remainder } = toChips(left);
+  // capped working stacks, biggest small first
+  for (let i = smalls.length - 1; i >= 0; i--) {
+    const denom = smalls[i];
+    const target = Math.min(Math.floor((cents * FRACS[i]) / denom), CAPS[i]);
+    const affordable = Math.min(target, Math.floor(left / denom));
+    rack[denom] += affordable;
+    left -= affordable * denom;
+  }
+  // whatever the spread left over goes in as chips, largest-first
+  const { chips, remainder } = toChips(left, denoms);
   for (const c of chips) rack[c] += 1;
   return { rack, change: remainder };
 }
@@ -89,13 +110,17 @@ export function removeChips(rack: Rack, chips: number[]): Rack | null {
 }
 
 /**
- * Ask the dealer to break one `denom` chip into smaller chips (greedy:
- * $1,000 -> 2x$500, $100 -> 4x$25, ...). Null if you don't have one or it's
- * the smallest chip.
+ * Ask the dealer to break one `denom` chip into smaller chips (greedy).
+ * Null if you don't have one, it's the table's smallest chip, or the smaller
+ * chips can't represent it exactly.
  */
-export function breakChip(rack: Rack, denom: number): Rack | null {
+export function breakChip(
+  rack: Rack,
+  denom: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): Rack | null {
   if ((rack[denom] ?? 0) < 1) return null;
-  const smaller = DESC.filter((d) => d < denom);
+  const smaller = desc(denoms).filter((d) => d < denom);
   if (smaller.length === 0) return null;
   const next = { ...rack, [denom]: rack[denom] - 1 };
   let left = denom;
@@ -112,8 +137,12 @@ export function breakChip(rack: Rack, denom: number): Rack | null {
  * Color up: hand the dealer smaller chips worth exactly one `denom` chip.
  * Uses your smaller chips largest-first. Null if you can't make the amount.
  */
-export function colorUp(rack: Rack, denom: number): Rack | null {
-  const smaller = DESC.filter((d) => d < denom);
+export function colorUp(
+  rack: Rack,
+  denom: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): Rack | null {
+  const smaller = desc(denoms).filter((d) => d < denom);
   const next = { ...rack };
   let need = denom;
   for (const d of smaller) {
@@ -128,10 +157,13 @@ export function colorUp(rack: Rack, denom: number): Rack | null {
 }
 
 /**
- * Fold loose change into $1 chips once it reaches a dollar.
+ * Fold loose change into the table's smallest chips once it covers one.
  * Returns the minted chips and what's still loose.
  */
-export function mintChange(change: number): { chips: number[]; change: number } {
-  const { chips, remainder } = toChips(change);
+export function mintChange(
+  change: number,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): { chips: number[]; change: number } {
+  const { chips, remainder } = toChips(change, denoms);
   return { chips, change: remainder };
 }

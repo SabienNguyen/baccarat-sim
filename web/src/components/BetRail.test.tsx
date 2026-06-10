@@ -2,11 +2,12 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BetRail } from "./BetRail";
 import { bettingSnapshot, dealingSnapshot } from "../test/fixtures";
-import { buyIn } from "../chips";
+import { buyIn, CHIP_DENOMINATIONS } from "../chips";
 
 const rack = buyIn(1_000_000).rack;
 
 const noopProps = {
+  denoms: CHIP_DENOMINATIONS,
   rack,
   hand: [] as number[],
   change: 0,

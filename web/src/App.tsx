@@ -47,6 +47,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
   const lastError = useStore(active, (s) => s.lastError);
   const lastDelta = useStore(active, (s) => s.lastDelta);
   const settleSeq = useStore(active, (s) => s.settleSeq);
+  const denoms = useStore(active, (s) => s.denoms);
   const rack = useStore(active, (s) => s.rack);
   const change = useStore(active, (s) => s.change);
   const hand = useStore(active, (s) => s.hand);
@@ -121,6 +122,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
         />
         <BetRail
           snapshot={snapshot}
+          denoms={denoms}
           rack={rack}
           hand={hand}
           change={change}
@@ -149,6 +151,7 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
       )}
       {exchanging && (
         <ExchangeModal
+          denoms={denoms}
           rack={rack}
           change={change}
           onBreak={exchangeBreak}

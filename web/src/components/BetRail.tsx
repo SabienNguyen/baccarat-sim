@@ -1,13 +1,14 @@
 import { useState } from "react";
 import type { RoundSnapshot, BetKind, PlacedBet } from "../engine/types";
 import { formatCents } from "../format";
-import { CHIP_DENOMINATIONS, type Rack } from "../chips";
+import { type Rack } from "../chips";
 import { Chip, MiniChip } from "./Chip";
 import { BonusInfoModal } from "./BonusInfoModal";
 import "./betrail.css";
 
 interface BetRailProps {
   snapshot: RoundSnapshot;
+  denoms: number[];
   rack: Rack;
   hand: number[];
   change: number;
@@ -100,6 +101,7 @@ function BetSpot({ spot, betting, chips, shape, onPlaceHand, onPlaceChip }: BetS
 
 export function BetRail({
   snapshot,
+  denoms,
   rack,
   hand,
   change,
@@ -188,7 +190,7 @@ export function BetRail({
       </div>
 
       <div aria-label="Chips" className="chips">
-        {CHIP_DENOMINATIONS.map((cents) => (
+        {denoms.map((cents) => (
           <Chip
             key={cents}
             cents={cents}

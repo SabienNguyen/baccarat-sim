@@ -2,7 +2,7 @@ import { createGameStore, type GameState } from "./gameStore";
 import { createSession } from "../engine/adapter";
 import type { StoreApi } from "zustand/vanilla";
 import { loadBankroll, saveBankroll } from "../bankrollStorage";
-import { configFor, type TableTier } from "../tables";
+import { configFor, tableSpec, type TableTier } from "../tables";
 
 const stores = new Map<TableTier, StoreApi<GameState>>();
 
@@ -14,7 +14,7 @@ export function storeFor(tier: TableTier): StoreApi<GameState> {
   let store = stores.get(tier);
   if (!store) {
     const saved = loadBankroll(tier);
-    store = createGameStore(createSession(configFor(tier, saved)));
+    store = createGameStore(createSession(configFor(tier, saved)), tableSpec(tier).denoms);
 
     let lastSaved = store.getState().snapshot.bankroll;
     saveBankroll(tier, lastSaved);

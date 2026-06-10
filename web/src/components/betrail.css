@@ -294,3 +294,8 @@
     font-size: 11px;
   }
 }
+/* high-denomination plates */
+.chip--orange { background: #d2691e; }
+.chip--teal { background: #0f7c74; }
+.mini-chip.chip--orange { background: #d2691e; }
+.mini-chip.chip--teal { background: #0f7c74; }

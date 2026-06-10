@@ -15,6 +15,7 @@ import {
 
 export { CHIP_DENOMINATIONS };
 
+
 export interface GameState {
   snapshot: RoundSnapshot;
   lastError: CommandError | null;
@@ -25,6 +26,8 @@ export interface GameState {
   /** Whether explain-the-rule mode is showing. UI-only. */
   explainOn: boolean;
 
+  /** The chip denominations this table stocks. */
+  denoms: number[];
   /** Your chips, by denomination. rack + change + hand + staged === bankroll. */
   rack: Rack;
   /** Loose cents that don't make a whole chip yet (commission change). */
@@ -57,14 +60,17 @@ export interface GameState {
   newShoe: () => void;
 }
 
-export function createGameStore(session: GameSession): StoreApi<GameState> {
+export function createGameStore(
+  session: GameSession,
+  denoms: number[] = CHIP_DENOMINATIONS,
+): StoreApi<GameState> {
   return createStore<GameState>((set, get) => {
     const apply = (result: CommandResult) => {
       if (result.ok) set({ snapshot: result.snapshot, lastError: null });
       else set({ lastError: result.error });
     };
 
-    const initial = buyIn(session.snapshot().bankroll);
+    const initial = buyIn(session.snapshot().bankroll, denoms);
 
     return {
       snapshot: session.snapshot(),
@@ -72,6 +78,7 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,
+      denoms,
       rack: initial.rack,
       change: initial.change,
       hand: [],
@@ -127,12 +134,12 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       },
 
       exchangeBreak: (denom) => {
-        const next = breakChip(get().rack, denom);
+        const next = breakChip(get().rack, denom, denoms);
         if (next !== null) set({ rack: next });
       },
 
       exchangeColorUp: (denom) => {
-        const next = colorUp(get().rack, denom);
+        const next = colorUp(get().rack, denom, denoms);
         if (next !== null) set({ rack: next });
       },
 
@@ -173,18 +180,18 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
           let rack = get().rack;
           let change = get().change;
           payouts.forEach((p, i) => {
-            const chips = staged[i] ?? toChips(p.bet.amount).chips;
+            const chips = staged[i] ?? toChips(p.bet.amount, denoms).chips;
             if (p.net >= 0) {
               rack = addChips(rack, chips);
               if (p.net > 0) {
-                const paid = toChips(p.net);
+                const paid = toChips(p.net, denoms);
                 rack = addChips(rack, paid.chips);
                 change += paid.remainder;
               }
             }
             // net < 0: the dealer sweeps those chips.
           });
-          const minted = mintChange(change);
+          const minted = mintChange(change, denoms);
           rack = addChips(rack, minted.chips);
           set({
             rack,

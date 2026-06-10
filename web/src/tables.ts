@@ -10,6 +10,8 @@ export interface TableSpec {
   starting_bankroll: number;
   table_min: number;
   table_max: number;
+  /** The chips this table stocks (cents), smallest no bigger than the min bet. */
+  denoms: number[];
 }
 
 export const TABLES: TableSpec[] = [
@@ -20,6 +22,7 @@ export const TABLES: TableSpec[] = [
     starting_bankroll: 50_000, // $500
     table_min: 100, // $1
     table_max: 50_000, // $500
+    denoms: [100, 500, 2500, 10000, 50000], // $1 ... $500
   },
   {
     tier: "mid",
@@ -28,6 +31,7 @@ export const TABLES: TableSpec[] = [
     starting_bankroll: 1_000_000, // $10,000
     table_min: 2_500, // $25
     table_max: 500_000, // $5,000
+    denoms: [500, 2500, 10000, 50000, 100000, 500000], // $5 ... $5,000
   },
   {
     tier: "high",
@@ -36,6 +40,7 @@ export const TABLES: TableSpec[] = [
     starting_bankroll: 25_000_000, // $250,000
     table_min: 50_000, // $500
     table_max: 10_000_000, // $100,000
+    denoms: [10000, 50000, 100000, 500000, 2500000], // $100 ... $25,000
   },
 ];
 

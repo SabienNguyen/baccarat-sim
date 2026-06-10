@@ -1,4 +1,5 @@
 import { TABLES, tableSpec, configFor } from "./tables";
+import { buyIn, rackTotal } from "./chips";
 
 test("three tiers, each coherent: min < max, buy-in covers many minimum bets", () => {
   expect(TABLES).toHaveLength(3);
@@ -30,4 +31,17 @@ test("each tier seeds its own shoe", () => {
   const a = configFor("mid", null).seed;
   const b = configFor("mid", null).seed;
   expect(a).not.toBe(b);
+});
+
+test("each table stocks chips that fit its stakes", () => {
+  for (const t of TABLES) {
+    const sorted = [...t.denoms].sort((a, b) => a - b);
+    // you can always bet exactly the table minimum
+    expect(sorted[0]).toBeLessThanOrEqual(t.table_min);
+    // the biggest chip isn't bigger than the biggest allowed bet
+    expect(sorted[sorted.length - 1]).toBeLessThanOrEqual(t.table_max);
+    // and the buy-in racks every denomination conservatively
+    const { rack, change } = buyIn(t.starting_bankroll, t.denoms);
+    expect(rackTotal(rack) + change).toBe(t.starting_bankroll);
+  }
 });

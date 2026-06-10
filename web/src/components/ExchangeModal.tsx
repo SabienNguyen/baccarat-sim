@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import type { Rack } from "../chips";
-import { CHIP_DENOMINATIONS, breakChip, colorUp } from "../chips";
+import { breakChip, colorUp } from "../chips";
 import { formatCents } from "../format";
 import { MiniChip, chipFace } from "./Chip";
 import "./exchange.css";
 
 interface ExchangeModalProps {
+  denoms: number[];
   rack: Rack;
   change: number;
   onBreak: (denom: number) => void;
@@ -14,7 +15,7 @@ interface ExchangeModalProps {
 }
 
 /** The dealer makes change: break big chips down, color small chips up. */
-export function ExchangeModal({ rack, change, onBreak, onColorUp, onClose }: ExchangeModalProps) {
+export function ExchangeModal({ denoms, rack, change, onBreak, onColorUp, onClose }: ExchangeModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -39,7 +40,7 @@ export function ExchangeModal({ rack, change, onBreak, onColorUp, onClose }: Exc
         </div>
 
         <ul className="exchange-rows">
-          {[...CHIP_DENOMINATIONS].reverse().map((denom) => (
+          {[...denoms].sort((a, b) => b - a).map((denom) => (
             <li key={denom} className="exchange-row">
               <span className="exchange-chip">
                 <MiniChip cents={denom} />
@@ -49,7 +50,7 @@ export function ExchangeModal({ rack, change, onBreak, onColorUp, onClose }: Exc
               <button
                 type="button"
                 className="btn"
-                disabled={breakChip(rack, denom) === null}
+                disabled={breakChip(rack, denom, denoms) === null}
                 onClick={() => onBreak(denom)}
               >
                 Break
@@ -57,7 +58,7 @@ export function ExchangeModal({ rack, change, onBreak, onColorUp, onClose }: Exc
               <button
                 type="button"
                 className="btn"
-                disabled={colorUp(rack, denom) === null}
+                disabled={colorUp(rack, denom, denoms) === null}
                 onClick={() => onColorUp(denom)}
               >
                 Color up
