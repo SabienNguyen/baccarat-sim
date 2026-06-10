@@ -63,6 +63,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
+  const lastFlip = useStore(active, (s) => s.lastFlip);
   const lastDelta = useStore(active, (s) => s.lastDelta);
   const settleSeq = useStore(active, (s) => s.settleSeq);
   const denoms = useStore(active, (s) => s.denoms);
@@ -113,7 +114,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         {seats !== null && (
           <SeatsStrip seats={seats} squeezers={squeezers} betting={snapshot.phase !== "Dealing"} />
         )}
-        <DealerLine snapshot={snapshot} lastError={lastError} />
+        <DealerLine snapshot={snapshot} lastError={lastError} lastFlip={lastFlip} />
         <div className="card-stage">
           <Hand
             side="Player"

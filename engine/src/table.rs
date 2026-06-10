@@ -218,6 +218,8 @@ impl Table {
             .into());
         }
         player.sitting_out = false;
+        // betting again closes last round's settled display
+        player.payouts = None;
         player.bets.push(PlacedBet { kind, amount });
         Ok(())
     }
@@ -234,6 +236,7 @@ impl Table {
         let player = self.player_mut(pid)?;
         player.bets.clear();
         player.sitting_out = true;
+        player.payouts = None;
         Ok(())
     }
 
@@ -756,6 +759,39 @@ mod tests {
         t.reveal(a, Side::Banker, 1).unwrap();
         // but peeking ahead is allowed — squeezers fiddle their cards early
         // (only rights gate peeks, not order)
+    }
+
+    #[test]
+    fn betting_again_after_a_settle_returns_the_view_to_betting() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Settled);
+        // chips down for the next coup: the settled display closes
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Betting);
+        assert!(v.payouts.is_none());
+        assert!(v.player.cards.is_empty());
+    }
+
+    #[test]
+    fn both_betting_player_leaves_the_player_hand_face_down_at_the_deal() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 2_000).unwrap();
+        t.deal().unwrap();
+        let v = t.view_for(a).unwrap();
+        // somebody owns the Player hand, so it must NOT be auto-flipped
+        assert_eq!(v.player_squeezer, Some(a));
+        assert!(matches!(v.player.cards[0], crate::session::CardView::FaceDown));
+        assert!(matches!(v.player.cards[1], crate::session::CardView::FaceDown));
+        // the unbet Banker hand waits for the ritual order too
+        assert!(matches!(v.banker.cards[0], crate::session::CardView::FaceDown));
     }
 
     #[test]

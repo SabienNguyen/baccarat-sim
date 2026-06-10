@@ -38,7 +38,16 @@ export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal
           </>
         ) : (
           shown.map((card, i) => (
-            <li key={i}>
+            <li
+              key={i}
+              className="card-dealt"
+              style={
+                {
+                  // the shoe deals Player, Banker, Player, Banker, then thirds
+                  "--deal-delay": `${(side === "Player" ? i * 2 : i * 2 + 1) * 140}ms`,
+                } as React.CSSProperties
+              }
+            >
               {dealing ? (
                 <SqueezeCard
                   card={card}

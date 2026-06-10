@@ -148,3 +148,30 @@ test("the dealer refuses oversized and undersized bets in plain speech", () => {
     "Chips down first — then we deal.",
   );
 });
+
+test("the dealer calls each card as it turns", () => {
+  const flip = { side: "Player" as const, card: { rank: "Nine" as const, suit: "Hearts" as const } };
+  expect(text(narrate(snap("Dealing"), flip))).toBe("Nine of Hearts to the Player.");
+});
+
+test("a monkey gets named in the call", () => {
+  const flip = { side: "Banker" as const, card: { rank: "King" as const, suit: "Spades" as const } };
+  const segs = narrate(snap("Dealing"), flip);
+  expect(text(segs)).toBe("King of Spades to the Banker — monkey!");
+  expect(segs[1]).toEqual({ text: "monkey", term: "monkey" });
+});
+
+test("a natural outranks the card call", () => {
+  const flip = { side: "Player" as const, card: { rank: "Nine" as const, suit: "Hearts" as const } };
+  const segs = narrate(snap("Dealing", [{ Natural: { side: "Player", total: 9 } }]), flip);
+  expect(text(segs)).toBe("Natural 9 — Player! Both hands stand.");
+});
+
+test("the win line outranks the card call", () => {
+  const flip = { side: "Banker" as const, card: { rank: "Two" as const, suit: "Clubs" as const } };
+  const segs = narrate(
+    snap("Dealing", [{ Win: { result: "BankerWin", player: 5, banker: 7 } }]),
+    flip,
+  );
+  expect(text(segs)).toBe("Banker wins, 7 over 5.");
+});

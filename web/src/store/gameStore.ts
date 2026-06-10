@@ -1,6 +1,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { RoundSnapshot, BetKind, CommandError, Side } from "../engine/types";
 import type { SeatView } from "../multiplayer/protocol";
+import { lastFlipBetween, type Flip } from "../cards";
 
 /** What the dealer can refuse with: an engine error or server speech. */
 export type DealerError = CommandError | { Message: string };
@@ -30,6 +31,8 @@ export interface GameState {
   squeezers: { player: number | null; banker: number | null } | null;
   /** Skip this coup (multiplayer); no-op alone at a single-player table. */
   sitOut: () => void;
+  /** The card that just turned, for the dealer's call. */
+  lastFlip: Flip | null;
   /** Bankroll change across the last settle, in cents; null until/after a settle. */
   lastDelta: number | null;
   /** Increments on each settle so the win pop-up can remount via React key. */
@@ -85,8 +88,16 @@ export function createGameStore(
 ): StoreApi<GameState> {
   return createStore<GameState>((set, get) => {
     const apply = (result: CommandResult) => {
-      if (result.ok) set({ snapshot: result.snapshot, lastError: null });
-      else set({ lastError: result.error });
+      if (result.ok) {
+        const flip = lastFlipBetween(get().snapshot, result.snapshot);
+        set({
+          snapshot: result.snapshot,
+          lastError: null,
+          ...(flip ? { lastFlip: flip } : {}),
+        });
+      } else {
+        set({ lastError: result.error });
+      }
     };
 
     const initial = buyIn(session.snapshot().bankroll, denoms);
@@ -97,6 +108,7 @@ export function createGameStore(
       seats: null,
       squeezers: null,
       sitOut: () => {},
+      lastFlip: null,
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,
@@ -189,7 +201,7 @@ export function createGameStore(
       deal: () => {
         // Chips can't stay in your hand once the cards come out.
         get().returnHand();
-        set({ lastDelta: null });
+        set({ lastDelta: null, lastFlip: null });
         apply(session.deal());
       },
 

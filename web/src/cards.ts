@@ -1,4 +1,4 @@
-import type { Card, CardView, Rank } from "./engine/types";
+import type { Card, CardView, Rank, RoundSnapshot, Side } from "./engine/types";
 
 /** True only when a card is fully revealed (face-up). */
 export function isFaceUp(card: CardView): card is { FaceUp: Card } {
@@ -46,4 +46,34 @@ export function runningTotal(cards: CardView[]): number | null {
     }
   }
   return seen ? sum % 10 : null;
+}
+
+/** A card that just turned face-up, and whose hand it belongs to. */
+export interface Flip {
+  side: Side;
+  card: Card;
+}
+
+/**
+ * Diff two snapshots and report the most recent reveal, in ritual order
+ * (Player's two, Banker's two, thirds). Null when nothing new turned.
+ */
+export function lastFlipBetween(prev: RoundSnapshot, next: RoundSnapshot): Flip | null {
+  const order: Array<[Side, number]> = [
+    ["Player", 0],
+    ["Player", 1],
+    ["Banker", 0],
+    ["Banker", 1],
+    ["Player", 2],
+    ["Banker", 2],
+  ];
+  let flip: Flip | null = null;
+  for (const [side, i] of order) {
+    const before = side === "Player" ? prev.player.cards[i] : prev.banker.cards[i];
+    const after = side === "Player" ? next.player.cards[i] : next.banker.cards[i];
+    if (after !== undefined && isFaceUp(after) && (before === undefined || !isFaceUp(before))) {
+      flip = { side, card: after.FaceUp };
+    }
+  }
+  return flip;
 }

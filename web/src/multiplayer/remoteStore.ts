@@ -18,6 +18,7 @@ import {
   toChips,
 } from "../chips";
 import { tableSpec, type TableTier } from "../tables";
+import { lastFlipBetween } from "../cards";
 import type { ClientMsg, ServerMsg, TableViewMsg } from "./protocol";
 
 export interface RemoteStore extends StoreApi<GameState> {
@@ -54,6 +55,7 @@ export function createRemoteStore(opts: {
     lastError: null,
     seats: opts.view.seats,
     squeezers: squeezersOf(opts.view),
+    lastFlip: null,
     sitOut: () => {
       get().returnHand();
       send({ type: "sit_out" });
@@ -130,12 +132,21 @@ export function createRemoteStore(opts: {
     reveal: (side, index) => send({ type: "reveal", hand: side, index }),
     settle: () => send({ type: "settle" }),
 
-    // Cosmetic: flip the local view back to Betting; the server's table is
-    // already open for the next coup's bets.
+    // Cosmetic: flip the local view back to Betting with a swept table; the
+    // server's table is already open for the next coup's bets.
     newHand: () =>
       set({
-        snapshot: { ...get().snapshot, phase: "Betting", payouts: null, outcome: null },
+        snapshot: {
+          ...get().snapshot,
+          phase: "Betting",
+          payouts: null,
+          outcome: null,
+          events: [],
+          player: { cards: [], total: null },
+          banker: { cards: [], total: null },
+        },
         lastDelta: null,
+        lastFlip: null,
       }),
 
     newShoe: () => send({ type: "new_shoe" }),
@@ -222,10 +233,12 @@ export function createRemoteStore(opts: {
       stagedChips = next.bets.map((b) => toChips(b.amount, denoms).chips);
     }
 
+    const flip = lastFlipBetween(prev, next);
     set({
       snapshot: next,
       seats: view.seats,
       squeezers: squeezersOf(view),
+      ...(flip ? { lastFlip: flip } : next.phase === "Betting" ? { lastFlip: null } : {}),
       rack,
       change,
       hand,

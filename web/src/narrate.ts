@@ -1,5 +1,8 @@
 import type { RoundSnapshot, Event, Outcome, CommandError } from "./engine/types";
 import { formatCents } from "./format";
+import type { Flip } from "./cards";
+
+const MONKEY_RANKS = ["Ten", "Jack", "Queen", "King"];
 
 /** A piece of the dealer line; `term` marks a glossary slug for interactivity. */
 export type NarrationSegment = { text: string; term?: string };
@@ -115,8 +118,21 @@ export function narrateError(error: CommandError | { Message: string }): Narrati
   return [{ text: "Can't do that, friend." }];
 }
 
+/** The dealer calls a card as it turns. */
+function flipLine(flip: Flip): NarrationSegment[] {
+  const name = `${flip.card.rank} of ${flip.card.suit}`;
+  if (MONKEY_RANKS.includes(flip.card.rank)) {
+    return [
+      { text: `${name} to the ${flip.side} — ` },
+      { text: "monkey", term: "monkey" },
+      { text: "!" },
+    ];
+  }
+  return [{ text: `${name} to the ${flip.side}.` }];
+}
+
 /** Turn the current snapshot into an ordered dealer line. Pure. */
-export function narrate(snapshot: RoundSnapshot): NarrationSegment[] {
+export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): NarrationSegment[] {
   if (snapshot.phase === "Betting") {
     if (snapshot.bankroll < snapshot.table_min) {
       return [{ text: "The cage thanks you for playing — reset the bank to buy back in." }];
@@ -146,6 +162,12 @@ export function narrate(snapshot: RoundSnapshot): NarrationSegment[] {
       else if (snapshot.payouts.length > 0) paidFlavor = " Bets back.";
     }
     return winLine(win.Win, natural, paidFlavor);
+  }
+
+  // a natural ends the announcements; otherwise call the freshest card
+  const naturalNow = snapshot.events.find((e) => "Natural" in e);
+  if (lastFlip && snapshot.phase === "Dealing" && !naturalNow) {
+    return flipLine(lastFlip);
   }
 
   const salient = pickSalient(snapshot.events);
