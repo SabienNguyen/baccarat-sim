@@ -5,8 +5,8 @@ baccarat game skips: **the squeeze**. Bend the corner of the card with your
 mouse, watch the pip edges come up — *two sides!* — and let the dealer talk you
 through every draw.
 
-Retro Balatro-style skin, a real chip economy, the full scoreboard roads, and a
-rules engine written in Rust, compiled to WebAssembly, and statistically
+A chunky retro pixel look, a real chip economy, the full scoreboard roads, and
+a rules engine written in Rust, compiled to WebAssembly, and statistically
 validated against published casino probabilities.
 
 ## The game
