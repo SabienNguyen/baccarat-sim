@@ -30,6 +30,13 @@ pub struct Room {
 }
 
 impl Room {
+    /// The dealer speaks to the whole table.
+    pub fn announce(&self, message: String) {
+        for tx in self.conns.values() {
+            let _ = tx.send(ServerMsg::Announce { message: message.clone() });
+        }
+    }
+
     pub fn new(id: String, tier: Tier, private: bool) -> Self {
         let (table_min, table_max, _) = tier.stakes();
         let seed: u64 = rand::thread_rng().gen(); // OS-entropy seeded shoe chain
@@ -151,7 +158,20 @@ pub fn maybe_pace(room: Arc<Mutex<Room>>) {
             }
             guard.pacing = true;
         }
+        let mut announced: Option<baccarat_engine::scoreboard::Side> = None;
         loop {
+            // announce each hand once before its first flip
+            {
+                let guard = room.lock().await;
+                match guard.table.dealer_next_side() {
+                    Some(side) if announced != Some(side) => {
+                        announced = Some(side);
+                        guard.announce(format!("Turning the {side:?} hand…"));
+                    }
+                    Some(_) => {}
+                    None => {}
+                }
+            }
             tokio::time::sleep(std::time::Duration::from_millis(DEALER_FLIP_MS)).await;
             let mut guard = room.lock().await;
             if guard.table.dealer_flip_one() {

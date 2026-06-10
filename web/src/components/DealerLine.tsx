@@ -13,6 +13,8 @@ interface DealerLineProps {
   lastError?: DealerError | null;
   /** The card that just turned, for the call-out. */
   lastFlip?: Flip | null;
+  /** The dealer's between-flips voice. */
+  announcement?: string | null;
   /** Term→entry lookup; defaults to the real (wasm-backed) glossary. Injectable for tests. */
   lookup?: (term: string) => GlossaryEntry | undefined;
 }
@@ -22,9 +24,14 @@ export function DealerLine({
   snapshot,
   lastError = null,
   lastFlip = null,
+  announcement = null,
   lookup = glossaryEntry,
 }: DealerLineProps) {
-  const segments = lastError ? narrateError(lastError) : narrate(snapshot, lastFlip);
+  const segments = lastError
+    ? narrateError(lastError)
+    : announcement
+      ? [{ text: announcement }]
+      : narrate(snapshot, lastFlip);
   const lineKey = segments.map((s) => s.text).join("");
   return (
     <section aria-label="Dealer" className="dealer-line">

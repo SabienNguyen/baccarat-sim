@@ -342,6 +342,11 @@ impl Table {
         self.next_dealer_card().is_some()
     }
 
+    /// Which hand the dealer would turn next, for the announcement.
+    pub fn dealer_next_side(&self) -> Option<Side> {
+        self.next_dealer_card().map(|(side, _)| side)
+    }
+
     /// The house dealer turns ONE card — the caller paces the rhythm so the
     /// whole table watches him flip card by card.
     pub fn dealer_flip_one(&mut self) -> bool {

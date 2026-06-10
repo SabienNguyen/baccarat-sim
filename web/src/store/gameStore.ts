@@ -33,6 +33,8 @@ export interface GameState {
   sitOut: () => void;
   /** The card that just turned, for the dealer's call. */
   lastFlip: Flip | null;
+  /** The dealer's between-flips voice (multiplayer pacing). */
+  announcement: string | null;
   /** Bankroll change across the last settle, in cents; null until/after a settle. */
   lastDelta: number | null;
   /** Increments on each settle so the win pop-up can remount via React key. */
@@ -109,6 +111,7 @@ export function createGameStore(
       squeezers: null,
       sitOut: () => {},
       lastFlip: null,
+      announcement: null,
       lastDelta: null,
       settleSeq: 0,
       explainOn: false,

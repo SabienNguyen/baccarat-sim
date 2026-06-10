@@ -64,6 +64,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
   const lastFlip = useStore(active, (s) => s.lastFlip);
+  const announcement = useStore(active, (s) => s.announcement);
   const lastDelta = useStore(active, (s) => s.lastDelta);
   const settleSeq = useStore(active, (s) => s.settleSeq);
   const denoms = useStore(active, (s) => s.denoms);
@@ -126,6 +127,12 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const playerVisible = visibleCardCount("Player", snapshot.player.cards, snapshot.banker.cards);
   const bankerVisible = visibleCardCount("Banker", snapshot.player.cards, snapshot.banker.cards);
 
+  // The ritual: Banker cards stay down until the Player hand is exposed.
+  // Hold the flip silently — peeking is fine, no dealer scolding needed.
+  const bankerLocked =
+    !isFaceUp(snapshot.player.cards[0] ?? "FaceDown") ||
+    !isFaceUp(snapshot.player.cards[1] ?? "FaceDown");
+
   return (
     <div className="app">
       <Hud
@@ -138,7 +145,12 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         {seats !== null && (
           <SeatsStrip seats={seats} squeezers={squeezers} betting={snapshot.phase !== "Dealing"} />
         )}
-        <DealerLine snapshot={snapshot} lastError={lastError} lastFlip={lastFlip} />
+        <DealerLine
+          snapshot={snapshot}
+          lastError={lastError}
+          lastFlip={lastFlip}
+          announcement={announcement}
+        />
         <div className="card-stage">
           <Hand
             side="Player"
@@ -156,7 +168,9 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
             visibleCount={bankerVisible}
             winner={snapshot.outcome === "BankerWin"}
             onPeek={(i) => peek("Banker", i)}
-            onReveal={(i) => reveal("Banker", i)}
+            onReveal={(i) => {
+              if (!bankerLocked) reveal("Banker", i);
+            }}
           />
         </div>
         <Controls

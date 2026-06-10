@@ -55,6 +55,8 @@ pub struct RoomInfo {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
     Rooms { rooms: Vec<RoomInfo> },
+    /// The dealer's voice between flips ("Turning the Banker's cards…").
+    Announce { message: String },
     Joined { room: String, player: PlayerId, tier: Tier, view: TableView },
     State { view: TableView },
     Left,

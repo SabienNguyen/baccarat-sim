@@ -134,3 +134,11 @@ test("sitting out sends the choice and returns any held chips", () => {
   expect(held(store)).toBe(1_000_000);
   expect(sent.at(-1)).toEqual({ type: "sit_out" });
 });
+
+test("the dealer's announcement speaks until the next flip arrives", () => {
+  const { store } = setup();
+  store.handle({ type: "announce", message: "Turning the Banker hand…" });
+  expect(store.getState().announcement).toBe("Turning the Banker hand…");
+  store.handle({ type: "state", view: view() });
+  expect(store.getState().announcement).toBeNull();
+});

@@ -210,6 +210,9 @@
   display: flex;
   gap: 64px;
   justify-content: center;
+  /* reserve room for cards + the total badge so the page never shifts */
+  min-height: 248px;
+  align-items: flex-start;
 }
 .hand {
   display: flex;
@@ -305,6 +308,7 @@
   }
   .card-stage {
     gap: 40px;
+    min-height: 222px;
   }
   .card-pip {
     font-size: 15px;
@@ -323,6 +327,7 @@
   }
   .card-stage {
     gap: 20px;
+    min-height: 196px;
   }
   .card-pip {
     font-size: 12px;
@@ -347,6 +352,7 @@
   }
   .card-stage {
     gap: 12px;
+    min-height: 168px;
   }
   .card-pip {
     font-size: 10px;

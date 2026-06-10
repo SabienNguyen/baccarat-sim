@@ -56,6 +56,7 @@ export function createRemoteStore(opts: {
     seats: opts.view.seats,
     squeezers: squeezersOf(opts.view),
     lastFlip: null,
+    announcement: null,
     sitOut: () => {
       get().returnHand();
       send({ type: "sit_out" });
@@ -156,6 +157,10 @@ export function createRemoteStore(opts: {
     const set = store.setState.bind(store);
     const get = store.getState.bind(store);
 
+    if (msg.type === "announce") {
+      set({ announcement: msg.message });
+      return;
+    }
     if (msg.type === "error") {
       // The wager came back: whatever was in flight returns to the rack.
       if (pending.length > 0) {
@@ -246,6 +251,7 @@ export function createRemoteStore(opts: {
       lastDelta,
       settleSeq,
       lastError: null,
+      announcement: null,
     });
   };
 

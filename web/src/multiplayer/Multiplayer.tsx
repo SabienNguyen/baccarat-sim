@@ -101,7 +101,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       } else if (msg.type === "error") {
         if (storeRef.current) storeRef.current.handle(msg);
         else setNotice(msg.message);
-      } else if (msg.type === "state") {
+      } else if (msg.type === "state" || msg.type === "announce") {
         storeRef.current?.handle(msg);
       }
     };

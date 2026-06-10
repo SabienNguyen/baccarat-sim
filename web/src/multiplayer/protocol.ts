@@ -44,6 +44,7 @@ export type ClientMsg =
 
 export type ServerMsg =
   | { type: "rooms"; rooms: RoomInfo[] }
+  | { type: "announce"; message: string }
   | { type: "joined"; room: string; player: number; tier: TableTier; view: TableViewMsg }
   | { type: "state"; view: TableViewMsg }
   | { type: "left" }
