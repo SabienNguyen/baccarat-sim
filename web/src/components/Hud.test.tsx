@@ -4,26 +4,18 @@ import { Hud } from "./Hud";
 import { bettingSnapshot, settledSnapshot } from "../test/fixtures";
 
 test("shows bankroll, phase, and table limits", () => {
-  render(<Hud snapshot={bettingSnapshot()} lastError={null} />);
+  render(<Hud snapshot={bettingSnapshot()} />);
   expect(screen.getByText("$1,000.00")).toBeInTheDocument();
   expect(screen.getByText(/Betting/)).toBeInTheDocument();
 });
 
 test("shows outcome and payouts when settled", () => {
-  render(<Hud snapshot={settledSnapshot()} lastError={null} />);
+  render(<Hud snapshot={settledSnapshot()} />);
   expect(screen.getByText(/PlayerWin/)).toBeInTheDocument();
   expect(screen.getByText("+$5.00")).toBeInTheDocument();
 });
 
-test("shows an error message when a command was rejected", () => {
-  render(
-    <Hud
-      snapshot={bettingSnapshot()}
-      lastError={{ WrongPhase: { expected: "Dealing", found: "Betting" } }}
-    />,
-  );
-  expect(screen.getByRole("alert")).toHaveTextContent(/WrongPhase/);
-});
+
 
 test("house actions live in the panel: Reset bank and Lobby fire their handlers", async () => {
   const onResetBankroll = vi.fn();
@@ -31,7 +23,6 @@ test("house actions live in the panel: Reset bank and Lobby fire their handlers"
   render(
     <Hud
       snapshot={bettingSnapshot()}
-      lastError={null}
       onResetBankroll={onResetBankroll}
       onLeave={onLeave}
     />,
@@ -43,7 +34,7 @@ test("house actions live in the panel: Reset bank and Lobby fire their handlers"
 });
 
 test("shows goal progress when the table has a win condition", () => {
-  render(<Hud snapshot={bettingSnapshot()} lastError={null} goal={400_000} />);
+  render(<Hud snapshot={bettingSnapshot()} goal={400_000} />);
   // betting fixture bankroll is $1,000 of a $4,000 goal -> 25%
   expect(screen.getByText("Goal $4,000.00")).toBeInTheDocument();
   expect(screen.getByText("25%")).toBeInTheDocument();

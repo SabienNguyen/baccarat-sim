@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
-import { storeFor } from "./store/useGameStore";
+import { storeFor, resetStore } from "./store/useGameStore";
 import { HomeScreen } from "./components/HomeScreen";
 import type { TableTier } from "./tables";
 import { hiddenIndices } from "./cards";
@@ -18,7 +18,6 @@ import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
 import { ExchangeModal } from "./components/ExchangeModal";
 import { VictoryModal } from "./components/VictoryModal";
-import { clearBankroll } from "./bankrollStorage";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -28,20 +27,31 @@ interface AppProps {
  *  store (tests) goes straight to the table. */
 export function App({ store }: AppProps = {}) {
   const [tier, setTier] = useState<TableTier | null>(store ? "mid" : null);
+  const [resetSeq, setResetSeq] = useState(0);
   if (tier === null) {
     return <HomeScreen onPlay={setTier} />;
   }
   const active = store ?? storeFor(tier);
-  return <GameTable store={active} tier={tier} onLeave={() => setTier(null)} />;
+  return (
+    <GameTable
+      key={`${tier}-${resetSeq}`}
+      store={active}
+      onLeave={() => setTier(null)}
+      onReset={() => {
+        resetStore(tier);
+        setResetSeq((n) => n + 1); // remount at the same table with a fresh buy-in
+      }}
+    />
+  );
 }
 
 interface GameTableProps {
   store: StoreApi<GameState>;
-  tier: TableTier;
   onLeave: () => void;
+  onReset: () => void;
 }
 
-function GameTable({ store: active, tier, onLeave }: GameTableProps) {
+function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
@@ -85,16 +95,12 @@ function GameTable({ store: active, tier, onLeave }: GameTableProps) {
     <div className="app">
       <Hud
         snapshot={snapshot}
-        lastError={lastError}
         goal={goal}
-        onResetBankroll={() => {
-          clearBankroll(tier);
-          window.location.reload();
-        }}
+        onResetBankroll={onReset}
         onLeave={onLeave}
       />
       <main className="stage">
-        <DealerLine snapshot={snapshot} />
+        <DealerLine snapshot={snapshot} lastError={lastError} />
         <div className="card-stage">
           <Hand
             side="Player"

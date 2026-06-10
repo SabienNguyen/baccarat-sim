@@ -1,18 +1,20 @@
-import type { RoundSnapshot, GlossaryEntry } from "../engine/types";
-import { narrate } from "../narrate";
+import type { RoundSnapshot, GlossaryEntry, CommandError } from "../engine/types";
+import { narrate, narrateError } from "../narrate";
 import { glossaryEntry } from "../glossaryData";
 import { GlossaryTerm } from "./GlossaryTerm";
 import "./dealer.css";
 
 interface DealerLineProps {
   snapshot: RoundSnapshot;
+  /** A refused command; the dealer explains it instead of narrating. */
+  lastError?: CommandError | null;
   /** Term→entry lookup; defaults to the real (wasm-backed) glossary. Injectable for tests. */
   lookup?: (term: string) => GlossaryEntry | undefined;
 }
 
 /** The dealer's dialogue box: he narrates the table as the round unfolds. */
-export function DealerLine({ snapshot, lookup = glossaryEntry }: DealerLineProps) {
-  const segments = narrate(snapshot);
+export function DealerLine({ snapshot, lastError = null, lookup = glossaryEntry }: DealerLineProps) {
+  const segments = lastError ? narrateError(lastError) : narrate(snapshot);
   const lineKey = segments.map((s) => s.text).join("");
   return (
     <section aria-label="Dealer" className="dealer-line">

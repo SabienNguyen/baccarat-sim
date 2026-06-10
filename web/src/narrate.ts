@@ -1,4 +1,4 @@
-import type { RoundSnapshot, Event, Outcome } from "./engine/types";
+import type { RoundSnapshot, Event, Outcome, CommandError } from "./engine/types";
 import { formatCents } from "./format";
 
 /** A piece of the dealer line; `term` marks a glossary slug for interactivity. */
@@ -86,6 +86,30 @@ function pickSalient(events: Event[]): Event | undefined {
 
 function anyCardShowing(snapshot: RoundSnapshot): boolean {
   return [...snapshot.player.cards, ...snapshot.banker.cards].some((c) => c !== "FaceDown");
+}
+
+/** What the dealer says when a command is refused — house rules, kindly. */
+export function narrateError(error: CommandError): NarrationSegment[] {
+  if (error === "NoBetsPlaced") {
+    return [{ text: "Chips down first — then we deal." }];
+  }
+  if ("BetAboveMaximum" in error) {
+    return [
+      { text: `Too rich for this table — the max is ${formatCents(error.BetAboveMaximum.max)}.` },
+    ];
+  }
+  if ("BetBelowMinimum" in error) {
+    return [
+      { text: `That's shy of the minimum — ${formatCents(error.BetBelowMinimum.min)} to play.` },
+    ];
+  }
+  if ("InsufficientBankroll" in error) {
+    return [{ text: "Your rack can't cover that one." }];
+  }
+  if ("WrongPhase" in error) {
+    return [{ text: "Not just now — let's finish this hand." }];
+  }
+  return [{ text: "Can't do that, friend." }];
 }
 
 /** Turn the current snapshot into an ordered dealer line. Pure. */

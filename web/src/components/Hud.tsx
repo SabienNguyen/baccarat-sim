@@ -1,10 +1,9 @@
-import type { RoundSnapshot, CommandError } from "../engine/types";
+import type { RoundSnapshot } from "../engine/types";
 import { formatCents } from "../format";
 import "./hud.css";
 
 interface HudProps {
   snapshot: RoundSnapshot;
-  lastError: CommandError | null;
   /** Beat-the-table target, if this table has one. */
   goal?: number | null;
   onResetBankroll?: () => void;
@@ -23,7 +22,7 @@ function describeBet(kind: RoundSnapshot["bets"][number]["kind"]): string {
   return Object.keys(kind.Side)[0];
 }
 
-export function Hud({ snapshot, lastError, goal, onResetBankroll, onLeave }: HudProps) {
+export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
   const progress = goal ? Math.min(snapshot.bankroll / goal, 1) : 0;
   return (
     <section aria-label="HUD" className="hud panel">
@@ -79,12 +78,6 @@ export function Hud({ snapshot, lastError, goal, onResetBankroll, onLeave }: Hud
             </li>
           ))}
         </ul>
-      )}
-
-      {lastError !== null && (
-        <p role="alert" className="hud-error">
-          {JSON.stringify(lastError)}
-        </p>
       )}
 
       {(onResetBankroll || onLeave) && (

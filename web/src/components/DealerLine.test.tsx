@@ -45,3 +45,16 @@ test("plain (non-term) phases render without a button", () => {
   expect(screen.getByText("Place your bets.")).toBeInTheDocument();
   expect(screen.queryByRole("button")).toBeNull();
 });
+
+test("a refused bet overrides the narration with the dealer's explanation", () => {
+  render(
+    <DealerLine
+      snapshot={snap({ phase: "Betting", events: [] })}
+      lastError={{ BetAboveMaximum: { max: 500_000, got: 600_000 } }}
+      lookup={lookup}
+    />,
+  );
+  expect(screen.getByLabelText("Dealer")).toHaveTextContent(
+    "Too rich for this table — the max is $5,000.00.",
+  );
+});

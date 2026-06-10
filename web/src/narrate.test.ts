@@ -1,4 +1,4 @@
-import { narrate } from "./narrate";
+import { narrate, narrateError } from "./narrate";
 import type { RoundSnapshot, Event } from "./engine/types";
 
 function snap(phase: RoundSnapshot["phase"], events: Event[] = []): RoundSnapshot {
@@ -135,4 +135,16 @@ test("natural outranks a co-occurring monkey", () => {
     ]),
   );
   expect(segs[0]).toEqual({ text: "Natural", term: "natural" });
+});
+
+test("the dealer refuses oversized and undersized bets in plain speech", () => {
+  expect(text(narrateError({ BetAboveMaximum: { max: 500_000, got: 600_000 } }))).toBe(
+    "Too rich for this table — the max is $5,000.00.",
+  );
+  expect(text(narrateError({ BetBelowMinimum: { min: 2500, got: 500 } }))).toBe(
+    "That's shy of the minimum — $25.00 to play.",
+  );
+  expect(text(narrateError("NoBetsPlaced"))).toBe(
+    "Chips down first — then we deal.",
+  );
 });

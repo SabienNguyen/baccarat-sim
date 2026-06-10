@@ -1,7 +1,7 @@
 import { createGameStore, type GameState } from "./gameStore";
 import { createSession } from "../engine/adapter";
 import type { StoreApi } from "zustand/vanilla";
-import { loadBankroll, saveBankroll } from "../bankrollStorage";
+import { clearBankroll, loadBankroll, saveBankroll } from "../bankrollStorage";
 import { configFor, tableSpec, type TableTier } from "../tables";
 
 const stores = new Map<TableTier, StoreApi<GameState>>();
@@ -29,6 +29,12 @@ export function storeFor(tier: TableTier): StoreApi<GameState> {
     stores.set(tier, store);
   }
   return store;
+}
+
+/** Wipe a tier's saved roll and drop its store so the next storeFor() re-buys in. */
+export function resetStore(tier: TableTier): void {
+  clearBankroll(tier);
+  stores.delete(tier);
 }
 
 /** Back-compat default: the main-floor table. */
