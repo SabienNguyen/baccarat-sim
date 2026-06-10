@@ -13,25 +13,28 @@
   font-size: 16px;
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--ink);
-  margin: 0 0 4px;
-  line-height: 1.4;
+  margin: 0 0 14px;
+  line-height: 1.5;
 }
 .hud-stats {
   display: grid;
   grid-template-columns: 1fr;
   gap: 2px;
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
 }
 .hud-stats dt {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: 10px;
   color: #b9aee0;
-  margin-top: 8px;
+  margin-top: 22px;
   letter-spacing: 1px;
 }
+.hud-stats dt:first-of-type {
+  margin-top: 0;
+}
 .hud-stats dd {
-  margin: 0;
+  margin: 5px 0 0;
   color: #f3eede;
 }
 .hud-outcome {
