@@ -38,3 +38,22 @@
   display: block;
   margin-bottom: 4px;
 }
+.term-popover--wide {
+  max-width: 300px;
+}
+
+/* the "?" beside a road heading */
+.road-info-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 9px;
+  line-height: 1;
+  color: #1a1208;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  cursor: help;
+  padding: 0;
+  vertical-align: middle;
+}

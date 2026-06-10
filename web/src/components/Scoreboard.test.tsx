@@ -43,3 +43,17 @@ test("renders empty roads without crashing", () => {
   render(<Scoreboard scoreboard={bettingSnapshot().scoreboard} />);
   expect(screen.getByLabelText("Big Road")).toBeInTheDocument();
 });
+
+test("each road heading explains itself via an info tip", async () => {
+  render(<Scoreboard scoreboard={scoredSnapshot().scoreboard} />);
+  const info = screen.getByRole("button", { name: "What is the Big Road?" });
+  fireEvent.focus(info);
+  expect(screen.getByRole("tooltip")).toHaveTextContent(/Big Road is the primary grid/);
+  fireEvent.blur(info);
+  // the full-roads window carries tips for every road
+  await userEvent.click(screen.getByRole("button", { name: "Full roads" }));
+  expect(screen.getByRole("button", { name: "What is the Bead Plate?" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "What is the Big Eye Boy?" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "What is the Small Road?" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "What is the Cockroach Pig?" })).toBeInTheDocument();
+});

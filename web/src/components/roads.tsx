@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   BeadPlate,
   BeadCell,
@@ -6,6 +7,35 @@ import type {
   DerivedRoad,
   Mark,
 } from "../engine/types";
+import { glossaryEntry } from "../glossaryData";
+import "./glossary.css";
+
+/** A "?" beside a road heading that explains what the road tracks. */
+function RoadInfo({ term }: { term: string }) {
+  const [open, setOpen] = useState(false);
+  const entry = glossaryEntry(term);
+  if (!entry) return null;
+  return (
+    <span className="glossary-term road-info">
+      <button
+        type="button"
+        className="road-info-btn"
+        aria-label={`What is the ${entry.label}?`}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        ?
+      </button>
+      {open && (
+        <span role="tooltip" className="term-popover term-popover--wide">
+          <strong>{entry.label}</strong> {entry.long}
+        </span>
+      )}
+    </span>
+  );
+}
 
 function beadLabel(cell: BeadCell): string {
   const base =
@@ -22,7 +52,7 @@ function bigRoadLabel(cell: BigRoadCell): string {
 export function BeadPlateView({ plate }: { plate: BeadPlate }) {
   return (
     <div aria-label="Bead Plate" className="road bead">
-      <h4>Bead Plate</h4>
+      <h4>Bead Plate <RoadInfo term="bead-plate" /></h4>
       <ul className="bead-grid">
         {plate.cells.map((cell, i) => (
           <li key={i} data-outcome={cell.outcome}>
@@ -37,7 +67,7 @@ export function BeadPlateView({ plate }: { plate: BeadPlate }) {
 export function BigRoadView({ road }: { road: BigRoad }) {
   return (
     <div aria-label="Big Road" className="road big">
-      <h4>Big Road</h4>
+      <h4>Big Road <RoadInfo term="big-road" /></h4>
       <div className="road-grid">
         {road.columns.map((col, ci) => (
           <ul key={ci}>
@@ -53,10 +83,20 @@ export function BigRoadView({ road }: { road: BigRoad }) {
   );
 }
 
-export function DerivedRoadView({ label, road }: { label: string; road: DerivedRoad }) {
+export function DerivedRoadView({
+  label,
+  road,
+  term,
+}: {
+  label: string;
+  road: DerivedRoad;
+  term?: string;
+}) {
   return (
     <div aria-label={label} className="road derived">
-      <h4>{label}</h4>
+      <h4>
+        {label} {term && <RoadInfo term={term} />}
+      </h4>
       <div className="road-grid">
         {road.columns.map((col, ci) => (
           <ul key={ci}>

@@ -34,9 +34,9 @@ export function RoadsModal({ scoreboard, onClose }: RoadsModalProps) {
         <div className="roads-grid">
           <BeadPlateView plate={scoreboard.bead_plate} />
           <BigRoadView road={scoreboard.big_road} />
-          <DerivedRoadView label="Big Eye Boy" road={scoreboard.big_eye_boy} />
-          <DerivedRoadView label="Small Road" road={scoreboard.small_road} />
-          <DerivedRoadView label="Cockroach Pig" road={scoreboard.cockroach_pig} />
+          <DerivedRoadView label="Big Eye Boy" road={scoreboard.big_eye_boy} term="big-eye-boy" />
+          <DerivedRoadView label="Small Road" road={scoreboard.small_road} term="small-road" />
+          <DerivedRoadView label="Cockroach Pig" road={scoreboard.cockroach_pig} term="cockroach-pig" />
         </div>
       </div>
     </div>
