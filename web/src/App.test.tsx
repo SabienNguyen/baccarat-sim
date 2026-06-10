@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App } from "./App";
+import { App, GameTable } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
@@ -138,4 +138,22 @@ test("New Shoe opens the cut-the-deck ritual and only shuffles after the cut", a
   await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
   expect(newShoe).toHaveBeenCalledOnce();
   expect(screen.queryByRole("dialog", { name: "Cut the deck" })).toBeNull();
+});
+
+test("busting offers a re-buy and a way out", async () => {
+  const user = userEvent.setup();
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  store.setState({ busted: true });
+  const onLeave = vi.fn();
+  const onReset = vi.fn();
+  render(<GameTable store={store} onLeave={onLeave} onReset={onReset} />);
+  expect(screen.getByRole("dialog", { name: "Busted" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Re-buy" }));
+  expect(onReset).toHaveBeenCalledOnce();
+
+  // leaving clears the dead roll first, so the next visit re-buys fresh
+  await user.click(screen.getByRole("button", { name: "Leave table" }));
+  expect(onReset).toHaveBeenCalledTimes(2);
+  expect(onLeave).toHaveBeenCalledOnce();
 });

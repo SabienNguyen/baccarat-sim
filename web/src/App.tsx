@@ -20,6 +20,7 @@ import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
 import { ExchangeModal } from "./components/ExchangeModal";
 import { VictoryModal } from "./components/VictoryModal";
+import { BustModal } from "./components/BustModal";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -93,6 +94,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
+  const busted = useStore(active, (s) => s.busted);
 
   // Turn YOUR cards for you, one per beat, in ritual order. Hands you didn't
   // bet belong to the house dealer — his own pacer turns those, so this just
@@ -236,6 +238,18 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           onKeepPlaying={dismissGoal}
           onLobby={() => {
             dismissGoal();
+            onLeave();
+          }}
+        />
+      )}
+      {busted && onReset && (
+        <BustModal
+          bankroll={snapshot.bankroll}
+          tableMin={snapshot.table_min}
+          onRebuy={onReset}
+          onLeave={() => {
+            // clear the dead roll so the next visit re-buys fresh
+            onReset();
             onLeave();
           }}
         />
