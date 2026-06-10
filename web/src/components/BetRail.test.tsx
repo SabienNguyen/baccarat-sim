@@ -2,62 +2,106 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BetRail } from "./BetRail";
 import { bettingSnapshot, dealingSnapshot } from "../test/fixtures";
-import type { BetKind } from "../engine/types";
+import { buyIn } from "../chips";
+
+const rack = buyIn(1_000_000).rack;
 
 const noopProps = {
-  onSelectChip: vi.fn(),
-  onPlaceBet: vi.fn(),
+  rack,
+  hand: [] as number[],
+  change: 0,
+  stagedChips: [] as number[][],
+  onPickChip: vi.fn(),
+  onReturnHand: vi.fn(),
+  onPlaceHand: vi.fn(),
   onPlaceChip: vi.fn(),
   onClear: vi.fn(),
+  onOpenExchange: vi.fn(),
 };
 
-test("placing a bet calls onPlaceBet with the spot's BetKind", async () => {
-  const onPlaceBet = vi.fn();
+test("clicking a chip picks it up", async () => {
+  const onPickChip = vi.fn();
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onPickChip={onPickChip} />);
+  await userEvent.click(screen.getByRole("button", { name: "$25.00 chip" }));
+  expect(onPickChip).toHaveBeenCalledWith(2500);
+});
+
+test("clicking a spot places the hand there", async () => {
+  const onPlaceHand = vi.fn();
   render(
-    <BetRail snapshot={bettingSnapshot()} selectedChip={2500} {...noopProps} onPlaceBet={onPlaceBet} />,
+    <BetRail
+      snapshot={bettingSnapshot()}
+      {...noopProps}
+      hand={[2500, 500]}
+      onPlaceHand={onPlaceHand}
+    />,
   );
   await userEvent.click(screen.getByRole("button", { name: "Bet Player" }));
-  const expected: BetKind = { Main: "Player" };
-  expect(onPlaceBet).toHaveBeenCalledWith(expected);
+  expect(onPlaceHand).toHaveBeenCalledWith({ Main: "Player" });
 });
 
-test("selecting a chip calls onSelectChip with the denomination", async () => {
-  const onSelectChip = vi.fn();
+test("the hand tray shows the picked total and returns chips", async () => {
+  const onReturnHand = vi.fn();
   render(
-    <BetRail snapshot={bettingSnapshot()} selectedChip={2500} {...noopProps} onSelectChip={onSelectChip} />,
+    <BetRail
+      snapshot={bettingSnapshot()}
+      {...noopProps}
+      hand={[10000, 2500]}
+      onReturnHand={onReturnHand}
+    />,
   );
-  await userEvent.click(screen.getByRole("button", { name: "$500.00 chip" }));
-  expect(onSelectChip).toHaveBeenCalledWith(50000);
+  expect(screen.getByLabelText("Chips in hand")).toHaveTextContent("$125.00 in hand");
+  await userEvent.click(screen.getByRole("button", { name: "Return" }));
+  expect(onReturnHand).toHaveBeenCalledOnce();
 });
 
-test("dropping a chip on a spot places that amount via onPlaceChip", () => {
+test("dropping a chip on a spot places that denomination", () => {
   const onPlaceChip = vi.fn();
-  render(
-    <BetRail snapshot={bettingSnapshot()} selectedChip={2500} {...noopProps} onPlaceChip={onPlaceChip} />,
-  );
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onPlaceChip={onPlaceChip} />);
   const spot = screen.getByRole("button", { name: "Bet Banker" });
-  fireEvent.drop(spot, {
-    dataTransfer: { getData: () => "50000" },
-  });
+  fireEvent.drop(spot, { dataTransfer: { getData: () => "50000" } });
   expect(onPlaceChip).toHaveBeenCalledWith({ Main: "Banker" }, 50000);
 });
 
 test("a chip dropped outside the Betting phase is ignored", () => {
   const onPlaceChip = vi.fn();
-  render(
-    <BetRail snapshot={dealingSnapshot()} selectedChip={2500} {...noopProps} onPlaceChip={onPlaceChip} />,
-  );
+  render(<BetRail snapshot={dealingSnapshot()} {...noopProps} onPlaceChip={onPlaceChip} />);
   const spot = screen.getByRole("button", { name: "Bet Banker" });
   fireEvent.drop(spot, { dataTransfer: { getData: () => "50000" } });
   expect(onPlaceChip).not.toHaveBeenCalled();
 });
 
-test("bet spots are disabled outside the Betting phase", () => {
-  render(<BetRail snapshot={dealingSnapshot()} selectedChip={2500} {...noopProps} />);
-  expect(screen.getByRole("button", { name: "Bet Player" })).toBeDisabled();
+test("staged chips render on their spot with the staked total", () => {
+  const snap = bettingSnapshot({
+    bets: [
+      { kind: { Main: "Player" }, amount: 12500 },
+      { kind: { Main: "Banker" }, amount: 2500 },
+    ],
+  });
+  render(
+    <BetRail
+      snapshot={snap}
+      {...noopProps}
+      stagedChips={[
+        [10000, 2500],
+        [2500],
+      ]}
+    />,
+  );
+  const player = screen.getByRole("button", { name: "Bet Player" });
+  expect(player).toHaveTextContent("$125.00");
+  const banker = screen.getByRole("button", { name: "Bet Banker" });
+  expect(banker).toHaveTextContent("$25.00");
 });
 
-test("lists staged bets with formatted amounts", () => {
-  render(<BetRail snapshot={dealingSnapshot()} selectedChip={2500} {...noopProps} />);
-  expect(screen.getByText(/Player.*\$5\.00/)).toBeInTheDocument();
+test("the Exchange button opens the dealer exchange", async () => {
+  const onOpenExchange = vi.fn();
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onOpenExchange={onOpenExchange} />);
+  await userEvent.click(screen.getByRole("button", { name: "Exchange" }));
+  expect(onOpenExchange).toHaveBeenCalledOnce();
+});
+
+test("bet spots are disabled outside the Betting phase", () => {
+  render(<BetRail snapshot={dealingSnapshot()} {...noopProps} />);
+  expect(screen.getByRole("button", { name: "Bet Player" })).toBeDisabled();
 });
