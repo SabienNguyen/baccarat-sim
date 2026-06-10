@@ -1,7 +1,7 @@
 .board {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   /* fill the side column and mirror the HUD */
   width: 100%;
   min-height: 460px;
@@ -11,34 +11,54 @@
   font-family: var(--font-display);
   font-size: 11px;
   color: var(--gold);
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   letter-spacing: 1px;
+  text-align: center;
+  text-shadow: 2px 2px 0 var(--ink);
 }
+
+/* --- bead plate (full-roads modal) --- */
 .bead-grid {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 6px;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 2px;
+  gap: 3px;
+  background: #f4efe0;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
 }
 .bead-grid li {
-  background: var(--panel-bevel-lo);
-  border: 1px solid var(--ink);
-  border-radius: 3px;
-  font-size: 14px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 11px;
   text-align: center;
-  min-height: 20px;
-  line-height: 20px;
+  min-height: 24px;
+  line-height: 24px;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
 }
+.bead-grid li[data-outcome="PlayerWin"] {
+  background: var(--chip-blue);
+}
+.bead-grid li[data-outcome="BankerWin"] {
+  background: var(--chip-red);
+}
+.bead-grid li[data-outcome="Tie"] {
+  background: #1d7a3a;
+}
+
+/* --- the pit display: cream board, red/blue circles --- */
 .road-grid {
   display: flex;
   gap: 3px;
   overflow-x: auto;
   /* always hold six rows so the road reads like the pit display */
-  min-height: 186px;
+  min-height: 192px;
   align-items: flex-start;
-  background: rgba(0, 0, 0, 0.18);
+  background: #f4efe0;
+  border: 2px solid var(--ink);
   border-radius: 6px;
   padding: 6px;
 }
@@ -56,28 +76,75 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  background: var(--panel-bevel-lo);
-  border: 1px solid var(--ink);
-  border-radius: 4px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  border-radius: 50%;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.07);
 }
+/* big road: hollow-circle look in real display colors */
+.road-grid li[data-side="Player"] {
+  background: #fff;
+  border: 4px solid var(--chip-blue);
+  color: var(--chip-blue);
+  text-shadow: none;
+}
+.road-grid li[data-side="Banker"] {
+  background: #fff;
+  border: 4px solid var(--chip-red);
+  color: var(--chip-red);
+  text-shadow: none;
+}
+/* derived roads keep their red/blue marks */
 .road-grid li[data-mark="Red"] {
   color: var(--chip-red);
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.15);
 }
 .road-grid li[data-mark="Blue"] {
   color: var(--chip-blue);
+  background: #fff;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+}
+
+/* win counters, like the pit display footer */
+.road-tally {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+.tally {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 6px 10px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.tally--p {
+  background: var(--chip-blue);
+}
+.tally--b {
+  background: var(--chip-red);
+}
+.tally--t {
+  background: #1d7a3a;
 }
 
 .full-roads-btn {
-  align-self: flex-start;
+  align-self: center;
   font-family: var(--font-display);
-  font-size: 8px;
+  font-size: 9px;
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 9px 12px;
   cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow);
 }
 
 /* Full-roads modal */

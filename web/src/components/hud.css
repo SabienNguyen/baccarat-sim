@@ -10,47 +10,98 @@
 }
 .hud-title {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 14px;
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--ink);
-  margin: 0 0 14px;
+  margin: 0 0 6px;
   line-height: 1.5;
+  text-align: center;
 }
-.hud-stats {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 2px;
-  margin: 0;
-  font-size: 22px;
+
+/* Balatro-style inset stat boxes */
+.hud-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35);
 }
-.hud-stats dt {
+.hud-box-label {
   font-family: var(--font-display);
-  font-size: 10px;
-  color: #b9aee0;
-  margin-top: 22px;
+  font-size: 8px;
   letter-spacing: 1px;
+  color: #b9aee0;
+  text-transform: uppercase;
 }
-.hud-stats dt:first-of-type {
-  margin-top: 0;
-}
-.hud-stats dd {
-  margin: 5px 0 0;
-  color: #f3eede;
-}
-.hud-outcome {
+.hud-box-value {
   font-family: var(--font-display);
-  font-size: 11px;
-  color: var(--gold);
-  margin: 4px 0 0;
+  font-size: 17px;
+  color: #fff;
+  text-shadow: 2px 2px 0 var(--ink);
 }
+.hud-box-value--small {
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+/* the money is the star */
+.hud-box--bankroll .hud-box-value {
+  color: var(--gold);
+  font-size: 19px;
+}
+/* phase reads as a status light */
+.hud-box-value--phase {
+  font-size: 12px;
+}
+.hud-box[data-phase="Betting"] .hud-box-value--phase {
+  color: #7ec8ff;
+}
+.hud-box[data-phase="Dealing"] .hud-box-value--phase {
+  color: var(--gold);
+}
+.hud-box[data-phase="Settled"] .hud-box-value--phase {
+  color: #7ee29a;
+}
+.hud-box--outcome .hud-box-value--small {
+  color: var(--gold);
+}
+
 .hud-payouts {
   list-style: none;
   padding: 0;
   margin: 0;
-  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+.hud-payouts li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-text);
+  font-size: 17px;
+}
+.hud-payout-bet {
+  color: #f3eede;
+}
+.hud-payout-net.is-win {
+  color: #7ee29a;
+}
+.hud-payout-net.is-loss {
+  color: #ff8a93;
+}
+
 .hud-error {
   color: var(--chip-red);
   font-size: 16px;
   margin: 0;
+  font-family: var(--font-text);
 }

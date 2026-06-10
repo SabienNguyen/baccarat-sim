@@ -25,7 +25,9 @@ export function BeadPlateView({ plate }: { plate: BeadPlate }) {
       <h4>Bead Plate</h4>
       <ul className="bead-grid">
         {plate.cells.map((cell, i) => (
-          <li key={i}>{beadLabel(cell)}</li>
+          <li key={i} data-outcome={cell.outcome}>
+            {beadLabel(cell)}
+          </li>
         ))}
       </ul>
     </div>
@@ -40,7 +42,9 @@ export function BigRoadView({ road }: { road: BigRoad }) {
         {road.columns.map((col, ci) => (
           <ul key={ci}>
             {col.map((cell, ri) => (
-              <li key={ri}>{bigRoadLabel(cell)}</li>
+              <li key={ri} data-side={cell.side}>
+                {bigRoadLabel(cell)}
+              </li>
             ))}
           </ul>
         ))}

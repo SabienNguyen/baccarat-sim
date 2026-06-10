@@ -23,24 +23,39 @@ export function Hud({ snapshot, lastError }: HudProps) {
   return (
     <section aria-label="HUD" className="hud panel">
       <h1 className="hud-title">Baccarat Simulator</h1>
-      <dl className="hud-stats">
-        <dt>Bankroll</dt>
-        <dd>{formatCents(snapshot.bankroll)}</dd>
-        <dt>Phase</dt>
-        <dd>{snapshot.phase}</dd>
-        <dt>Table</dt>
-        <dd>
-          {formatCents(snapshot.table_min)} – {formatCents(snapshot.table_max)}
-        </dd>
-      </dl>
 
-      {snapshot.outcome !== null && <p className="hud-outcome">Outcome: {snapshot.outcome}</p>}
+      <div className="hud-box hud-box--bankroll">
+        <span className="hud-box-label">Bankroll</span>
+        <span className="hud-box-value">{formatCents(snapshot.bankroll)}</span>
+      </div>
+
+      <div className="hud-box" data-phase={snapshot.phase}>
+        <span className="hud-box-label">Phase</span>
+        <span className="hud-box-value hud-box-value--phase">{snapshot.phase}</span>
+      </div>
+
+      <div className="hud-box">
+        <span className="hud-box-label">Table limits</span>
+        <span className="hud-box-value hud-box-value--small">
+          {formatCents(snapshot.table_min)} – {formatCents(snapshot.table_max)}
+        </span>
+      </div>
+
+      {snapshot.outcome !== null && (
+        <div className="hud-box hud-box--outcome">
+          <span className="hud-box-label">Outcome</span>
+          <span className="hud-box-value hud-box-value--small">{snapshot.outcome}</span>
+        </div>
+      )}
 
       {snapshot.payouts !== null && (
         <ul aria-label="payouts" className="hud-payouts">
           {snapshot.payouts.map((p, i) => (
             <li key={i}>
-              {describeBet(p.bet.kind)}: <span>{formatNet(p.net)}</span>
+              <span className="hud-payout-bet">{describeBet(p.bet.kind)}</span>
+              <span className={`hud-payout-net ${p.net >= 0 ? "is-win" : "is-loss"}`}>
+                {formatNet(p.net)}
+              </span>
             </li>
           ))}
         </ul>
