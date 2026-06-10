@@ -25,7 +25,12 @@
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 3px;
-  background: #f4efe0;
+  background-color: #f4efe0;
+  background-image:
+    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
+  background-size: 27px 27px;
+  background-position: 5px 5px;
   border: 2px solid var(--ink);
   border-radius: 6px;
 }
@@ -57,7 +62,13 @@
   /* always hold six rows so the road reads like the pit display */
   min-height: 192px;
   align-items: flex-start;
-  background: #f4efe0;
+  background-color: #f4efe0;
+  /* faint cell grid so an empty board still reads as a pit display */
+  background-image:
+    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: 5px 5px;
   border: 2px solid var(--ink);
   border-radius: 6px;
   padding: 6px;
