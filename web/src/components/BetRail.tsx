@@ -112,6 +112,9 @@ export function BetRail({
   onOpenExchange,
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
+  // After a settle the engine is already back in Betting; touching chips or
+  // spots implicitly opens the next hand, so they stay live in Settled too.
+  const canBet = betting || snapshot.phase === "Settled";
   const handTotal = hand.reduce((a, b) => a + b, 0);
   const [showBonusInfo, setShowBonusInfo] = useState(false);
 
@@ -131,7 +134,7 @@ export function BetRail({
             <BetSpot
               key={spot.label}
               spot={spot}
-              betting={betting}
+              betting={canBet}
               chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
               shape="side"
               onPlaceHand={onPlaceHand}
@@ -144,7 +147,7 @@ export function BetRail({
             <BetSpot
               key={spot.label}
               spot={spot}
-              betting={betting}
+              betting={canBet}
               chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
               shape={spot.label.toLowerCase()}
               onPlaceHand={onPlaceHand}
@@ -171,7 +174,9 @@ export function BetRail({
           <p className="rail-hint">
             {betting
               ? "Tap chips to pick up a stack, then tap a spot. Or drag a chip."
-              : "Bets are locked — squeeze the cards."}
+              : snapshot.phase === "Settled"
+                ? "Hand over — grab chips to play the next one."
+                : "Bets are locked — squeeze the cards."}
           </p>
         )}
         <button type="button" className="clear-bets" disabled={!betting} onClick={onClear}>
@@ -189,7 +194,7 @@ export function BetRail({
             cents={cents}
             count={rack[cents] ?? 0}
             onPick={onPickChip}
-            disabled={!betting}
+            disabled={!canBet}
           />
         ))}
         {change > 0 && <span className="change-note">+{formatCents(change)} change</span>}

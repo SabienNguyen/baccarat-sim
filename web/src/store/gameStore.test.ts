@@ -240,6 +240,27 @@ test("newHand refreshes to the session's betting snapshot and clears the delta",
   expect(store.getState().lastDelta).toBeNull();
 });
 
+test("touching chips after a settled round opens the next hand (no dead rack)", () => {
+  const betting = snapshotWith({ phase: "Betting", bankroll: 1_000_000 });
+  const settled = snapshotWith({
+    phase: "Settled",
+    bankroll: 997_500,
+    payouts: [{ bet: { kind: { Main: "Player" }, amount: 2500 }, net: -2500 }],
+  });
+  const session: GameSession = {
+    ...fakeSession({ ok: true, snapshot: betting }, betting),
+    settle: () => ({ ok: true, snapshot: settled }),
+  };
+  const store = createGameStore(session);
+  store.getState().placeChip({ Main: "Player" }, 2500);
+  store.getState().settle();
+  expect(store.getState().snapshot.phase).toBe("Settled");
+  // the bug: chips looked dead here until "Next hand" was pressed
+  store.getState().pickChip(500);
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  expect(store.getState().hand).toEqual([500]);
+});
+
 test("explain mode is off by default and toggles", () => {
   const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
   expect(store.getState().explainOn).toBe(false);

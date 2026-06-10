@@ -80,6 +80,9 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       toggleExplain: () => set({ explainOn: !get().explainOn }),
 
       pickChip: (denom) => {
+        // Touching your chips after a settled round opens the next hand,
+        // like a real table: the dealer pays, you grab chips and rebet.
+        if (get().snapshot.phase === "Settled") get().newHand();
         const taken = removeChips(get().rack, [denom]);
         if (taken === null) return;
         set({ rack: taken, hand: [...get().hand, denom] });
@@ -92,6 +95,7 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       },
 
       placeHand: (kind) => {
+        if (get().snapshot.phase === "Settled") get().newHand();
         const hand = get().hand;
         if (hand.length === 0) return;
         const amount = hand.reduce((a, b) => a + b, 0);
@@ -103,6 +107,7 @@ export function createGameStore(session: GameSession): StoreApi<GameState> {
       },
 
       placeChip: (kind, denom) => {
+        if (get().snapshot.phase === "Settled") get().newHand();
         const taken = removeChips(get().rack, [denom]);
         if (taken === null) return;
         // A dragged chip brings the picked-up hand along with it, so "grab a
