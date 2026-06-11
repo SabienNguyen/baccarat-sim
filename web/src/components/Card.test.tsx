@@ -40,3 +40,9 @@ test("a court card shows a double-ended figure instead of pips", () => {
   expect(container.querySelectorAll(".card-pip")).toHaveLength(0);
   expect(container.querySelectorAll(".card-court-half")).toHaveLength(2); // mirrored figure
 });
+
+test("an edge grip peels a straight strip back", () => {
+  const { container } = render(<Card card="FaceDown" bend={0.4} grip="bottom" />);
+  expect(container.querySelector(".card-peel-under--bottom")).not.toBeNull();
+  expect(container.querySelector(".card-peel-shade--bottom")).not.toBeNull();
+});

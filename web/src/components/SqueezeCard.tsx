@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { CardView } from "../engine/types";
-import { Card, type PeelCorner } from "./Card";
+import { Card } from "./Card";
 import { isFaceUp } from "../cards";
-import { PEEK_AT } from "../squeeze";
+import { gripAt, PEEK_AT, type Grip, type PeelGrip } from "../squeeze";
 
 const DRAG_DISTANCE_PX = 120;
 /** Pointer travel (px) above which a gesture counts as a drag, not a tap. */
@@ -19,35 +19,18 @@ function isPeeked(card: CardView): boolean {
   return card !== "FaceDown" && typeof card === "object" && "Peeked" in card;
 }
 
-/** Drag geometry: which corner was grabbed and the direction that peels. */
-interface Grip {
-  corner: PeelCorner;
-  /** Unit vector from the grabbed corner toward the opposite corner. */
-  dirX: number;
-  dirY: number;
-  /** How far along that diagonal counts as a full peel. */
-  reach: number;
-}
-
 function gripFrom(e: ReactPointerEvent): Grip {
   const rect = e.currentTarget.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) {
     // jsdom / degenerate: distance-based fallback
-    return { corner: "tl", dirX: 0, dirY: 0, reach: 0 };
+    return { grip: "tl", dirX: 0, dirY: 0, reach: 0 };
   }
-  const right = e.clientX > rect.left + rect.width / 2;
-  const bottom = e.clientY > rect.top + rect.height / 2;
-  const corner: PeelCorner = right && bottom ? "br" : right ? "tr" : bottom ? "bl" : "tl";
-  const diag = Math.hypot(rect.width, rect.height);
-  // toward the opposite corner: the fold chases the finger across the card
-  const dirX = (right ? -rect.width : rect.width) / diag;
-  const dirY = (bottom ? -rect.height : rect.height) / diag;
-  return { corner, dirX, dirY, reach: diag * 0.8 };
+  return gripAt(e.clientX, e.clientY, rect);
 }
 
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const [bend, setBend] = useState(0);
-  const [corner, setCorner] = useState<PeelCorner>("tl");
+  const [peelGrip, setPeelGrip] = useState<PeelGrip>("tl");
   const start = useRef<{ x: number; y: number } | null>(null);
   const grip = useRef<Grip | null>(null);
   const peekedThisGesture = useRef(false);
@@ -78,7 +61,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     if (faceUp) return;
     start.current = { x: e.clientX, y: e.clientY };
     grip.current = gripFrom(e);
-    setCorner(grip.current.corner);
+    setPeelGrip(grip.current.grip);
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;
     draggedThisGesture.current = false;
@@ -158,7 +141,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <Card card={card} bend={bend} corner={corner} />
+      <Card card={card} bend={bend} grip={peelGrip} />
     </div>
   );
 }

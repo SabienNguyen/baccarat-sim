@@ -152,20 +152,22 @@ function FaceContent({ rank, suit }: { rank: Rank; suit: Suit }) {
   );
 }
 
-/** Which corner of the card is being squeezed. */
-export type PeelCorner = "tl" | "tr" | "bl" | "br";
+import type { PeelGrip } from "../squeeze";
+
+export type { PeelGrip };
 
 interface CardProps {
   card: CardView;
-  /** 0..1 corner-bend progress while squeezing; drives the visible peel. */
+  /** 0..1 bend progress while squeezing; drives the visible peel. */
   bend?: number;
-  /** The corner the player grabbed; the peel folds from there. */
-  corner?: PeelCorner;
+  /** Where the player grabbed; the peel folds from there. */
+  grip?: PeelGrip;
 }
 
-/** Clip-path triangle for a fold of `size` starting at `corner`. */
-function foldClip(corner: PeelCorner, size: string): string {
-  switch (corner) {
+/** Clip-path for a fold of `size`: corner grips fold a triangle, edge grips
+ *  peel a straight strip back — the long-edge squeeze. */
+function foldClip(grip: PeelGrip, size: string): string {
+  switch (grip) {
     case "tl":
       return `polygon(0 0, ${size} 0, 0 ${size})`;
     case "tr":
@@ -174,50 +176,71 @@ function foldClip(corner: PeelCorner, size: string): string {
       return `polygon(0 calc(100% - ${size}), 0 100%, ${size} 100%)`;
     case "br":
       return `polygon(100% calc(100% - ${size}), 100% 100%, calc(100% - ${size}) 100%)`;
+    case "top":
+      return `polygon(0 0, 100% 0, 100% ${size}, 0 ${size})`;
+    case "bottom":
+      return `polygon(0 calc(100% - ${size}), 100% calc(100% - ${size}), 100% 100%, 0 100%)`;
+    case "left":
+      return `polygon(0 0, ${size} 0, ${size} 100%, 0 100%)`;
+    case "right":
+      return `polygon(calc(100% - ${size}) 0, 100% 0, 100% 100%, calc(100% - ${size}) 100%)`;
   }
 }
 
-/** Tilt direction so the grabbed corner visibly lifts. */
-const TILT: Record<PeelCorner, number> = { tl: -4, tr: 4, bl: 3, br: -3 };
+/** Tilt direction so the grabbed spot visibly lifts. */
+const TILT: Record<PeelGrip, number> = {
+  tl: -4,
+  tr: 4,
+  bl: 3,
+  br: -3,
+  top: 0,
+  bottom: 0,
+  left: -2,
+  right: 2,
+};
 
-/** The squeezed corner: the card stock curling back as you bend it. */
+/** The squeezed fold: the card stock curling back as you bend it. */
 function Peel({
   bend,
-  corner,
+  grip,
   children,
 }: {
   bend: number;
-  corner: PeelCorner;
+  grip: PeelGrip;
   children?: ReactNode;
 }) {
   if (bend <= 0) return null;
-  const size = `${Math.round(16 + bend * 70)}%`;
+  // edge strips read sooner than corner triangles, so they grow a bit slower
+  const corner = grip.length === 2;
+  const size = corner
+    ? `${Math.round(16 + bend * 70)}%`
+    : `${Math.round(12 + bend * 58)}%`;
   return (
     <span
-      className={`card-peel-under card-peel-under--${corner}`}
-      style={{ clipPath: foldClip(corner, size) }}
+      className={`card-peel-under card-peel-under--${grip}`}
+      style={{ clipPath: foldClip(grip, size) }}
     >
       {children}
       {/* curvature shading toward the crease */}
-      <span className={`card-peel-shade card-peel-shade--${corner}`} />
+      <span className={`card-peel-shade card-peel-shade--${grip}`} />
     </span>
   );
 }
 
-export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
+export function Card({ card, bend = 0, grip = "tl" }: CardProps) {
   // The whole card tilts and lifts a little while it's being squeezed.
   const squeeze =
     bend > 0
       ? {
-          transform: `rotate(${(TILT[corner] * bend).toFixed(2)}deg) translateY(${(-bend * 6).toFixed(1)}px)`,
+          transform: `rotate(${(TILT[grip] * bend).toFixed(2)}deg) translateY(${(-bend * 6).toFixed(1)}px)`,
         }
       : undefined;
 
   if (card === "FaceDown") {
     return (
       <div key="back" className="card card-back" aria-label="face-down card" style={squeeze}>
-        {/* the corner folds, but reveals nothing yet */}
-        <Peel bend={bend} corner={corner} />
+        {/* the fold grows, but reveals nothing yet */}
+        <Peel bend={bend} grip={grip} />
       </div>
     );
   }
@@ -227,7 +250,7 @@ export function Card({ card, bend = 0, corner = "tl" }: CardProps) {
     const held = Math.max(bend, 0.35);
     return (
       <div key="back" className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
-        <Peel bend={held} corner={corner}>
+        <Peel bend={held} grip={grip}>
           {/* the real printed face under the fold: pip edges, legs, the index */}
           <span className="card-peel-face" data-color={suitColor(suit)}>
             <FaceContent rank={rank} suit={suit} />
