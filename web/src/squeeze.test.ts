@@ -102,3 +102,11 @@ test("the fold knows its hinge: the crease point between grab and finger", () =>
   // crease at (45, 90) → the flap rotates up around this point
   expect(f.origin).toBe("50.0% 71.4%");
 });
+
+test("the flap face is a pure layout shift — symmetric artwork, no transform", () => {
+  // rotating 180° about the crease equals translating the (symmetric)
+  // face artwork by twice the crease offset from center
+  const f = foldFrom(45, 120, 45, 60, RECT)!;
+  // crease at (50%, 71.4%): shift = (0%, 42.9%)
+  expect(f.faceShift).toEqual({ left: "0.0%", top: "42.9%" });
+});

@@ -22,6 +22,11 @@ export interface Fold {
   flapClip: string;
   /** The crease point, as a CSS transform-origin — the flap's 3D hinge. */
   origin: string;
+  /** Layout offsets that place the face artwork on the flap. Rotating the
+   *  180°-symmetric face about the crease equals translating it by twice
+   *  the crease's offset from center — pure left/top, NO transform, so no
+   *  compositor layer can ever escape the flap's clip. */
+  faceShift: { left: string; top: string };
   /** CSS gradient angle (deg) running from the flap edge toward the crease. */
   angle: number;
   /** 0..1 — drives the peek/reveal thresholds. */
@@ -137,10 +142,16 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
   const poly = (pts: Point[]) =>
     `polygon(${pts.map((p) => `${pct(p.x, w)} ${pct(p.y, h)}`).join(", ")})`;
+  const cx = g.x + apex * nux;
+  const cy = g.y + apex * nuy;
   return {
     clip: poly(flap),
     flapClip: poly(leaf),
-    origin: `${pct(g.x + apex * nux, w)} ${pct(g.y + apex * nuy, h)}`,
+    origin: `${pct(cx, w)} ${pct(cy, h)}`,
+    faceShift: {
+      left: `${(((2 * cx) / w - 1) * 100).toFixed(1)}%`,
+      top: `${(((2 * cy) / h - 1) * 100).toFixed(1)}%`,
+    },
     // CSS gradient angles: 0deg points up, clockwise from there
     angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
     progress: Math.min(len / (Math.hypot(w, h) * 0.85), 1),

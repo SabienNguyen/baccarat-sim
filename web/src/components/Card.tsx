@@ -163,33 +163,23 @@ interface CardProps {
 
 /** The squeeze: the flap IS the card coming off the table. The window it
  *  leaves shows the felt; the bent-up part shows the card's underside —
- *  blank stock while face-down, the printed face (rotated 180° by the
- *  fold, so the near edge reads at the tip) once peeked. */
+ *  blank stock while face-down, the printed face once peeked, placed by
+ *  the fold's layout shift so the near edge reads at the tip.
+ *
+ *  NO transforms inside the clipped spans: GPU compositing promotes
+ *  transformed children to their own layers and drops the ancestor
+ *  clip-path — the face then paints outside the flap. Layout offsets and
+ *  gradients only. */
 function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
-  const phi = (fold.angle * Math.PI) / 180;
   return (
     <>
       {/* the table showing through where the card has lifted away */}
       <span className="card-peel-under" style={{ clipPath: fold.clip }} />
-      {/* the lifted card itself, hinged in 3D at the crease: steep on a
-          light pull, laying flatter as it deepens, tip chasing the finger.
-          It projects its own perspective — the card's drop-shadow filter
-          forces transform-style flat, so no shared 3D context exists. */}
-      <span
-        className="card-peel-flap"
-        style={{
-          clipPath: fold.flapClip,
-          transformOrigin: fold.origin,
-          // start at ~55°: steep enough to read as a bend, open enough
-          // that the flap is visible from the first pixels of pull
-          transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-55 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
-        }}
-      >
+      {/* the lifted card itself: a leaf attached at the crease, its tip
+          chasing the finger */}
+      <span className="card-peel-flap" style={{ clipPath: fold.flapClip }}>
         {children && (
-          <span
-            className="card-peel-flap-face"
-            style={{ transformOrigin: fold.origin, transform: "rotate(180deg)" }}
-          >
+          <span className="card-peel-flap-face" style={fold.faceShift}>
             {children}
           </span>
         )}

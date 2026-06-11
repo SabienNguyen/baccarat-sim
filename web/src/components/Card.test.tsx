@@ -13,6 +13,7 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
     clip: "polygon(0% 70%, 100% 70%, 100% 100%, 0% 100%)",
     flapClip: "polygon(0% 70%, 100% 70%, 100% 40%, 0% 40%)",
     origin: "50.0% 70.0%",
+    faceShift: { left: "0.0%", top: "40.0%" },
     angle: 0,
     progress: 0.4,
   };
@@ -25,13 +26,10 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
   // with the shadow separating beneath it
   const card = container.querySelector<HTMLElement>(".card")!;
   expect(card.style.transform).toContain("perspective(");
-  // the flap is hinged in 3D at the crease with its own perspective —
-  // the card's drop-shadow filter flattens preserve-3d, so the flap
-  // must project itself (CSS: filter forces transform-style flat)
+  // the peel layers must stay transform-free: a composited (transformed)
+  // child escapes the flap's clip-path on GPU and the face floats off
   const flap = container.querySelector<HTMLElement>(".card-peel-flap")!;
-  expect(flap.style.transform).toContain("perspective(");
-  expect(flap.style.transform).toContain("rotate3d(");
-  expect(flap.style.transformOrigin).toBe("50.0% 70.0%");
+  expect(flap.style.transform).toBe("");
   expect(card.style.transformOrigin).toBe("50.0% 0.0%"); // pull-up: top edge rests
   expect(card.style.filter).toContain("drop-shadow");
 });
@@ -44,7 +42,9 @@ test("a peeked card folds back to show the real face under the corner", () => {
   // rotated 180 about the crease — you read the near edge at the tip
   const face = container.querySelector<HTMLElement>(".card-peel-flap .card-peel-flap-face");
   expect(face).not.toBeNull();
-  expect(face!.style.transform).toBe("rotate(180deg)");
+  // placed by layout shift (symmetric artwork), never by transform
+  expect(face!.style.transform).toBe("");
+  expect(face!.style.top).not.toBe("");
   expect(container.querySelectorAll(".card-peel-flap .card-pip")).toHaveLength(9);
   // nothing hides under the lift but the table
   expect(container.querySelector(".card-peel-under .card-pip")).toBeNull();
@@ -73,6 +73,7 @@ test("a live fold clips exactly where the squeeze says", () => {
     clip: "polygon(100.0% 71.4%, 100.0% 100.0%, 0.0% 100.0%, 0.0% 71.4%)",
     flapClip: "polygon(100.0% 71.4%, 100.0% 42.9%, 0.0% 42.9%, 0.0% 71.4%)",
     origin: "50.0% 71.4%",
+    faceShift: { left: "0.0%", top: "42.9%" },
     angle: 0,
     progress: 0.4,
   };
