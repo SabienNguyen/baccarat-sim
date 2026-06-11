@@ -1,4 +1,4 @@
-import { actionForProgress, gripAt, PEEK_AT, REVEAL_AT } from "./squeeze";
+import { actionForProgress, foldFrom, HELD_FOLD, PEEK_AT, REVEAL_AT } from "./squeeze";
 
 test("below the peek threshold does nothing", () => {
   expect(actionForProgress(0)).toBe("none");
@@ -21,51 +21,47 @@ test("thresholds are ordered sanely", () => {
   expect(REVEAL_AT).toBeLessThanOrEqual(1);
 });
 
-// --- grip geometry: where you grab decides how the card peels ---
+// --- the fold: the crease forms between the grab point and the finger ---
 
 const RECT = { left: 0, top: 0, width: 90, height: 126 };
 
-test("corner cells fold on the diagonal toward the opposite corner", () => {
-  const tl = gripAt(10, 10, RECT);
-  expect(tl.grip).toBe("tl");
-  expect(tl.dirX).toBeGreaterThan(0);
-  expect(tl.dirY).toBeGreaterThan(0);
-
-  const br = gripAt(85, 120, RECT);
-  expect(br.grip).toBe("br");
-  expect(br.dirX).toBeLessThan(0);
-  expect(br.dirY).toBeLessThan(0);
+test("a straight pull up from the bottom edge creases at the midpoint", () => {
+  const f = foldFrom(45, 120, 45, 60, RECT);
+  expect(f).not.toBeNull();
+  // midpoint y = 90 of 126 → the flap is the bottom 28.6% of the card
+  expect(f!.clip).toContain("71.4%");
+  expect(f!.angle).toBeCloseTo(0);
+  expect(f!.progress).toBeGreaterThan(0);
 });
 
-test("the bottom edge peels straight up — the classic squeeze", () => {
-  const g = gripAt(45, 120, RECT); // middle of the bottom edge
-  expect(g.grip).toBe("bottom");
-  expect(g.dirX).toBe(0);
-  expect(g.dirY).toBe(-1);
-  // a straight-up drag is full-speed progress: nothing lost to projection
-  expect(g.reach).toBeCloseTo(126 * 0.8);
+test("grabbing mid-card folds from that exact point, not a corner", () => {
+  const f = foldFrom(45, 100, 45, 40, RECT);
+  // crease at y = 70 → 55.6%: the fold tracks the grab, wherever it was
+  expect(f!.clip).toContain("55.6%");
 });
 
-test("the sides peel straight across", () => {
-  const left = gripAt(5, 63, RECT); // middle of the left edge
-  expect(left.grip).toBe("left");
-  expect(left.dirX).toBe(1);
-  expect(left.dirY).toBe(0);
-
-  const right = gripAt(85, 63, RECT);
-  expect(right.grip).toBe("right");
-  expect(right.dirX).toBe(-1);
-  expect(right.dirY).toBe(0);
+test("a slanted pull creases on the slant", () => {
+  const f = foldFrom(85, 120, 30, 60, RECT); // near the br corner, pulled up-left
+  expect(f!.clip).toMatch(/^polygon\(/);
+  expect(f!.angle).toBeLessThan(0); // the crease leans with the drag
 });
 
-test("the dead middle bends from the nearest horizontal edge", () => {
-  expect(gripAt(45, 70, RECT).grip).toBe("bottom"); // lower half
-  expect(gripAt(45, 55, RECT).grip).toBe("top"); // upper half
+test("progress grows with the pull", () => {
+  const short = foldFrom(45, 120, 45, 100, RECT)!;
+  const long = foldFrom(45, 120, 45, 30, RECT)!;
+  expect(long.progress).toBeGreaterThan(short.progress);
 });
 
-test("the top edge peels straight down", () => {
-  const g = gripAt(45, 5, RECT);
-  expect(g.grip).toBe("top");
-  expect(g.dirX).toBe(0);
-  expect(g.dirY).toBe(1);
+test("pulling away from the card folds nothing", () => {
+  expect(foldFrom(45, 120, 45, 170, RECT)).toBeNull(); // straight down, off the felt
+});
+
+test("degenerate gestures fold nothing", () => {
+  expect(foldFrom(45, 120, 45, 120, RECT)).toBeNull(); // no travel
+  expect(foldFrom(0, 0, 10, 10, { left: 0, top: 0, width: 0, height: 0 })).toBeNull();
+});
+
+test("a peeked card at rest holds a bottom-edge bend", () => {
+  expect(HELD_FOLD.clip).toMatch(/^polygon\(/);
+  expect(HELD_FOLD.angle).toBeCloseTo(0);
 });

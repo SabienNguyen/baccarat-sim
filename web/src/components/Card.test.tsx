@@ -9,7 +9,8 @@ test("renders a face-down back with no peel until squeezed", () => {
 });
 
 test("a squeezed face-down card shows the fold but reveals nothing", () => {
-  const { container } = render(<Card card="FaceDown" bend={0.4} />);
+  const fold = { clip: "polygon(0% 70%, 100% 70%, 100% 100%, 0% 100%)", angle: 0, progress: 0.4 };
+  const { container } = render(<Card card="FaceDown" fold={fold} />);
   expect(container.querySelector(".card-peel-under")).not.toBeNull();
   expect(screen.queryByText(/[♠♥♦♣]/)).not.toBeInTheDocument();
 });
@@ -41,8 +42,13 @@ test("a court card shows a double-ended figure instead of pips", () => {
   expect(container.querySelectorAll(".card-court-half")).toHaveLength(2); // mirrored figure
 });
 
-test("an edge grip peels a straight strip back", () => {
-  const { container } = render(<Card card="FaceDown" bend={0.4} grip="bottom" />);
-  expect(container.querySelector(".card-peel-under--bottom")).not.toBeNull();
-  expect(container.querySelector(".card-peel-shade--bottom")).not.toBeNull();
+test("a live fold clips exactly where the squeeze says", () => {
+  const fold = {
+    clip: "polygon(100.0% 71.4%, 100.0% 100.0%, 0.0% 100.0%, 0.0% 71.4%)",
+    angle: 0,
+    progress: 0.4,
+  };
+  const { container } = render(<Card card="FaceDown" fold={fold} />);
+  const peel = container.querySelector<HTMLElement>(".card-peel-under");
+  expect(peel?.style.clipPath).toBe(fold.clip);
 });

@@ -119,81 +119,23 @@
   transform: rotate(180deg);
 }
 
-/* --- the squeeze peel: the corner curling back as you bend it --- */
+/* --- the squeeze peel: the stock bending back along the live crease --- */
 .card-peel-under {
   position: absolute;
   inset: 0;
+  background: #f9f4e6; /* card stock under the fold */
   filter: drop-shadow(2px 2px 3px rgba(0, 0, 0, 0.45));
-}
-/* card stock under the fold */
-.card-peel-under--tl {
-  background: #f9f4e6;
-  border-radius: 6px 0 0 0;
-}
-.card-peel-under--tr {
-  background: #f9f4e6;
-  border-radius: 0 6px 0 0;
-}
-.card-peel-under--bl {
-  background: #f9f4e6;
-  border-radius: 0 0 0 6px;
-}
-.card-peel-under--br {
-  background: #f9f4e6;
-  border-radius: 0 0 6px 0;
-}
-/* edge peels: a straight strip of stock folding back */
-.card-peel-under--top {
-  background: #f9f4e6;
-  border-radius: 6px 6px 0 0;
-}
-.card-peel-under--bottom {
-  background: #f9f4e6;
-  border-radius: 0 0 6px 6px;
-}
-.card-peel-under--left {
-  background: #f9f4e6;
-  border-radius: 6px 0 0 6px;
-}
-.card-peel-under--right {
-  background: #f9f4e6;
-  border-radius: 0 6px 6px 0;
 }
 /* the real printed face showing through the fold */
 .card-peel-face {
   position: absolute;
   inset: 0;
 }
-/* curvature: brightness rolling into shadow at the crease */
+/* curvature shading: the gradient angle is computed from the drag */
 .card-peel-shade {
   position: absolute;
   inset: 0;
   pointer-events: none;
-}
-.card-peel-shade--tl {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--tr {
-  background: linear-gradient(225deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--bl {
-  background: linear-gradient(45deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--br {
-  background: linear-gradient(315deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-/* edge peels shade straight toward their crease */
-.card-peel-shade--top {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--bottom {
-  background: linear-gradient(0deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--left {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
-}
-.card-peel-shade--right {
-  background: linear-gradient(270deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%);
 }
 
 /* --- the deal: cards slide in from the shoe, faces snap over --- */

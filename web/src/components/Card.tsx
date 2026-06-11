@@ -152,105 +152,54 @@ function FaceContent({ rank, suit }: { rank: Rank; suit: Suit }) {
   );
 }
 
-import type { PeelGrip } from "../squeeze";
-
-export type { PeelGrip };
+import { HELD_FOLD, type Fold } from "../squeeze";
 
 interface CardProps {
   card: CardView;
-  /** 0..1 bend progress while squeezing; drives the visible peel. */
-  bend?: number;
-  /** Where the player grabbed; the peel folds from there. */
-  grip?: PeelGrip;
+  /** The live fold while fingers are on the card; a peeked card at rest
+   *  holds a default bottom-edge bend. */
+  fold?: Fold | null;
 }
 
-/** Clip-path for a fold of `size`: corner grips fold a triangle, edge grips
- *  peel a straight strip back — the long-edge squeeze. */
-function foldClip(grip: PeelGrip, size: string): string {
-  switch (grip) {
-    case "tl":
-      return `polygon(0 0, ${size} 0, 0 ${size})`;
-    case "tr":
-      return `polygon(calc(100% - ${size}) 0, 100% 0, 100% ${size})`;
-    case "bl":
-      return `polygon(0 calc(100% - ${size}), 0 100%, ${size} 100%)`;
-    case "br":
-      return `polygon(100% calc(100% - ${size}), 100% 100%, calc(100% - ${size}) 100%)`;
-    case "top":
-      return `polygon(0 0, 100% 0, 100% ${size}, 0 ${size})`;
-    case "bottom":
-      return `polygon(0 calc(100% - ${size}), 100% calc(100% - ${size}), 100% 100%, 0 100%)`;
-    case "left":
-      return `polygon(0 0, ${size} 0, ${size} 100%, 0 100%)`;
-    case "right":
-      return `polygon(calc(100% - ${size}) 0, 100% 0, 100% 100%, calc(100% - ${size}) 100%)`;
-  }
-}
-
-/** Tilt direction so the grabbed spot visibly lifts. */
-const TILT: Record<PeelGrip, number> = {
-  tl: -4,
-  tr: 4,
-  bl: 3,
-  br: -3,
-  top: 0,
-  bottom: 0,
-  left: -2,
-  right: 2,
-};
-
-/** The squeezed fold: the card stock curling back as you bend it. */
-function Peel({
-  bend,
-  grip,
-  children,
-}: {
-  bend: number;
-  grip: PeelGrip;
-  children?: ReactNode;
-}) {
-  if (bend <= 0) return null;
-  // edge strips read sooner than corner triangles, so they grow a bit slower
-  const corner = grip.length === 2;
-  const size = corner
-    ? `${Math.round(16 + bend * 70)}%`
-    : `${Math.round(12 + bend * 58)}%`;
+/** The squeezed fold: the card stock bending back along the crease. */
+function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
   return (
-    <span
-      className={`card-peel-under card-peel-under--${grip}`}
-      style={{ clipPath: foldClip(grip, size) }}
-    >
+    <span className="card-peel-under" style={{ clipPath: fold.clip }}>
       {children}
-      {/* curvature shading toward the crease */}
-      <span className={`card-peel-shade card-peel-shade--${grip}`} />
+      {/* curvature: brightness rolling into shadow at the crease */}
+      <span
+        className="card-peel-shade"
+        style={{
+          background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%)`,
+        }}
+      />
     </span>
   );
 }
 
-export function Card({ card, bend = 0, grip = "tl" }: CardProps) {
-  // The whole card tilts and lifts a little while it's being squeezed.
-  const squeeze =
-    bend > 0
-      ? {
-          transform: `rotate(${(TILT[grip] * bend).toFixed(2)}deg) translateY(${(-bend * 6).toFixed(1)}px)`,
-        }
-      : undefined;
+export function Card({ card, fold = null }: CardProps) {
+  // The whole card tilts and lifts a little while it's being squeezed:
+  // the lean follows the drag direction, the lift follows the bend.
+  const squeeze = fold
+    ? {
+        transform: `rotate(${(-3 * Math.sin((fold.angle * Math.PI) / 180) * fold.progress).toFixed(2)}deg) translateY(${(-fold.progress * 6).toFixed(1)}px)`,
+      }
+    : undefined;
 
   if (card === "FaceDown") {
     return (
       <div key="back" className="card card-back" aria-label="face-down card" style={squeeze}>
         {/* the fold grows, but reveals nothing yet */}
-        <Peel bend={bend} grip={grip} />
+        {fold && <Peel fold={fold} />}
       </div>
     );
   }
 
   if ("Peeked" in card) {
     const { suit, rank } = card.Peeked.sliver;
-    const held = Math.max(bend, 0.35);
     return (
       <div key="back" className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
-        <Peel bend={held} grip={grip}>
+        <Peel fold={fold ?? HELD_FOLD}>
           {/* the real printed face under the fold: pip edges, legs, the index */}
           <span className="card-peel-face" data-color={suitColor(suit)}>
             <FaceContent rank={rank} suit={suit} />

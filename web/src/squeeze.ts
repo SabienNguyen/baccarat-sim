@@ -12,52 +12,83 @@ export function actionForProgress(progress: number): SqueezeAction {
   return "none";
 }
 
-/** Where the card was gripped: a corner fold or a straight edge peel. */
-export type PeelGrip = "tl" | "tr" | "bl" | "br" | "top" | "bottom" | "left" | "right";
+/** A live fold: where the card stock has bent back, and how far. */
+export interface Fold {
+  /** CSS clip-path polygon for the folded-back region, in % of the card. */
+  clip: string;
+  /** CSS gradient angle (deg) running from the flap edge toward the crease. */
+  angle: number;
+  /** 0..1 — drives the peek/reveal thresholds. */
+  progress: number;
+}
 
-/** Drag geometry: where the card was grabbed and the direction that peels. */
-export interface Grip {
-  grip: PeelGrip;
-  /** Unit vector the drag must follow for the fold to grow. */
-  dirX: number;
-  dirY: number;
-  /** Pointer travel (px) along that vector for a full peel. */
-  reach: number;
+interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 }
 
 /**
- * Map a grab point to its peel. The face splits into a 3×3 grid: corner
- * cells fold on the diagonal, edge cells peel straight across — the classic
- * long-edge squeeze — and the dead middle bends from the nearest horizontal
- * edge, so every grip follows the finger instead of snapping to a corner.
+ * The fold for a pinch at (gx, gy) dragged to (fx, fy), like real card
+ * stock: the crease is the perpendicular bisector of grab→finger, and the
+ * flap is whatever part of the card got left on the grab's side of it. No
+ * zones, no corners — the bend happens exactly where the fingers are.
+ *
+ * Null when there is nothing to fold: no travel, a degenerate rect, or a
+ * pull away from the card (that lifts the card, it doesn't bend it).
  */
-export function gripAt(
-  px: number,
-  py: number,
-  rect: { left: number; top: number; width: number; height: number },
-): Grip {
-  const fx = (px - rect.left) / rect.width;
-  const fy = (py - rect.top) / rect.height;
-  const col = fx < 1 / 3 ? 0 : fx < 2 / 3 ? 1 : 2;
-  const row = fy < 1 / 3 ? 0 : fy < 2 / 3 ? 1 : 2;
+export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: Rect): Fold | null {
+  const { width: w, height: h } = rect;
+  if (w === 0 || h === 0) return null;
+  const g = { x: gx - rect.left, y: gy - rect.top };
+  const nx = fx - rect.left - g.x;
+  const ny = fy - rect.top - g.y;
+  const len = Math.hypot(nx, ny);
+  if (len < 1) return null;
+  // folding means pulling toward the card, not off it
+  const cx = w / 2 - g.x;
+  const cy = h / 2 - g.y;
+  if (nx * cx + ny * cy <= 0 && Math.hypot(cx, cy) > 1) return null;
 
-  const top: Grip = { grip: "top", dirX: 0, dirY: 1, reach: rect.height * 0.8 };
-  const bottom: Grip = { grip: "bottom", dirX: 0, dirY: -1, reach: rect.height * 0.8 };
-  if (col === 1) return row === 0 || (row === 1 && fy < 0.5) ? top : bottom;
-  if (row === 1) {
-    return col === 0
-      ? { grip: "left", dirX: 1, dirY: 0, reach: rect.width * 0.85 }
-      : { grip: "right", dirX: -1, dirY: 0, reach: rect.width * 0.85 };
+  // the crease: every card point still closer to the grab than the finger
+  // is flap. Clip the card rectangle to that half-plane.
+  const c = nx * ((g.x + g.x + nx) / 2) + ny * ((g.y + g.y + ny) / 2);
+  const side = (x: number, y: number) => nx * x + ny * y - c;
+  const corners = [
+    { x: 0, y: 0 },
+    { x: w, y: 0 },
+    { x: w, y: h },
+    { x: 0, y: h },
+  ];
+  const flap: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % corners.length];
+    const da = side(a.x, a.y);
+    const db = side(b.x, b.y);
+    if (da <= 0) flap.push(a);
+    if (da < 0 !== db < 0) {
+      const t = da / (da - db);
+      flap.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
   }
+  if (flap.length < 3) return null;
 
-  const right = col === 2;
-  const low = row === 2;
-  const diag = Math.hypot(rect.width, rect.height);
+  const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
   return {
-    grip: right && low ? "br" : right ? "tr" : low ? "bl" : "tl",
-    // toward the opposite corner: the fold chases the finger across the card
-    dirX: (right ? -rect.width : rect.width) / diag,
-    dirY: (low ? -rect.height : rect.height) / diag,
-    reach: diag * 0.8,
+    clip: `polygon(${flap.map((p) => `${pct(p.x, w)} ${pct(p.y, h)}`).join(", ")})`,
+    // CSS gradient angles: 0deg points up, clockwise from there
+    angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
+    progress: Math.min(len / (Math.hypot(w, h) * 0.85), 1),
   };
 }
+
+/** The bend a peeked card holds at rest: a thumb's pull up from the bottom.
+ *  Computed from a vertical drag, so the % clip fits any card size. */
+export const HELD_FOLD: Fold = foldFrom(45, 123, 45, 56, {
+  left: 0,
+  top: 0,
+  width: 90,
+  height: 126,
+})!;
