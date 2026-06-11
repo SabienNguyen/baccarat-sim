@@ -46,6 +46,8 @@ test("a peeked card folds back to show the real face under the corner", () => {
   expect(face!.style.transform).toBe("");
   expect(face!.style.top).not.toBe("");
   expect(container.querySelectorAll(".card-peel-flap .card-pip")).toHaveLength(9);
+  // the squeezer's thumbs cover the corner indices: pips only on the flap
+  expect(container.querySelectorAll(".card-peel-flap .card-index")).toHaveLength(0);
   // nothing hides under the lift but the table
   expect(container.querySelector(".card-peel-under .card-pip")).toBeNull();
 });

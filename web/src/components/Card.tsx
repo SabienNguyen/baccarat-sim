@@ -109,20 +109,34 @@ function suitColor(suit: Suit): "red" | "black" {
   return suit === "Hearts" || suit === "Diamonds" ? "red" : "black";
 }
 
-/** The printed face of a card: corner indices plus pips or a court figure. */
-function FaceContent({ rank, suit }: { rank: Rank; suit: Suit }) {
+/** The printed face of a card: corner indices plus pips or a court figure.
+ *  `coverIndices` is the squeezer's thumbs: during a peel the corner
+ *  numbers stay hidden — you read the pips, the rank waits for the flip. */
+function FaceContent({
+  rank,
+  suit,
+  coverIndices = false,
+}: {
+  rank: Rank;
+  suit: Suit;
+  coverIndices?: boolean;
+}) {
   const pips = PIP_LAYOUT[rank];
   const court = COURT_GLYPH[rank];
   return (
     <>
-      <span className="card-index card-index--tl">
-        <span className="card-rank">{RANK_SHORT[rank]}</span>
-        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
-      </span>
-      <span className="card-index card-index--br">
-        <span className="card-rank">{RANK_SHORT[rank]}</span>
-        <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
-      </span>
+      {!coverIndices && (
+        <>
+          <span className="card-index card-index--tl">
+            <span className="card-rank">{RANK_SHORT[rank]}</span>
+            <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
+          </span>
+          <span className="card-index card-index--br">
+            <span className="card-rank">{RANK_SHORT[rank]}</span>
+            <span className="card-index-suit">{SUIT_GLYPH[suit]}</span>
+          </span>
+        </>
+      )}
       {pips && (
         <span className="card-pips">
           {pips.map(([x, y], i) => (
@@ -228,9 +242,10 @@ export function Card({ card, fold = null }: CardProps) {
     return (
       <div key="back" className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
         <Peel fold={fold ?? HELD_FOLD}>
-          {/* the real printed face under the fold: pip edges, legs, the index */}
+          {/* the real printed face on the flap: pip edges and legs only —
+              the thumbs cover the indices until the card turns */}
           <span className="card-peel-face" data-color={suitColor(suit)}>
-            <FaceContent rank={rank} suit={suit} />
+            <FaceContent rank={rank} suit={suit} coverIndices />
           </span>
         </Peel>
       </div>
