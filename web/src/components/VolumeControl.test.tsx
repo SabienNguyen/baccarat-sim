@@ -44,5 +44,14 @@ test("dragging the slider while muted unmutes", () => {
   fireEvent.change(screen.getByRole("slider", { name: "Volume" }), {
     target: { value: "30" },
   });
-  expect(loadAudioSettings()).toEqual({ volume: 0.3, muted: false });
+  expect(loadAudioSettings()).toEqual({ volume: 0.3, muted: false, music: true });
+});
+
+test("the music note toggles and persists the lounge loop", async () => {
+  const user = userEvent.setup();
+  render(<VolumeControl />);
+  await user.click(screen.getByRole("button", { name: "Turn music off" }));
+  expect(loadAudioSettings().music).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Turn music on" }));
+  expect(loadAudioSettings().music).toBe(true);
 });

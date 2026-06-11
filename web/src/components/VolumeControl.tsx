@@ -4,7 +4,7 @@ import {
   saveAudioSettings,
   type AudioSettings,
 } from "../audio/settings";
-import { setMuted, setVolume } from "../audio/sfx";
+import { setMuted, setMusicEnabled, setVolume } from "../audio/sfx";
 import "./volume.css";
 
 /** Speaker toggle + slider. Applies immediately, persists across visits. */
@@ -16,6 +16,7 @@ export function VolumeControl() {
     saveAudioSettings(next);
     setVolume(next.volume);
     setMuted(next.muted);
+    setMusicEnabled(next.music);
   };
 
   const silent = settings.muted || settings.volume === 0;
@@ -29,6 +30,16 @@ export function VolumeControl() {
         onClick={() => update({ ...settings, muted: !settings.muted })}
       >
         {silent ? "🔇" : "🔊"}
+      </button>
+      <button
+        type="button"
+        className="volume-music"
+        data-on={settings.music}
+        aria-label={settings.music ? "Turn music off" : "Turn music on"}
+        aria-pressed={settings.music}
+        onClick={() => update({ ...settings, music: !settings.music })}
+      >
+        ♪
       </button>
       <input
         type="range"

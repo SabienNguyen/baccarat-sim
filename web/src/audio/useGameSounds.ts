@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import type { GameState } from "../store/gameStore";
-import { playSfx, type SfxName } from "./sfx";
+import { playSfx, startAmbience, stopAmbience, type SfxName } from "./sfx";
 
 function stagedCount(s: GameState): number {
   return s.stagedChips.reduce((n, chips) => n + chips.length, 0);
@@ -40,16 +40,20 @@ export function soundsFor(prev: GameState, next: GameState): SfxName[] {
   return out;
 }
 
-/** Subscribe a table store to the speaker. Works for local and remote play. */
+/** Subscribe a table store to the speaker, and run the casino-floor bed
+ *  (murmur + lounge loop) for as long as the table is mounted. */
 export function useGameSounds(
   store: StoreApi<GameState>,
   play: (name: SfxName) => void = playSfx,
 ): void {
-  useEffect(
-    () =>
-      store.subscribe((state, prev) => {
-        for (const name of soundsFor(prev, state)) play(name);
-      }),
-    [store, play],
-  );
+  useEffect(() => {
+    startAmbience();
+    const unsubscribe = store.subscribe((state, prev) => {
+      for (const name of soundsFor(prev, state)) play(name);
+    });
+    return () => {
+      unsubscribe();
+      stopAmbience();
+    };
+  }, [store, play]);
 }

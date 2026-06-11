@@ -3,7 +3,8 @@
   align-items: center;
   gap: 8px;
 }
-.volume-mute {
+.volume-mute,
+.volume-music {
   font-size: 14px;
   line-height: 1;
   padding: 4px 6px;
@@ -11,6 +12,12 @@
   border: 2px solid var(--ink);
   border-radius: 6px;
   cursor: pointer;
+}
+.volume-music {
+  color: var(--gold);
+}
+.volume-music[data-on="false"] {
+  color: var(--panel-bevel-lo);
 }
 .volume-slider {
   flex: 1;

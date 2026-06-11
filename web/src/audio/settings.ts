@@ -4,9 +4,11 @@ export interface AudioSettings {
   /** Master volume, 0..1. */
   volume: number;
   muted: boolean;
+  /** The lounge loop — separate toggle, background music divides opinion. */
+  music: boolean;
 }
 
-export const DEFAULT_AUDIO: AudioSettings = { volume: 0.5, muted: false };
+export const DEFAULT_AUDIO: AudioSettings = { volume: 0.5, muted: false, music: true };
 
 /**
  * Persist the player's sound preferences across reloads. Guarded like
@@ -24,7 +26,7 @@ export function loadAudioSettings(
       typeof parsed.volume === "number" && Number.isFinite(parsed.volume)
         ? Math.min(1, Math.max(0, parsed.volume))
         : DEFAULT_AUDIO.volume;
-    return { volume, muted: parsed.muted === true };
+    return { volume, muted: parsed.muted === true, music: parsed.music !== false };
   } catch {
     return DEFAULT_AUDIO;
   }
