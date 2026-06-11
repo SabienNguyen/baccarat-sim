@@ -43,7 +43,8 @@ export const TABLES: TableSpec[] = [
     blurb: "The private salon",
     starting_bankroll: 25_000_000, // $250,000
     table_min: 50_000, // $500
-    table_max: 10_000_000, // $100,000
+    // the salon posts a limit bigger than the buy-in — earn your way up to it
+    table_max: 50_000_000, // $500,000 per spot, per hand
     denoms: [10000, 50000, 100000, 500000, 2500000, 10000000], // $100 ... $100,000
     goal: 250_000_000, // $2,500,000
   },

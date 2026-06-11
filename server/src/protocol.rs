@@ -21,7 +21,7 @@ impl Tier {
         match self {
             Tier::Low => (100, 50_000, 50_000),
             Tier::Mid => (2_500, 500_000, 1_000_000),
-            Tier::High => (50_000, 10_000_000, 25_000_000),
+            Tier::High => (50_000, 50_000_000, 25_000_000),
         }
     }
 }
@@ -89,6 +89,6 @@ mod tests {
     fn tier_stakes_match_the_web_tables() {
         assert_eq!(Tier::Low.stakes(), (100, 50_000, 50_000));
         assert_eq!(Tier::Mid.stakes(), (2_500, 500_000, 1_000_000));
-        assert_eq!(Tier::High.stakes(), (50_000, 10_000_000, 25_000_000));
+        assert_eq!(Tier::High.stakes(), (50_000, 50_000_000, 25_000_000));
     }
 }

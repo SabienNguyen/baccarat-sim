@@ -197,8 +197,10 @@ impl Session {
         if amount < table_min {
             return Err(CommandError::BetBelowMinimum { min: table_min, got: amount });
         }
-        if amount > table_max {
-            return Err(CommandError::BetAboveMaximum { max: table_max, got: amount });
+        // the posted limit binds the whole stack on a spot, not each chip
+        let on_spot: i64 = bets.iter().filter(|b| b.kind == kind).map(|b| b.amount).sum();
+        if on_spot + amount > table_max {
+            return Err(CommandError::BetAboveMaximum { max: table_max, got: on_spot + amount });
         }
         let staked: i64 = bets.iter().map(|b| b.amount).sum();
         if staked + amount > bankroll {
@@ -497,6 +499,17 @@ mod tests {
         let mut s = Session::new(cfg());
         let err = s.place_bet(BetKind::Main(BetSpot::Banker), 60_000).unwrap_err();
         assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
+    }
+
+    #[test]
+    fn stacked_bets_on_one_spot_cannot_pass_the_table_max() {
+        // chips placed one at a time still answer to the posted limit
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 30_000).unwrap();
+        let err = s.place_bet(BetKind::Main(BetSpot::Player), 30_000).unwrap_err();
+        assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
+        // the limit is per spot: another wager has its own headroom
+        s.place_bet(BetKind::Main(BetSpot::Banker), 30_000).unwrap();
     }
 
     #[test]

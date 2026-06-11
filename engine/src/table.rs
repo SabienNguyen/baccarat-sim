@@ -215,8 +215,11 @@ impl Table {
         if amount < min {
             return Err(CommandError::BetBelowMinimum { min, got: amount }.into());
         }
-        if amount > max {
-            return Err(CommandError::BetAboveMaximum { max, got: amount }.into());
+        // the posted limit binds the whole stack on a spot, not each chip
+        let on_spot: i64 =
+            player.bets.iter().filter(|b| b.kind == kind).map(|b| b.amount).sum();
+        if on_spot + amount > max {
+            return Err(CommandError::BetAboveMaximum { max, got: on_spot + amount }.into());
         }
         let staked: i64 = player.bets.iter().map(|b| b.amount).sum();
         if staked + amount > player.bankroll {
@@ -700,6 +703,22 @@ mod tests {
         t.reveal(a, Side::Player, 0).unwrap();
         let vb = t.view_for(b).unwrap();
         assert!(matches!(vb.player.cards[0], crate::session::CardView::FaceUp(_)));
+    }
+
+    #[test]
+    fn stacked_bets_on_one_spot_cannot_pass_the_table_max() {
+        let mut t = table(); // max 1_000_000
+        let a = t.join("a", 5_000_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 600_000).unwrap();
+        let err = t.place_bet(a, BetKind::Main(BetSpot::Player), 600_000).unwrap_err();
+        assert!(matches!(
+            err,
+            TableError::Command(CommandError::BetAboveMaximum { max: 1_000_000, got: 1_200_000 })
+        ));
+        // each seat answers for its own stack, and other spots have headroom
+        let b = t.join("b", 5_000_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 600_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 600_000).unwrap();
     }
 
     #[test]

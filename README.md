@@ -12,7 +12,7 @@ validated against published casino probabilities.
 ## The game
 
 - **Three tables, one ladder** — Low Stakes ($1–$500), Mid Roller ($25–$5k),
-  High Roller ($500–$100k). Each has its own buy-in, its own chip set
+  High Roller ($500–$500k: the salon posts a limit bigger than the buy-in). Each has its own buy-in, its own chip set
   (the salon stocks $25k and $100k plates), and a **run goal**: beat the table
   by turning the buy-in into 10×. Each table's bankroll persists between visits.
 - **The squeeze** — cards deal face down in real coup order (no third-card

@@ -6,7 +6,8 @@ test("three tiers, each coherent: min < max, buy-in covers many minimum bets", (
   for (const t of TABLES) {
     expect(t.table_min).toBeLessThan(t.table_max);
     expect(t.starting_bankroll).toBeGreaterThanOrEqual(t.table_min * 100);
-    expect(t.table_max).toBeLessThanOrEqual(t.starting_bankroll);
+    // a posted limit can outsize the buy-in (the salon does), never the goal
+    expect(t.table_max).toBeLessThanOrEqual(t.goal);
   }
 });
 
