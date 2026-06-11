@@ -65,3 +65,18 @@ test("a peeked card at rest holds a bottom-edge bend", () => {
   expect(HELD_FOLD.clip).toMatch(/^polygon\(/);
   expect(HELD_FOLD.angle).toBeCloseTo(0);
 });
+
+test("a modest pinch reads the edge pips but keeps the corner index covered", () => {
+  // pinch the bottom edge center, pull up 40px: the bend is widest at the
+  // fingers and closes toward the corners — where the rank index lives
+  const f = foldFrom(45, 123, 45, 83, RECT);
+  expect(f).not.toBeNull();
+  expect(f!.clip).not.toContain("0.0% 100.0%");
+  expect(f!.clip).not.toContain("100.0% 100.0%");
+});
+
+test("a deep pull opens the whole edge, corners and all", () => {
+  const f = foldFrom(45, 123, 45, 10, RECT)!;
+  expect(f.clip).toContain("0.0% 100.0%");
+  expect(f.clip).toContain("100.0% 100.0%");
+});

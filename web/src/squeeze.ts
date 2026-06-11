@@ -29,11 +29,39 @@ interface Rect {
   height: number;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+/** Sutherland–Hodgman: clip a polygon to the half-plane ax·x + ay·y ≤ c. */
+function clipHalf(poly: Point[], ax: number, ay: number, c: number): Point[] {
+  const out: Point[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const da = ax * a.x + ay * a.y - c;
+    const db = ax * b.x + ay * b.y - c;
+    if (da <= 0) out.push(a);
+    if (da < 0 !== db < 0) {
+      const t = da / (da - db);
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+  }
+  return out;
+}
+
+/** Tangent sample points along the bend's parabola, as fractions of its
+ *  half-width. The half-planes they define approximate the curved opening. */
+const BEND_TANGENTS = [-0.9, -0.6, -0.3, 0, 0.3, 0.6, 0.9];
+
 /**
  * The fold for a pinch at (gx, gy) dragged to (fx, fy), like real card
- * stock: the crease is the perpendicular bisector of grab→finger, and the
- * flap is whatever part of the card got left on the grab's side of it. No
- * zones, no corners — the bend happens exactly where the fingers are.
+ * stock: the crease sits at the midpoint of grab→finger, and the opening
+ * is a bend — widest at the fingers, curving closed toward the card's
+ * corners. Edge pips read first; the corner index stays covered until the
+ * pull goes deep. The curve is a parabola (apex on the crease), built by
+ * clipping the card to its tangent half-planes.
  *
  * Null when there is nothing to fold: no travel, a degenerate rect, or a
  * pull away from the card (that lifts the card, it doesn't bend it).
@@ -47,33 +75,36 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   const len = Math.hypot(nx, ny);
   if (len < 1) return null;
   // folding means pulling toward the card, not off it
-  const cx = w / 2 - g.x;
-  const cy = h / 2 - g.y;
-  if (nx * cx + ny * cy <= 0 && Math.hypot(cx, cy) > 1) return null;
+  const ccx = w / 2 - g.x;
+  const ccy = h / 2 - g.y;
+  if (nx * ccx + ny * ccy <= 0 && Math.hypot(ccx, ccy) > 1) return null;
 
-  // the crease: every card point still closer to the grab than the finger
-  // is flap. Clip the card rectangle to that half-plane.
-  const c = nx * ((g.x + g.x + nx) / 2) + ny * ((g.y + g.y + ny) / 2);
-  const side = (x: number, y: number) => nx * x + ny * y - c;
-  const corners = [
+  // local frame at the grab: v runs along the drag, u along the crease
+  const nux = nx / len;
+  const nuy = ny / len;
+  const ux = -nuy;
+  const uy = nux;
+  const apex = len / 2; // the crease depth: half the finger travel
+  const half = Math.max(len * 0.9, 20); // the opening's half-width
+
+  let flap: Point[] = [
     { x: 0, y: 0 },
     { x: w, y: 0 },
     { x: w, y: h },
     { x: 0, y: h },
   ];
-  const flap: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < corners.length; i++) {
-    const a = corners[i];
-    const b = corners[(i + 1) % corners.length];
-    const da = side(a.x, a.y);
-    const db = side(b.x, b.y);
-    if (da <= 0) flap.push(a);
-    if (da < 0 !== db < 0) {
-      const t = da / (da - db);
-      flap.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
-    }
+  for (const t of BEND_TANGENTS) {
+    // parabola v(u) = apex·(1 − (u/half)²), tangent at u₀ = t·half
+    const u0 = t * half;
+    const v0 = apex * (1 - t * t);
+    const slope = (-2 * apex * t) / half;
+    // v − v₀ ≤ slope·(u − u₀), rewritten over screen points
+    const ax = nux - slope * ux;
+    const ay = nuy - slope * uy;
+    const c = ax * g.x + ay * g.y + (v0 - slope * u0);
+    flap = clipHalf(flap, ax, ay, c);
+    if (flap.length < 3) return null;
   }
-  if (flap.length < 3) return null;
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
   return {
