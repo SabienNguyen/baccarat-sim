@@ -180,7 +180,9 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
         style={{
           clipPath: fold.flapClip,
           transformOrigin: fold.origin,
-          transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
+          // start at ~55°: steep enough to read as a bend, open enough
+          // that the flap is visible from the first pixels of pull
+          transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-55 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
         }}
       >
         {children && (
@@ -215,9 +217,9 @@ export function Card({ card, fold = null }: CardProps) {
     const ax = Math.cos(phi).toFixed(3);
     const ay = Math.sin(phi).toFixed(3);
     squeeze = {
-      transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.05 * p).toFixed(3)})`,
+      transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.02 * p).toFixed(3)})`,
       transformOrigin: `${(50 + 50 * Math.sin(phi)).toFixed(1)}% ${(50 - 50 * Math.cos(phi)).toFixed(1)}%`,
-      filter: `drop-shadow(0 ${(3 + 16 * p).toFixed(1)}px ${(2 + 9 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.45 - 0.15 * p).toFixed(2)}))`,
+      filter: `drop-shadow(0 ${(3 + 9 * p).toFixed(1)}px ${(2 + 6 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.4 - 0.18 * p).toFixed(2)}))`,
       zIndex: 3,
     };
   }

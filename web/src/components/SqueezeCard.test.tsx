@@ -109,3 +109,22 @@ test("a face-up card ignores interaction", async () => {
   expect(onPeek).not.toHaveBeenCalled();
   expect(onReveal).not.toHaveBeenCalled();
 });
+
+test("the fold measures the card itself, not its wrapper", () => {
+  render(<SqueezeCard card={faceDown} onPeek={vi.fn()} onReveal={vi.fn()} />);
+  const wrapper = screen.getByRole("button");
+  const card = wrapper.querySelector(".card")!;
+  const box = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => "" }) as DOMRect;
+  // the wrapper is bigger than the card (margins, baseline slack): clip
+  // percentages must come from the card's own box or the fold drifts off
+  // the finger
+  vi.spyOn(wrapper, "getBoundingClientRect").mockReturnValue(box(0, 0, 108, 154));
+  vi.spyOn(card as HTMLElement, "getBoundingClientRect").mockReturnValue(box(7, 7, 94, 140));
+  fireEvent.pointerDown(wrapper, { pointerId: 1, clientX: 54, clientY: 140 });
+  fireEvent.pointerMove(wrapper, { pointerId: 1, clientX: 54, clientY: 80 });
+  const under = wrapper.querySelector<HTMLElement>(".card-peel-under");
+  expect(under).not.toBeNull();
+  // grab (47,133) in card space pulled to (47,73): crease at y=103 of 140
+  expect(under!.style.clipPath).toContain("73.6%");
+});

@@ -23,7 +23,25 @@ function isPeeked(card: CardView): boolean {
 interface Grab {
   x: number;
   y: number;
-  rect: DOMRect;
+  rect: { left: number; top: number; width: number; height: number };
+}
+
+/** The card's padding box in viewport coordinates — the box the peel's
+ *  clip-path percentages actually resolve against. */
+function cardPaddingBox(wrapper: Element): Grab["rect"] {
+  const card = wrapper.querySelector(".card");
+  if (!card) return { left: 0, top: 0, width: 0, height: 0 };
+  const r = card.getBoundingClientRect();
+  const cs = typeof getComputedStyle !== "undefined" ? getComputedStyle(card) : null;
+  const edge = (v: string | undefined) => parseFloat(v ?? "") || 0;
+  const bl = edge(cs?.borderLeftWidth);
+  const bt = edge(cs?.borderTopWidth);
+  return {
+    left: r.left + bl,
+    top: r.top + bt,
+    width: Math.max(r.width - bl - edge(cs?.borderRightWidth), 0),
+    height: Math.max(r.height - bt - edge(cs?.borderBottomWidth), 0),
+  };
 }
 
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
@@ -89,7 +107,10 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     start.current = {
       x: e.clientX,
       y: e.clientY,
-      rect: e.currentTarget.getBoundingClientRect(),
+      // Measure the card's padding box, NOT this wrapper: the fold's clip
+      // percentages resolve against the peel spans (inset 0 inside the
+      // card's border), so any other box squashes the fold off the finger.
+      rect: cardPaddingBox(e.currentTarget),
     };
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;

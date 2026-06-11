@@ -120,11 +120,20 @@
 }
 
 /* --- the squeeze peel: the card itself bending up off the table --- */
-/* the table felt showing through where the card has lifted away */
+/* The table showing through where the card has lifted away: the same
+   fixed-attachment felt layers as the body, so the hole's gradients line
+   up with the real table around the card, under the card's shadow. */
 .card-peel-under {
   position: absolute;
   inset: 0;
-  background: linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.2)), var(--felt-deep);
+  background-color: var(--felt-deep);
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.14)),
+    radial-gradient(circle at 30% 20%, var(--felt-light), transparent 55%),
+    radial-gradient(circle at 75% 70%, var(--felt-light), transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04), transparent 60%);
+  background-attachment: scroll, fixed, fixed, fixed;
+  background-size: 100% 100%, 140% 140%, 160% 160%, 200% 200%;
 }
 /* the lifted card: stock-white underside, the face printed on it */
 .card-peel-flap {
@@ -134,10 +143,22 @@
   background: #f9f4e6;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
 }
-/* the printed face riding the flap (rotated 180° by the fold) */
+/* the printed face riding the flap (rotated 180° by the fold); it eases
+   in when the peek lands instead of popping mid-drag */
 .card-peel-flap-face {
   position: absolute;
   inset: 0;
+  animation: peel-face-in 180ms ease-out;
+}
+@keyframes peel-face-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-peel-flap-face {
+    animation: none;
+  }
 }
 /* the real printed face artwork */
 .card-peel-face {
