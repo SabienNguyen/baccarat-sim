@@ -175,13 +175,16 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
           }}
         />
       </span>
-      {/* the folded-over tongue of stock, its tip riding the finger;
-          shaded into shadow where it rolls over the crease */}
+      {/* the bent flap of stock, hinged in 3D at the crease: it stands
+          steeply on a light pull and folds flatter as the pull deepens,
+          its tip chasing the finger */}
       <span
         className="card-peel-flap"
         style={{
           clipPath: fold.flapClip,
           background: `linear-gradient(${fold.angle.toFixed(1)}deg, #cfc5a6 4%, #f2ecd9 45%, #fbf7ec 96%)`,
+          transformOrigin: fold.origin,
+          transform: `rotate3d(${Math.cos((fold.angle * Math.PI) / 180).toFixed(3)}, ${Math.sin((fold.angle * Math.PI) / 180).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
         }}
       />
     </>
@@ -202,6 +205,8 @@ export function Card({ card, fold = null }: CardProps) {
     squeeze = {
       transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.05 * p).toFixed(3)})`,
       transformOrigin: `${(50 + 50 * Math.sin(phi)).toFixed(1)}% ${(50 - 50 * Math.cos(phi)).toFixed(1)}%`,
+      // the bent flap inside lives in the same 3D space as the tilt
+      transformStyle: "preserve-3d" as const,
       filter: `drop-shadow(0 ${(3 + 16 * p).toFixed(1)}px ${(2 + 9 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.45 - 0.15 * p).toFixed(2)}))`,
       zIndex: 3,
     };

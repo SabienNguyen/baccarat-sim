@@ -19,6 +19,8 @@ export interface Fold {
   /** The folded-over flap itself: the revealed region mirrored across the
    *  crease, so its tip sits exactly under the pulling finger. */
   flapClip: string;
+  /** The crease point, as a CSS transform-origin — the flap's 3D hinge. */
+  origin: string;
   /** CSS gradient angle (deg) running from the flap edge toward the crease. */
   angle: number;
   /** 0..1 — drives the peek/reveal thresholds. */
@@ -123,6 +125,7 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   return {
     clip: poly(flap),
     flapClip: poly(mirrored),
+    origin: `${pct(g.x + apex * nux, w)} ${pct(g.y + apex * nuy, h)}`,
     // CSS gradient angles: 0deg points up, clockwise from there
     angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
     progress: Math.min(len / (Math.hypot(w, h) * 0.85), 1),

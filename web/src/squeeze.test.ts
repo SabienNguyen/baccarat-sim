@@ -96,3 +96,9 @@ test("the flap mirrors the opening across the crease", () => {
   expect(f.clip).toContain("55.6%");
   expect(f.flapClip).toContain("55.6%");
 });
+
+test("the fold knows its hinge: the crease point between grab and finger", () => {
+  const f = foldFrom(45, 120, 45, 60, RECT)!;
+  // crease at (45, 90) → the flap rotates up around this point
+  expect(f.origin).toBe("50.0% 71.4%");
+});
