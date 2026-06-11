@@ -143,22 +143,14 @@
   background: #f9f4e6;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
 }
-/* the printed face riding the flap (rotated 180° by the fold); it eases
-   in when the peek lands instead of popping mid-drag */
+/* The printed face riding the flap (rotated 180° by the fold).
+   NO animation/filter/will-change here: promoting this span to its own
+   compositor layer breaks the parent leaf's clip-path under the flap's
+   perspective transform in Chromium — the face then paints outside the
+   flap ("symbols floating off the peel"). */
 .card-peel-flap-face {
   position: absolute;
   inset: 0;
-  animation: peel-face-in 180ms ease-out;
-}
-@keyframes peel-face-in {
-  from {
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card-peel-flap-face {
-    animation: none;
-  }
 }
 /* the real printed face artwork */
 .card-peel-face {
