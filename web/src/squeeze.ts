@@ -133,7 +133,8 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     x: g.x + u * ux + v * nux,
     y: g.y + u * uy + v * nuy,
   });
-  const A = 0.95 * half;
+  // as wide as the opening: the flap IS the material that left the hole
+  const A = half;
   const leaf: Point[] = [];
   for (const t of BEND_TANGENTS) {
     const u = t * A;
@@ -141,7 +142,9 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   }
   for (const t of BEND_TANGENTS) {
     const u = -t * A; // walk back along the tip curve
-    leaf.push(pt(u, 2 * apex * (1 - (u / A) ** 2)));
+    // quartic: a broad flat end with rounded shoulders — the card's own
+    // straight edge folded over, not a tent peak
+    leaf.push(pt(u, 2 * apex * (1 - (u / A) ** 4)));
   }
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
