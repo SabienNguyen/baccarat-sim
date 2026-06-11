@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MouseEvent as ReactMouseEvent, FocusEvent as ReactFocusEvent } from "react";
 import type {
@@ -58,6 +58,17 @@ function RoadInfo({ term }: { term: string }) {
   );
 }
 
+/** Keep a scrolling road pinned to its newest column, like the pit display:
+ *  when the grid outgrows its window, the latest play stays in view. */
+function useFollowLatest(columnCount: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [columnCount]);
+  return ref;
+}
+
 function beadLabel(cell: BeadCell): string {
   const base =
     cell.outcome === "PlayerWin" ? "P" : cell.outcome === "BankerWin" ? "B" : "T";
@@ -86,10 +97,11 @@ export function BeadPlateView({ plate }: { plate: BeadPlate }) {
 }
 
 export function BigRoadView({ road }: { road: BigRoad }) {
+  const gridRef = useFollowLatest(road.columns.length);
   return (
     <div aria-label="Big Road" className="road big">
       <h4>Big Road <RoadInfo term="big-road" /></h4>
-      <div className="road-grid">
+      <div className="road-grid" ref={gridRef}>
         {road.columns.map((col, ci) => (
           <ul key={ci}>
             {col.map((cell, ri) => (
@@ -113,12 +125,13 @@ export function DerivedRoadView({
   road: DerivedRoad;
   term?: string;
 }) {
+  const gridRef = useFollowLatest(road.columns.length);
   return (
     <div aria-label={label} className="road derived">
       <h4>
         {label} {term && <RoadInfo term={term} />}
       </h4>
-      <div className="road-grid">
+      <div className="road-grid" ref={gridRef}>
         {road.columns.map((col, ci) => (
           <ul key={ci}>
             {col.map((mark: Mark, ri) => (
