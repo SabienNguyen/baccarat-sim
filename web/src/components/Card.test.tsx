@@ -9,9 +9,15 @@ test("renders a face-down back with no peel until squeezed", () => {
 });
 
 test("a squeezed face-down card shows the fold but reveals nothing", () => {
-  const fold = { clip: "polygon(0% 70%, 100% 70%, 100% 100%, 0% 100%)", angle: 0, progress: 0.4 };
+  const fold = {
+    clip: "polygon(0% 70%, 100% 70%, 100% 100%, 0% 100%)",
+    flapClip: "polygon(0% 70%, 100% 70%, 100% 40%, 0% 40%)",
+    angle: 0,
+    progress: 0.4,
+  };
   const { container } = render(<Card card="FaceDown" fold={fold} />);
   expect(container.querySelector(".card-peel-under")).not.toBeNull();
+  expect(container.querySelector(".card-peel-flap")).not.toBeNull();
   expect(screen.queryByText(/[♠♥♦♣]/)).not.toBeInTheDocument();
 });
 
@@ -45,6 +51,7 @@ test("a court card shows a double-ended figure instead of pips", () => {
 test("a live fold clips exactly where the squeeze says", () => {
   const fold = {
     clip: "polygon(100.0% 71.4%, 100.0% 100.0%, 0.0% 100.0%, 0.0% 71.4%)",
+    flapClip: "polygon(100.0% 71.4%, 100.0% 42.9%, 0.0% 42.9%, 0.0% 71.4%)",
     angle: 0,
     progress: 0.4,
   };

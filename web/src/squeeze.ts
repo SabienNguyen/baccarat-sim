@@ -14,8 +14,11 @@ export function actionForProgress(progress: number): SqueezeAction {
 
 /** A live fold: where the card stock has bent back, and how far. */
 export interface Fold {
-  /** CSS clip-path polygon for the folded-back region, in % of the card. */
+  /** CSS clip-path polygon for the revealed region, in % of the card. */
   clip: string;
+  /** The folded-over flap itself: the revealed region mirrored across the
+   *  crease, so its tip sits exactly under the pulling finger. */
+  flapClip: string;
   /** CSS gradient angle (deg) running from the flap edge toward the crease. */
   angle: number;
   /** 0..1 — drives the peek/reveal thresholds. */
@@ -106,9 +109,20 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     if (flap.length < 3) return null;
   }
 
+  // the folded-over flap: reflect the opening across the crease, a rigid
+  // motion that puts the grabbed edge exactly under the fingertip
+  const mirrored = flap.map((p) => {
+    const v = (p.x - g.x) * nux + (p.y - g.y) * nuy;
+    const d = 2 * (apex - v);
+    return { x: p.x + d * nux, y: p.y + d * nuy };
+  });
+
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
+  const poly = (pts: Point[]) =>
+    `polygon(${pts.map((p) => `${pct(p.x, w)} ${pct(p.y, h)}`).join(", ")})`;
   return {
-    clip: `polygon(${flap.map((p) => `${pct(p.x, w)} ${pct(p.y, h)}`).join(", ")})`,
+    clip: poly(flap),
+    flapClip: poly(mirrored),
     // CSS gradient angles: 0deg points up, clockwise from there
     angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
     progress: Math.min(len / (Math.hypot(w, h) * 0.85), 1),

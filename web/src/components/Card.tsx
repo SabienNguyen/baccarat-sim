@@ -164,16 +164,27 @@ interface CardProps {
 /** The squeezed fold: the card stock bending back along the crease. */
 function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
   return (
-    <span className="card-peel-under" style={{ clipPath: fold.clip }}>
-      {children}
-      {/* curvature: brightness rolling into shadow at the crease */}
+    <>
+      <span className="card-peel-under" style={{ clipPath: fold.clip }}>
+        {children}
+        {/* curvature: brightness rolling into shadow at the crease */}
+        <span
+          className="card-peel-shade"
+          style={{
+            background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%)`,
+          }}
+        />
+      </span>
+      {/* the folded-over tongue of stock, its tip riding the finger;
+          shaded into shadow where it rolls over the crease */}
       <span
-        className="card-peel-shade"
+        className="card-peel-flap"
         style={{
-          background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%)`,
+          clipPath: fold.flapClip,
+          background: `linear-gradient(${fold.angle.toFixed(1)}deg, #cfc5a6 4%, #f2ecd9 45%, #fbf7ec 96%)`,
         }}
       />
-    </span>
+    </>
   );
 }
 

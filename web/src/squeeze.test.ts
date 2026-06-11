@@ -80,3 +80,19 @@ test("a deep pull opens the whole edge, corners and all", () => {
   expect(f.clip).toContain("0.0% 100.0%");
   expect(f.clip).toContain("100.0% 100.0%");
 });
+
+test("the folded-back flap's tip lands exactly at the finger", () => {
+  // pinch the bottom edge itself (45,126), pull to (45,60): folding the
+  // edge over the crease puts the grabbed point right under the fingertip
+  const f = foldFrom(45, 126, 45, 60, RECT)!;
+  // y=126 mirrored across the crease at y=93 → y=60, the finger (47.6%)
+  expect(f.flapClip).toContain("47.6%");
+  expect(f.flapClip).toMatch(/^polygon\(/);
+});
+
+test("the flap mirrors the opening across the crease", () => {
+  const f = foldFrom(45, 100, 45, 40, RECT)!;
+  // opening apex at the crease y=70 stays the hinge: both clips share it
+  expect(f.clip).toContain("55.6%");
+  expect(f.flapClip).toContain("55.6%");
+});

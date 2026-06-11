@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { CardView } from "../engine/types";
 import { Card } from "./Card";
@@ -29,6 +29,37 @@ interface Grab {
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const [fold, setFold] = useState<Fold | null>(null);
   const start = useRef<Grab | null>(null);
+  const springRaf = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(springRaf.current), []);
+
+  /** Released card stock doesn't vanish — it springs flat with a small
+   *  flutter (a damped bounce re-bending once before it settles). */
+  function springBack(grab: Grab, fx: number, fy: number) {
+    cancelAnimationFrame(springRaf.current);
+    if (
+      typeof matchMedia !== "undefined" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setFold(null);
+      return;
+    }
+    const t0 = performance.now();
+    const TAU = 140; // ms — how fast the energy drains
+    const OMEGA = 0.013; // rad/ms — flat at ~120ms, one soft re-bend after
+    const step = (now: number) => {
+      const t = now - t0;
+      const s = Math.exp(-t / TAU) * Math.abs(Math.cos(OMEGA * t));
+      if (s < 0.02) {
+        setFold(null);
+        return;
+      }
+      const x = grab.x + (fx - grab.x) * s;
+      const y = grab.y + (fy - grab.y) * s;
+      setFold(foldFrom(grab.x, grab.y, x, y, grab.rect));
+      springRaf.current = requestAnimationFrame(step);
+    };
+    springRaf.current = requestAnimationFrame(step);
+  }
   const peekedThisGesture = useRef(false);
   const revealedThisGesture = useRef(false);
   const draggedThisGesture = useRef(false);
@@ -54,6 +85,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
 
   function handlePointerDown(e: ReactPointerEvent) {
     if (faceUp) return;
+    cancelAnimationFrame(springRaf.current);
     start.current = {
       x: e.clientX,
       y: e.clientY,
@@ -99,8 +131,14 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       draggedThisGesture.current ||
       peekedThisGesture.current ||
       revealedThisGesture.current;
+    const grab = start.current;
     start.current = null;
-    setFold(null);
+    // a revealed card flips face-up — no stock left to spring
+    if (!revealedThisGesture.current && fold !== null) {
+      springBack(grab, e.clientX, e.clientY);
+    } else {
+      setFold(null);
+    }
   }
 
   function advanceOneStep() {

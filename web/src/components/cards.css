@@ -137,6 +137,13 @@
   inset: 0;
   pointer-events: none;
 }
+/* the folded-over tongue floating above the felt */
+.card-peel-flap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+}
 
 /* --- the deal: cards slide in from the shoe, faces snap over --- */
 .card-dealt {
