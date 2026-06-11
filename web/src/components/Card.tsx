@@ -189,13 +189,23 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
 }
 
 export function Card({ card, fold = null }: CardProps) {
-  // The whole card tilts and lifts a little while it's being squeezed:
-  // the lean follows the drag direction, the lift follows the bend.
-  const squeeze = fold
-    ? {
-        transform: `rotate(${(-3 * Math.sin((fold.angle * Math.PI) / 180) * fold.progress).toFixed(2)}deg) translateY(${(-fold.progress * 6).toFixed(1)}px)`,
-      }
-    : undefined;
+  // While squeezed, the card comes off the table: it tips up around the
+  // edge opposite the pull (which stays resting on the felt), grows
+  // slightly toward the camera, and its shadow separates beneath it.
+  let squeeze;
+  if (fold) {
+    const phi = (fold.angle * Math.PI) / 180;
+    const p = fold.progress;
+    // the hinge axis runs along the crease; the grabbed side rises
+    const ax = Math.cos(phi).toFixed(3);
+    const ay = Math.sin(phi).toFixed(3);
+    squeeze = {
+      transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.05 * p).toFixed(3)})`,
+      transformOrigin: `${(50 + 50 * Math.sin(phi)).toFixed(1)}% ${(50 - 50 * Math.cos(phi)).toFixed(1)}%`,
+      filter: `drop-shadow(0 ${(3 + 16 * p).toFixed(1)}px ${(2 + 9 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.45 - 0.15 * p).toFixed(2)}))`,
+      zIndex: 3,
+    };
+  }
 
   if (card === "FaceDown") {
     return (

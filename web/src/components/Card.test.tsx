@@ -19,6 +19,12 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
   expect(container.querySelector(".card-peel-under")).not.toBeNull();
   expect(container.querySelector(".card-peel-flap")).not.toBeNull();
   expect(screen.queryByText(/[♠♥♦♣]/)).not.toBeInTheDocument();
+  // the card lifts off the felt: perspective tilt, hinged on the far edge,
+  // with the shadow separating beneath it
+  const card = container.querySelector<HTMLElement>(".card")!;
+  expect(card.style.transform).toContain("perspective(");
+  expect(card.style.transformOrigin).toBe("50.0% 0.0%"); // pull-up: top edge rests
+  expect(card.style.filter).toContain("drop-shadow");
 });
 
 test("a peeked card folds back to show the real face under the corner", () => {
