@@ -14,6 +14,9 @@ export function actionForProgress(progress: number): SqueezeAction {
 
 /** A live fold: where the card stock has bent back, and how far. */
 export interface Fold {
+  /** "edge": a clean side pull — the classic full-width straight fold.
+   *  "pinch": corners, semi-corners, diagonals — the parabolic bend. */
+  grip: "edge" | "pinch";
   /** CSS clip-path polygon for the revealed region, in % of the card. */
   clip: string;
   /** The lifted tongue of stock: a leaf grown from the crease arc (where
@@ -105,23 +108,53 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   // the pips must read before the rank gives itself away
   const half = Math.max(bend * 0.7, 18);
 
-  let flap: Point[] = [
+  // "Definitely pulling from the side": an axis-aligned pull that starts
+  // in the matching edge band, clear of the corners.
+  const ang = ((Math.atan2(nx, -ny) * 180) / Math.PI + 360) % 360;
+  const offAxis = Math.min(ang % 90, 90 - (ang % 90));
+  let edge = false;
+  if (offAxis <= 22) {
+    const axis = Math.round(ang / 90) % 4; // 0 up, 1 right, 2 down, 3 left
+    const band = 0.28;
+    const inBand =
+      axis === 0
+        ? g.y >= h * (1 - band)
+        : axis === 1
+          ? g.x <= w * band
+          : axis === 2
+            ? g.y <= h * band
+            : g.x >= w * (1 - band);
+    const cross = axis % 2 === 0 ? g.x / w : g.y / h;
+    edge = inBand && cross >= 0.2 && cross <= 0.8;
+  }
+
+  const rect4: Point[] = [
     { x: 0, y: 0 },
     { x: w, y: 0 },
     { x: w, y: h },
     { x: 0, y: h },
   ];
-  for (const t of BEND_TANGENTS) {
-    // parabola v(u) = apex·(1 − (u/half)²), tangent at u₀ = t·half
-    const u0 = t * half;
-    const v0 = apex * (1 - t * t);
-    const slope = (-2 * apex * t) / half;
-    // v − v₀ ≤ slope·(u − u₀), rewritten over screen points
-    const ax = nux - slope * ux;
-    const ay = nuy - slope * uy;
-    const c = ax * g.x + ay * g.y + (v0 - slope * u0);
-    flap = clipHalf(flap, ax, ay, c);
+  const cBase = nux * g.x + nuy * g.y;
+
+  let flap: Point[];
+  if (edge) {
+    // the classic side squeeze: a straight crease across the whole card
+    flap = clipHalf(rect4, nux, nuy, cBase + apex);
     if (flap.length < 3) return null;
+  } else {
+    flap = rect4;
+    for (const t of BEND_TANGENTS) {
+      // parabola v(u) = apex·(1 − (u/half)²), tangent at u₀ = t·half
+      const u0 = t * half;
+      const v0 = apex * (1 - t * t);
+      const slope = (-2 * apex * t) / half;
+      // v − v₀ ≤ slope·(u − u₀), rewritten over screen points
+      const ax = nux - slope * ux;
+      const ay = nuy - slope * uy;
+      const c = ax * g.x + ay * g.y + (v0 - slope * u0);
+      flap = clipHalf(flap, ax, ay, c);
+      if (flap.length < 3) return null;
+    }
   }
 
   // The folded tongue. A rigid mirror of the opening reads as an hourglass
@@ -133,18 +166,27 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     x: g.x + u * ux + v * nux,
     y: g.y + u * uy + v * nuy,
   });
-  // as wide as the opening: the flap IS the material that left the hole
-  const A = half;
-  const leaf: Point[] = [];
-  for (const t of BEND_TANGENTS) {
-    const u = t * A;
-    leaf.push(pt(u, apex * (1 - (u / half) ** 2))); // along the crease arc
-  }
-  for (const t of BEND_TANGENTS) {
-    const u = -t * A; // walk back along the tip curve
-    // quartic: a broad flat end with rounded shoulders — the card's own
-    // straight edge folded over, not a tent peak
-    leaf.push(pt(u, 2 * apex * (1 - (u / A) ** 4)));
+  let leaf: Point[];
+  if (edge) {
+    // the straight fold's flap: the matching full-width strip, crease to
+    // the finger line
+    leaf = clipHalf(rect4, nux, nuy, cBase + 2 * apex);
+    leaf = clipHalf(leaf, -nux, -nuy, -(cBase + apex));
+    if (leaf.length < 3) return null;
+  } else {
+    // as wide as the opening: the flap IS the material that left the hole
+    const A = half;
+    leaf = [];
+    for (const t of BEND_TANGENTS) {
+      const u = t * A;
+      leaf.push(pt(u, apex * (1 - (u / half) ** 2))); // along the crease arc
+    }
+    for (const t of BEND_TANGENTS) {
+      const u = -t * A; // walk back along the tip curve
+      // quartic: a broad flat end with rounded shoulders — the card's own
+      // straight edge folded over, not a tent peak
+      leaf.push(pt(u, 2 * apex * (1 - (u / A) ** 4)));
+    }
   }
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
@@ -153,6 +195,7 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   const cx = g.x + apex * nux;
   const cy = g.y + apex * nuy;
   return {
+    grip: edge ? "edge" : "pinch",
     clip: poly(flap),
     flapClip: poly(leaf),
     origin: `${pct(cx, w)} ${pct(cy, h)}`,

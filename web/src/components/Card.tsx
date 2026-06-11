@@ -173,6 +173,10 @@ interface CardProps {
   /** The live fold while fingers are on the card; a peeked card at rest
    *  holds a default bottom-edge bend. */
   fold?: Fold | null;
+  /** Your own card at rest lies flat after a peek (set back down like a
+   *  real squeeze); without this, a peeked card shows the held bend —
+   *  how the rest of the table sees a card someone has looked at. */
+  restFlat?: boolean;
 }
 
 /** The squeeze: the flap IS the card coming off the table. The window it
@@ -204,12 +208,27 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
             background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(40, 30, 15, 0.5) 3%, transparent 45%, rgba(255, 252, 240, 0.3) 97%)`,
           }}
         />
+        {/* the squeezer's thumb pressing where the rank index would read —
+            one per index corner; whichever lands on the flap shows, the
+            other is clipped away (positions ride the same layout shift) */}
+        {fold.grip === "edge" && (
+          <>
+            <span
+              className="card-peel-thumb"
+              style={{ left: `calc(${fold.faceShift.left} + 13%)`, top: `calc(${fold.faceShift.top} + 12%)` }}
+            />
+            <span
+              className="card-peel-thumb"
+              style={{ left: `calc(${fold.faceShift.left} + 87%)`, top: `calc(${fold.faceShift.top} + 88%)` }}
+            />
+          </>
+        )}
       </span>
     </>
   );
 }
 
-export function Card({ card, fold = null }: CardProps) {
+export function Card({ card, fold = null, restFlat = false }: CardProps) {
   // While squeezed, the card comes off the table: it tips up around the
   // edge opposite the pull (which stays resting on the felt), grows
   // slightly toward the camera, and its shadow separates beneath it.
@@ -239,15 +258,18 @@ export function Card({ card, fold = null }: CardProps) {
 
   if ("Peeked" in card) {
     const { suit, rank } = card.Peeked.sliver;
+    const active = fold ?? (restFlat ? null : HELD_FOLD);
     return (
       <div key="back" className="card card-back" aria-label={`peeked card, ${suit}`} style={squeeze}>
-        <Peel fold={fold ?? HELD_FOLD}>
-          {/* the real printed face on the flap: pip edges and legs only —
-              the thumbs cover the indices until the card turns */}
-          <span className="card-peel-face" data-color={suitColor(suit)}>
-            <FaceContent rank={rank} suit={suit} coverIndices />
-          </span>
-        </Peel>
+        {active && (
+          <Peel fold={active}>
+            {/* the real printed face on the flap: pip edges and legs only —
+                the thumbs cover the indices until the card turns */}
+            <span className="card-peel-face" data-color={suitColor(suit)}>
+              <FaceContent rank={rank} suit={suit} coverIndices />
+            </span>
+          </Peel>
+        )}
       </div>
     );
   }

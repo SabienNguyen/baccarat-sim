@@ -67,11 +67,11 @@ test("a peeked card at rest holds a bottom-edge bend", () => {
 });
 
 test("a modest pinch reads the edge pips but keeps the corner index covered", () => {
-  // pinch the bottom edge center, pull up 40px: the bend is widest at the
-  // fingers and closes toward the corners — where the rank index lives
-  const f = foldFrom(45, 123, 45, 83, RECT);
+  // a diagonal pinch: the bend is widest at the fingers and closes toward
+  // the corners — where the rank index lives
+  const f = foldFrom(45, 123, 70, 83, RECT);
   expect(f).not.toBeNull();
-  expect(f!.clip).not.toContain("0.0% 100.0%");
+  // the index corner on the pull side stays covered
   expect(f!.clip).not.toContain("100.0% 100.0%");
 });
 
@@ -121,4 +121,29 @@ test("the bend has a limit — pulling past it doesn't stretch the fold", () => 
   // the cap still clears the reveal threshold
   expect(atCap.progress).toBeGreaterThan(REVEAL_AT);
   expect(atCap.progress).toBeLessThan(1);
+});
+
+// --- grip kinds: a clean side pull folds straight, everything else pinches ---
+
+test("a straight pull from the bottom edge is a rectangular fold", () => {
+  const f = foldFrom(45, 120, 45, 60, RECT)!;
+  expect(f.grip).toBe("edge");
+  // full-width strip: both bottom corners are in the opening
+  expect(f.clip).toContain("0.0% 100.0%");
+  expect(f.clip).toContain("100.0% 100.0%");
+  // the flap is the matching strip, tip at the finger line
+  expect(f.flapClip).toContain("47.6%"); // 2·apex above the grab: y=60, the finger
+});
+
+test("corner pulls and semi-corners keep the pinch parabola", () => {
+  expect(foldFrom(85, 120, 30, 60, RECT)!.grip).toBe("pinch"); // corner pull
+  expect(foldFrom(75, 123, 75, 80, RECT)!.grip).toBe("pinch"); // near the corner
+  expect(foldFrom(45, 123, 80, 83, RECT)!.grip).toBe("pinch"); // diagonal pull
+});
+
+test("a side pull from the left edge folds a vertical strip", () => {
+  const f = foldFrom(4, 63, 50, 63, RECT)!;
+  expect(f.grip).toBe("edge");
+  expect(f.clip).toContain("0.0% 0.0%");
+  expect(f.clip).toContain("0.0% 100.0%");
 });

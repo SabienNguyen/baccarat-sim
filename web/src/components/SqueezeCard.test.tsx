@@ -71,14 +71,14 @@ test("drag: a fast jump past the reveal threshold still peeks first, and waits f
   expect(onReveal).not.toHaveBeenCalled(); // flip waits for release
 });
 
-test("drag: releasing after a started peek commits the reveal", () => {
+test("drag: releasing a deep pull commits the reveal", () => {
   const onPeek = vi.fn();
   const onReveal = vi.fn();
   render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
   const el = screen.getByRole("button");
   fireEvent.pointerDown(el, { pointerId: 1, clientY: 300 });
-  fireEvent.pointerMove(el, { pointerId: 1, clientY: 264 }); // 0.30 -> peek
-  fireEvent.pointerUp(el, { pointerId: 1, clientY: 264 }); // release past peek -> reveal
+  fireEvent.pointerMove(el, { pointerId: 1, clientY: 210 }); // 0.75 -> deep
+  fireEvent.pointerUp(el, { pointerId: 1, clientY: 210 }); // release deep -> reveal
   expect(onPeek).toHaveBeenCalledOnce();
   expect(onReveal).toHaveBeenCalledOnce();
 });
@@ -127,4 +127,25 @@ test("the fold measures the card itself, not its wrapper", () => {
   expect(under).not.toBeNull();
   // grab (47,133) in card space pulled to (47,73): crease at y=103 of 140
   expect(under!.style.clipPath).toContain("73.6%");
+});
+
+test("drag: a mid-pull release keeps the card unflipped — peeking is free", () => {
+  const onPeek = vi.fn();
+  const onReveal = vi.fn();
+  render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
+  const el = screen.getByRole("button");
+  fireEvent.pointerDown(el, { pointerId: 1, clientY: 300 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientY: 250 }); // 0.42: peeked, not committed
+  expect(onPeek).toHaveBeenCalledOnce();
+  fireEvent.pointerUp(el, { pointerId: 1, clientY: 250 }); // let go: not ready to know
+  fireEvent.click(el); // swallow the trailing synthetic click
+  expect(onReveal).not.toHaveBeenCalled();
+});
+
+test("a released peek lies flat again — back to the original unflipped state", () => {
+  render(<SqueezeCard card={peeked} onPeek={vi.fn()} onReveal={vi.fn()} />);
+  // at rest (no live fold), your own peeked card shows no bend at all
+  expect(document.querySelector(".card-peel-under")).toBeNull();
+  expect(document.querySelector(".card-peel-flap")).toBeNull();
+  expect(screen.getByLabelText(/peeked card/)).toBeInTheDocument();
 });

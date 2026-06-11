@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardE
 import type { CardView } from "../engine/types";
 import { Card } from "./Card";
 import { isFaceUp } from "../cards";
-import { foldFrom, PEEK_AT, type Fold } from "../squeeze";
+import { foldFrom, PEEK_AT, REVEAL_AT, type Fold } from "../squeeze";
 
 const DRAG_DISTANCE_PX = 120;
 /** Pointer travel (px) above which a gesture counts as a drag, not a tap. */
@@ -140,8 +140,10 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   function handlePointerUp(e: ReactPointerEvent) {
     if (faceUp || start.current === null) return;
     const { progress } = foldAt(e.clientX, e.clientY);
-    // Releasing a started squeeze past the peek point commits the flip.
-    if (!revealedThisGesture.current && progress >= PEEK_AT) {
+    // Only a DEEP pull commits the flip on release. Letting go of a
+    // shallower squeeze keeps the card down — peeking costs nothing, the
+    // reveal is a deliberate act.
+    if (!revealedThisGesture.current && progress >= REVEAL_AT) {
       revealedThisGesture.current = true;
       onReveal();
     }
@@ -199,7 +201,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >
-      <Card card={card} fold={fold} />
+      <Card card={card} fold={fold} restFlat />
     </div>
   );
 }
