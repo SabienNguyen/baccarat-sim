@@ -126,9 +126,9 @@
   inset: 0;
   background: #f9f4e6; /* the printed face's stock, when there's a face */
 }
-/* blind (face-down) bend: what shows is the felt, in the card's shadow */
+/* blind (face-down) bend: what shows is the table felt, in the card's shadow */
 .card-peel-under--blind {
-  background: linear-gradient(#06241a, #041a13);
+  background: linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.2)), var(--felt-deep);
 }
 /* the real printed face showing through the fold */
 .card-peel-face {

@@ -192,7 +192,9 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
         className="card-peel-flap"
         style={{
           clipPath: fold.flapClip,
-          background: `linear-gradient(${fold.angle.toFixed(1)}deg, #cfc5a6 4%, #f2ecd9 45%, #fbf7ec 96%)`,
+          // the flap IS the card: its back pattern rides the bend, rolling
+          // through shadow at the crease and catching light at the tip
+          background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(10, 6, 18, 0.55) 4%, rgba(20, 12, 34, 0.18) 45%, rgba(255, 250, 235, 0.25) 96%), repeating-linear-gradient(45deg, #3a2a55, #3a2a55 6px, #4a3a6a 6px, #4a3a6a 12px)`,
           transformOrigin: fold.origin,
           transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
         }}
