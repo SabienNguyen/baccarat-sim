@@ -95,10 +95,15 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   const nuy = ny / len;
   const ux = -nuy;
   const uy = nux;
-  const apex = len / 2; // the crease depth: half the finger travel
+  // The stock only bends so far: past this the hand would be lifting the
+  // whole card, and the deepest folds poke rendering edge cases. The fold
+  // freezes at the cap — direction still tracks, depth stops growing.
+  const reach = Math.hypot(w, h) * 0.85;
+  const bend = Math.min(len, reach * 0.8);
+  const apex = bend / 2; // the crease depth: half the finger travel
   // narrow enough that a medium pull keeps the corner indices covered —
   // the pips must read before the rank gives itself away
-  const half = Math.max(len * 0.7, 18);
+  const half = Math.max(bend * 0.7, 18);
 
   let flap: Point[] = [
     { x: 0, y: 0 },
@@ -154,7 +159,7 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     },
     // CSS gradient angles: 0deg points up, clockwise from there
     angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
-    progress: Math.min(len / (Math.hypot(w, h) * 0.85), 1),
+    progress: Math.min(bend / reach, 1),
   };
 }
 

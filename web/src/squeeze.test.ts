@@ -110,3 +110,15 @@ test("the flap face is a pure layout shift — symmetric artwork, no transform",
   // crease at (50%, 71.4%): shift = (0%, 42.9%)
   expect(f.faceShift).toEqual({ left: "0.0%", top: "42.9%" });
 });
+
+test("the bend has a limit — pulling past it doesn't stretch the fold", () => {
+  const atCap = foldFrom(45, 123, 45, 5, RECT)!;
+  const past = foldFrom(45, 123, 45, -40, RECT)!; // way past the card
+  // same direction, both beyond the cap: identical frozen geometry
+  expect(past.clip).toBe(atCap.clip);
+  expect(past.flapClip).toBe(atCap.flapClip);
+  expect(past.progress).toBe(atCap.progress);
+  // the cap still clears the reveal threshold
+  expect(atCap.progress).toBeGreaterThan(REVEAL_AT);
+  expect(atCap.progress).toBeLessThan(1);
+});
