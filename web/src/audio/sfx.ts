@@ -21,6 +21,8 @@ export type SfxName = (typeof SFX_NAMES)[number];
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
+/** One-shot bus: lifts the boops above the ambience without touching it. */
+let shots: GainNode | null = null;
 let settings: AudioSettings = { ...DEFAULT_AUDIO };
 let loaded = false;
 
@@ -50,9 +52,13 @@ function ensureContext(): AudioContext | null {
       master = ctx.createGain();
       master.gain.value = masterLevel();
       master.connect(ctx.destination);
+      shots = ctx.createGain();
+      shots.gain.value = 1.35;
+      shots.connect(master);
     } catch {
       ctx = null;
       master = null;
+      shots = null;
       return null;
     }
   }
@@ -79,7 +85,7 @@ function tone(
   dur: number,
   type: OscillatorType = "square",
   peak = 0.3,
-  out: GainNode | null = master,
+  out: GainNode | null = shots,
 ): void {
   if (!ctx || !out) return;
   const t0 = ctx.currentTime + at;
@@ -97,7 +103,7 @@ function tone(
 
 /** A decaying noise burst through a bandpass — card swishes and snaps. */
 function swish(at: number, dur: number, freq: number, peak = 0.25): void {
-  if (!ctx || !master) return;
+  if (!ctx || !shots) return;
   const t0 = ctx.currentTime + at;
   const len = Math.max(1, Math.ceil(ctx.sampleRate * dur));
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -111,7 +117,7 @@ function swish(at: number, dur: number, freq: number, peak = 0.25): void {
   band.Q.value = 0.8;
   const env = ctx.createGain();
   env.gain.value = peak;
-  src.connect(band).connect(env).connect(master);
+  src.connect(band).connect(env).connect(shots);
   src.start(t0);
 }
 
@@ -252,7 +258,7 @@ export function startAmbience(): void {
   if (!c || !master) return;
   try {
     const room = c.createGain();
-    room.gain.value = 0.05;
+    room.gain.value = 0.032;
     room.connect(master);
     // room tone: looped brownish noise, lowpassed — the floor's hush
     const len = c.sampleRate * 3;
@@ -275,7 +281,7 @@ export function startAmbience(): void {
     const lfo = c.createOscillator();
     lfo.frequency.value = 0.07;
     const depth = c.createGain();
-    depth.gain.value = 0.02;
+    depth.gain.value = 0.012;
     lfo.connect(depth).connect(room.gain);
     lfo.start();
     // distant life: sparse clinks and somebody else's payout
@@ -284,10 +290,13 @@ export function startAmbience(): void {
       timer = setTimeout(sparkle, 2500 + Math.random() * 6500);
       const roll = Math.random();
       if (roll < 0.5) {
-        tone(0, 1400 + Math.random() * 900, 0.04, "triangle", 0.05);
+        // straight to master: distant life shouldn't ride the one-shot boost
+        tone(0, 1400 + Math.random() * 900, 0.04, "triangle", 0.05, master);
       } else if (roll < 0.8) {
         const base = 700 + Math.random() * 300;
-        [1, 1.25, 1.5].forEach((m, i) => tone(i * 0.07, base * m, 0.08, "triangle", 0.04));
+        [1, 1.25, 1.5].forEach((m, i) =>
+          tone(i * 0.07, base * m, 0.08, "triangle", 0.04, master),
+        );
       }
       // else: just the murmur
     };
