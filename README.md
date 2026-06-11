@@ -16,9 +16,10 @@ validated against published casino probabilities.
   (the salon stocks $25k and $100k plates), and a **run goal**: beat the table
   by turning the buy-in into 10×. Each table's bankroll persists between visits.
 - **The squeeze** — cards deal face down in real coup order (no third-card
-  spoilers). Pinch the card anywhere and pull: the crease forms right under
-  your fingers, and the genuine printed face shows under the fold, so a 9
-  reads as four legs up the long edge, exactly like paper.
+  spoilers). Pinch the card anywhere and pull: the crease forms under your
+  fingers and the card itself bends up off the felt, the genuine printed
+  face riding the lifted flap upside down, near edge first — so a 9 reads
+  as four legs up the long edge, exactly like paper.
 - **A real chip economy** — your bankroll is physical chips in real casino
   colors. Pick up mixed stacks, drop them on the felt, and make change with the
   dealer (break plates down, color up, or just *get* any chip you can cover).

@@ -161,44 +161,44 @@ interface CardProps {
   fold?: Fold | null;
 }
 
-/** The squeezed fold: the card stock bending back along the crease.
- *  With a face (`children`) the window shows it; blind (face-down), the
- *  window is the felt the lifted flap no longer covers. */
+/** The squeeze: the flap IS the card coming off the table. The window it
+ *  leaves shows the felt; the bent-up part shows the card's underside —
+ *  blank stock while face-down, the printed face (rotated 180° by the
+ *  fold, so the near edge reads at the tip) once peeked. */
 function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
   const phi = (fold.angle * Math.PI) / 180;
   return (
     <>
-      <span
-        className={`card-peel-under${children ? "" : " card-peel-under--blind"}`}
-        style={{ clipPath: fold.clip }}
-      >
-        {children}
-        {/* the bent flap's contact shadow falls along the crease */}
-        {children && (
-          <span
-            className="card-peel-shade"
-            style={{
-              background: `linear-gradient(${fold.angle.toFixed(1)}deg, transparent 55%, rgba(40, 30, 15, 0.45) 97%)`,
-            }}
-          />
-        )}
-      </span>
-      {/* the bent flap of stock, hinged in 3D at the crease: it stands
-          steeply on a light pull and lays flatter as the pull deepens,
-          its tip chasing the finger. It projects its own perspective —
-          the card's drop-shadow filter forces transform-style flat, so
-          a shared 3D context is not available. */}
+      {/* the table showing through where the card has lifted away */}
+      <span className="card-peel-under" style={{ clipPath: fold.clip }} />
+      {/* the lifted card itself, hinged in 3D at the crease: steep on a
+          light pull, laying flatter as it deepens, tip chasing the finger.
+          It projects its own perspective — the card's drop-shadow filter
+          forces transform-style flat, so no shared 3D context exists. */}
       <span
         className="card-peel-flap"
         style={{
           clipPath: fold.flapClip,
-          // the flap IS the card: its back pattern rides the bend, rolling
-          // through shadow at the crease and catching light at the tip
-          background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(10, 6, 18, 0.55) 4%, rgba(20, 12, 34, 0.18) 45%, rgba(255, 250, 235, 0.25) 96%), repeating-linear-gradient(45deg, #3a2a55, #3a2a55 6px, #4a3a6a 6px, #4a3a6a 12px)`,
           transformOrigin: fold.origin,
           transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
         }}
-      />
+      >
+        {children && (
+          <span
+            className="card-peel-flap-face"
+            style={{ transformOrigin: fold.origin, transform: "rotate(180deg)" }}
+          >
+            {children}
+          </span>
+        )}
+        {/* curvature: shadow rolling over the crease, sheen at the tip */}
+        <span
+          className="card-peel-shade"
+          style={{
+            background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(40, 30, 15, 0.5) 3%, transparent 45%, rgba(255, 252, 240, 0.3) 97%)`,
+          }}
+        />
+      </span>
     </>
   );
 }

@@ -119,18 +119,27 @@
   transform: rotate(180deg);
 }
 
-/* --- the squeeze peel: the stock bending back along the live crease --- */
-/* the window the lifted flap no longer covers: a flush reveal, no shadow */
+/* --- the squeeze peel: the card itself bending up off the table --- */
+/* the table felt showing through where the card has lifted away */
 .card-peel-under {
   position: absolute;
   inset: 0;
-  background: #f9f4e6; /* the printed face's stock, when there's a face */
-}
-/* blind (face-down) bend: what shows is the table felt, in the card's shadow */
-.card-peel-under--blind {
   background: linear-gradient(rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.2)), var(--felt-deep);
 }
-/* the real printed face showing through the fold */
+/* the lifted card: stock-white underside, the face printed on it */
+.card-peel-flap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: #f9f4e6;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+}
+/* the printed face riding the flap (rotated 180° by the fold) */
+.card-peel-flap-face {
+  position: absolute;
+  inset: 0;
+}
+/* the real printed face artwork */
 .card-peel-face {
   position: absolute;
   inset: 0;
@@ -140,13 +149,6 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-}
-/* the folded-over tongue floating above the felt */
-.card-peel-flap {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
 }
 
 /* --- the deal: cards slide in from the shoe, faces snap over --- */
