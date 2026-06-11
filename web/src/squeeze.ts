@@ -16,8 +16,9 @@ export function actionForProgress(progress: number): SqueezeAction {
 export interface Fold {
   /** CSS clip-path polygon for the revealed region, in % of the card. */
   clip: string;
-  /** The folded-over flap itself: the revealed region mirrored across the
-   *  crease, so its tip sits exactly under the pulling finger. */
+  /** The lifted tongue of stock: a leaf grown from the crease arc (where
+   *  it stays attached to the card) narrowing to a rounded tip that lands
+   *  exactly under the pulling finger. */
   flapClip: string;
   /** The crease point, as a CSS transform-origin — the flap's 3D hinge. */
   origin: string;
@@ -90,7 +91,9 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
   const ux = -nuy;
   const uy = nux;
   const apex = len / 2; // the crease depth: half the finger travel
-  const half = Math.max(len * 0.9, 20); // the opening's half-width
+  // narrow enough that a medium pull keeps the corner indices covered —
+  // the pips must read before the rank gives itself away
+  const half = Math.max(len * 0.7, 18);
 
   let flap: Point[] = [
     { x: 0, y: 0 },
@@ -111,20 +114,32 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     if (flap.length < 3) return null;
   }
 
-  // the folded-over flap: reflect the opening across the crease, a rigid
-  // motion that puts the grabbed edge exactly under the fingertip
-  const mirrored = flap.map((p) => {
-    const v = (p.x - g.x) * nux + (p.y - g.y) * nuy;
-    const d = 2 * (apex - v);
-    return { x: p.x + d * nux, y: p.y + d * nuy };
+  // The folded tongue. A rigid mirror of the opening reads as an hourglass
+  // (the mirrored parabola pinches at the crease), so build the leaf the
+  // material actually makes: based on the crease arc — where the stock is
+  // still attached — tapering to a rounded tip at the fingertip (2·apex,
+  // the fold's invariant: the grabbed edge lands under the finger).
+  const pt = (u: number, v: number): Point => ({
+    x: g.x + u * ux + v * nux,
+    y: g.y + u * uy + v * nuy,
   });
+  const A = 0.95 * half;
+  const leaf: Point[] = [];
+  for (const t of BEND_TANGENTS) {
+    const u = t * A;
+    leaf.push(pt(u, apex * (1 - (u / half) ** 2))); // along the crease arc
+  }
+  for (const t of BEND_TANGENTS) {
+    const u = -t * A; // walk back along the tip curve
+    leaf.push(pt(u, 2 * apex * (1 - (u / A) ** 2)));
+  }
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(1)}%`;
   const poly = (pts: Point[]) =>
     `polygon(${pts.map((p) => `${pct(p.x, w)} ${pct(p.y, h)}`).join(", ")})`;
   return {
     clip: poly(flap),
-    flapClip: poly(mirrored),
+    flapClip: poly(leaf),
     origin: `${pct(g.x + apex * nux, w)} ${pct(g.y + apex * nuy, h)}`,
     // CSS gradient angles: 0deg points up, clockwise from there
     angle: (Math.atan2(nx, -ny) * 180) / Math.PI,

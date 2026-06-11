@@ -161,30 +161,40 @@ interface CardProps {
   fold?: Fold | null;
 }
 
-/** The squeezed fold: the card stock bending back along the crease. */
+/** The squeezed fold: the card stock bending back along the crease.
+ *  With a face (`children`) the window shows it; blind (face-down), the
+ *  window is the felt the lifted flap no longer covers. */
 function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
+  const phi = (fold.angle * Math.PI) / 180;
   return (
     <>
-      <span className="card-peel-under" style={{ clipPath: fold.clip }}>
+      <span
+        className={`card-peel-under${children ? "" : " card-peel-under--blind"}`}
+        style={{ clipPath: fold.clip }}
+      >
         {children}
-        {/* curvature: brightness rolling into shadow at the crease */}
-        <span
-          className="card-peel-shade"
-          style={{
-            background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(255, 255, 255, 0.35) 8%, transparent 45%, rgba(60, 50, 30, 0.4) 96%)`,
-          }}
-        />
+        {/* the bent flap's contact shadow falls along the crease */}
+        {children && (
+          <span
+            className="card-peel-shade"
+            style={{
+              background: `linear-gradient(${fold.angle.toFixed(1)}deg, transparent 55%, rgba(40, 30, 15, 0.45) 97%)`,
+            }}
+          />
+        )}
       </span>
       {/* the bent flap of stock, hinged in 3D at the crease: it stands
-          steeply on a light pull and folds flatter as the pull deepens,
-          its tip chasing the finger */}
+          steeply on a light pull and lays flatter as the pull deepens,
+          its tip chasing the finger. It projects its own perspective —
+          the card's drop-shadow filter forces transform-style flat, so
+          a shared 3D context is not available. */}
       <span
         className="card-peel-flap"
         style={{
           clipPath: fold.flapClip,
           background: `linear-gradient(${fold.angle.toFixed(1)}deg, #cfc5a6 4%, #f2ecd9 45%, #fbf7ec 96%)`,
           transformOrigin: fold.origin,
-          transform: `rotate3d(${Math.cos((fold.angle * Math.PI) / 180).toFixed(3)}, ${Math.sin((fold.angle * Math.PI) / 180).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
+          transform: `perspective(520px) rotate3d(${Math.cos(phi).toFixed(3)}, ${Math.sin(phi).toFixed(3)}, 0, ${(-78 * Math.pow(1 - fold.progress, 1.3)).toFixed(1)}deg)`,
         }}
       />
     </>
@@ -205,8 +215,6 @@ export function Card({ card, fold = null }: CardProps) {
     squeeze = {
       transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.05 * p).toFixed(3)})`,
       transformOrigin: `${(50 + 50 * Math.sin(phi)).toFixed(1)}% ${(50 - 50 * Math.cos(phi)).toFixed(1)}%`,
-      // the bent flap inside lives in the same 3D space as the tilt
-      transformStyle: "preserve-3d" as const,
       filter: `drop-shadow(0 ${(3 + 16 * p).toFixed(1)}px ${(2 + 9 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.45 - 0.15 * p).toFixed(2)}))`,
       zIndex: 3,
     };

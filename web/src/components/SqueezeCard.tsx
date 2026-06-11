@@ -168,7 +168,9 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   return (
     <div
       role="button"
-      style={{ touchAction: "none" }}
+      // a folding card rises above its neighbors — the wrapper must carry
+      // the z-order, since the card's own z-index can't escape it
+      style={{ touchAction: "none", position: "relative", zIndex: fold ? 3 : undefined }}
       tabIndex={faceUp ? -1 : 0}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

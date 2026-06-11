@@ -17,15 +17,19 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
     progress: 0.4,
   };
   const { container } = render(<Card card="FaceDown" fold={fold} />);
-  expect(container.querySelector(".card-peel-under")).not.toBeNull();
+  // a face-down bend exposes the felt under the flap — not white stock
+  expect(container.querySelector(".card-peel-under--blind")).not.toBeNull();
   expect(container.querySelector(".card-peel-flap")).not.toBeNull();
   expect(screen.queryByText(/[♠♥♦♣]/)).not.toBeInTheDocument();
   // the card lifts off the felt: perspective tilt, hinged on the far edge,
   // with the shadow separating beneath it
   const card = container.querySelector<HTMLElement>(".card")!;
   expect(card.style.transform).toContain("perspective(");
-  // the flap is hinged in 3D at the crease, not painted flat
+  // the flap is hinged in 3D at the crease with its own perspective —
+  // the card's drop-shadow filter flattens preserve-3d, so the flap
+  // must project itself (CSS: filter forces transform-style flat)
   const flap = container.querySelector<HTMLElement>(".card-peel-flap")!;
+  expect(flap.style.transform).toContain("perspective(");
   expect(flap.style.transform).toContain("rotate3d(");
   expect(flap.style.transformOrigin).toBe("50.0% 70.0%");
   expect(card.style.transformOrigin).toBe("50.0% 0.0%"); // pull-up: top edge rests
@@ -36,6 +40,8 @@ test("a peeked card folds back to show the real face under the corner", () => {
   const card: CardView = { Peeked: { sliver: { suit: "Spades", rank: "Nine" } } };
   const { container } = render(<Card card={card} />);
   expect(screen.getByLabelText("peeked card, Spades")).toBeInTheDocument();
+  // the peeked window shows the face, never the blind felt
+  expect(container.querySelector(".card-peel-under--blind")).toBeNull();
   // the genuine printed face (pip edges, index) sits under the fold
   expect(container.querySelector(".card-peel-face")).not.toBeNull();
   expect(container.querySelectorAll(".card-pip")).toHaveLength(9);
