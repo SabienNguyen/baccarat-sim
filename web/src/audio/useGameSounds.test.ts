@@ -60,3 +60,54 @@ test("an unchanged state is silent", () => {
   const s = state();
   expect(soundsFor(s, s)).toEqual([]);
 });
+
+test("bending a card up rustles", () => {
+  const down = state({
+    snapshot: {
+      ...bettingSnapshot(),
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: ["FaceDown", "FaceDown"], total: null },
+    },
+  });
+  const peeked = state({
+    snapshot: {
+      ...down.snapshot,
+      player: {
+        cards: [{ Peeked: { sliver: { suit: "Spades", rank: "Nine" } } }, "FaceDown"],
+        total: null,
+      },
+    },
+  });
+  expect(soundsFor(down, peeked)).toEqual(["squeeze"]);
+  // holding the bend (no new peek) stays quiet
+  expect(soundsFor(peeked, state({ snapshot: peeked.snapshot }))).toEqual([]);
+});
+
+test("chips coming back off the felt or out of the hand clatter", () => {
+  // returnHand: hand empties, nothing staged
+  expect(soundsFor(state({ hand: [100, 500] }), state({ hand: [] }))).toEqual(["chipReturn"]);
+  // clearBets: the felt empties outside a settle
+  expect(soundsFor(state({ stagedChips: [[100]] }), state({ stagedChips: [] }))).toEqual([
+    "chipReturn",
+  ]);
+});
+
+test("staking the hand is a place, not a return", () => {
+  const held = state({ hand: [100] });
+  const staked = state({ hand: [], stagedChips: [[100]] });
+  expect(soundsFor(held, staked)).toEqual(["chipPlace"]);
+});
+
+test("the settle sweep is not a chip return", () => {
+  const before = state({ stagedChips: [[100]] });
+  const after = state({ stagedChips: [], settleSeq: 1, lastDelta: -100 });
+  expect(soundsFor(before, after)).toEqual(["lose"]);
+});
+
+test("a dealer refusal buzzes, once per refusal", () => {
+  const calm = state();
+  const refused = state({ lastError: "NoBetsPlaced" });
+  expect(soundsFor(calm, refused)).toEqual(["error"]);
+  expect(soundsFor(refused, state({ lastError: refused.lastError }))).toEqual([]);
+});

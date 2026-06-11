@@ -22,6 +22,7 @@ import { ExchangeModal } from "./components/ExchangeModal";
 import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
+import { playSfx } from "./audio/sfx";
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -229,6 +230,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
       {cutting && (
         <CutDeckModal
           onCut={() => {
+            // a fresh shoe is invisible in the store diff — riffle it here
+            playSfx("shuffle");
             newShoe();
             setCutting(false);
           }}

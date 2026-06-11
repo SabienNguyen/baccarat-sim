@@ -4,13 +4,17 @@ import { DEFAULT_AUDIO, loadAudioSettings, type AudioSettings } from "./settings
 export const SFX_NAMES = [
   "chipPick",
   "chipPlace",
+  "chipReturn",
   "deal",
   "flip",
+  "squeeze",
   "win",
   "lose",
   "push",
   "victory",
   "bust",
+  "error",
+  "shuffle",
 ] as const;
 
 export type SfxName = (typeof SFX_NAMES)[number];
@@ -116,11 +120,17 @@ const SOUNDS: Record<SfxName, () => void> = {
     tone(0, 950, 0.04, "square", 0.25);
     tone(0.045, 700, 0.05, "square", 0.2);
   },
+  chipReturn: () => {
+    // softer than a place: chips sliding home, pitch falling away
+    tone(0, 800, 0.04, "triangle", 0.16);
+    tone(0.05, 620, 0.05, "triangle", 0.13);
+  },
   deal: () => swish(0, 0.18, 1800),
   flip: () => {
     swish(0, 0.06, 3000, 0.18);
     tone(0.01, 1400, 0.05, "triangle", 0.15);
   },
+  squeeze: () => swish(0, 0.12, 700, 0.14), // a low paper bend
   win: () => {
     // rising C-major arpeggio
     [523, 659, 784, 1047].forEach((f, i) => tone(i * 0.09, f, 0.14, "square", 0.25));
@@ -138,6 +148,16 @@ const SOUNDS: Record<SfxName, () => void> = {
     // the long walk away from the table
     [330, 277, 233].forEach((f, i) => tone(i * 0.19, f, 0.24, "square", 0.26));
     tone(0.57, 196, 0.6, "square", 0.28);
+  },
+  error: () => {
+    // the dealer's flat two-note "no"
+    tone(0, 110, 0.09, "square", 0.2);
+    tone(0.1, 92, 0.14, "square", 0.2);
+  },
+  shuffle: () => {
+    // a riffle: quick ticks building into one long cascade
+    for (let i = 0; i < 6; i++) swish(i * 0.05, 0.04, 1500 + i * 150, 0.12);
+    swish(0.34, 0.28, 1100, 0.16);
   },
 };
 

@@ -28,8 +28,9 @@ validated against published casino probabilities.
 - **Scoreboard roads** — Big Road on the table like a pit display, with the
   Bead Plate, Big Eye Boy, Small Road, and Cockroach Pig one click away, each
   with an explainer.
-- **Sound** — synthesized chiptune table noise (chips, cards, settles, the
-  bust dirge), with a persisted volume control in the HUD.
+- **Sound** — synthesized chiptune table noise (chips, cards, squeezes,
+  settles, the shuffle, dealer refusals, the bust dirge), with a persisted
+  volume control in the HUD.
 - **Full bet menu** — Player/Banker/Tie plus Pairs, Dragon 7, Panda 8, Dragon
   Bonus, and the Tiger family, all documented in-game.
 - **Explain mode** — see *why* each third card was drawn and the house edge of
