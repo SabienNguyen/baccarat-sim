@@ -1,6 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
 
 :root {
+  /* The table IS the dark theme: declaring it stops forced-dark
+     browser modes from inverting the white card faces to black. */
+  color-scheme: dark;
   /* felt */
   --felt-deep: #0b3d2e;
   --felt-light: #145c43;
