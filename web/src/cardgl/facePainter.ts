@@ -11,8 +11,8 @@ export const REF_H = 143;
 
 // colors mirrored from theme.css / cards.css — a canvas can't read CSS vars
 export const INK = "#15110f";
-export const FACE_BG = "#f6f1e0";
-export const STOCK_BG = "#f9f4e6";
+export const FACE_BG = "#ffffff";
+export const STOCK_BG = "#ffffff";
 export const BACK_A = "#3a2a55";
 export const BACK_B = "#4a3a6a";
 export const BEVEL_HI = "#4a4060";

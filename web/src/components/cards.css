@@ -21,7 +21,7 @@
     3px 3px 0 var(--shadow);
 }
 .card-face {
-  background: #f6f1e0;
+  background: #ffffff;
 }
 /* an empty slot on the felt where a card will land */
 .card-slot {
@@ -88,13 +88,7 @@
   inset: 19px 22px;
   border: 2px solid currentColor;
   border-radius: 3px;
-  background: linear-gradient(
-    180deg,
-    rgba(244, 196, 48, 0.25),
-    rgba(244, 196, 48, 0.08) 49%,
-    rgba(244, 196, 48, 0.08) 51%,
-    rgba(244, 196, 48, 0.25)
-  );
+  /* no tint: the face stays white, matching the GL flip exactly */
   display: flex;
   flex-direction: column;
 }
@@ -140,7 +134,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: #f9f4e6;
+  background: #ffffff;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
 }
 /* The printed face riding the flap, placed by left/top layout offsets.
