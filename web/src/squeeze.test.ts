@@ -1,4 +1,4 @@
-import { actionForProgress, foldFrom, HELD_FOLD, PEEK_AT, REVEAL_AT } from "./squeeze";
+import { actionForProgress, foldFrom, gripFrom, HELD_FOLD, PEEK_AT, REVEAL_AT } from "./squeeze";
 
 test("below the peek threshold does nothing", () => {
   expect(actionForProgress(0)).toBe("none");
@@ -146,4 +146,25 @@ test("a side pull from the left edge folds a vertical strip", () => {
   expect(f.grip).toBe("edge");
   expect(f.clip).toContain("0.0% 0.0%");
   expect(f.clip).toContain("0.0% 100.0%");
+});
+
+// --- gripFrom: the gesture's geometric core, shared with the GL engine ---
+
+test("gripFrom exposes the fold's geometric core", () => {
+  const g = gripFrom(45, 120, 45, 60, RECT)!;
+  expect(g.edge).toBe(true);
+  expect(g.gx).toBe(45);
+  expect(g.gy).toBe(120);
+  expect(g.nx).toBeCloseTo(0);
+  expect(g.ny).toBeCloseTo(-1);
+  expect(g.bend).toBeCloseTo(60);
+  expect(g.apex).toBeCloseTo(30);
+  expect(g.angle).toBeCloseTo(0);
+  expect(g.progress).toBeGreaterThan(0);
+});
+
+test("gripFrom matches foldFrom's grip taxonomy and null cases", () => {
+  expect(gripFrom(85, 120, 30, 60, RECT)!.edge).toBe(false); // corner pinch
+  expect(gripFrom(45, 120, 45, 170, RECT)).toBeNull(); // pull off the card
+  expect(gripFrom(45, 120, 45, 120, RECT)).toBeNull(); // no travel
 });

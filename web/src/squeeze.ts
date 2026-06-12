@@ -69,18 +69,41 @@ function clipHalf(poly: Point[], ax: number, ay: number, c: number): Point[] {
  *  half-width. The half-planes they define approximate the curved opening. */
 const BEND_TANGENTS = [-0.9, -0.6, -0.3, 0, 0.3, 0.6, 0.9];
 
+/** The geometric core of a squeeze gesture — everything the fold's
+ *  geometry derives from, shared by the CSS peel and the GL engine. */
+export interface Grip {
+  /** grab point, card-local px */
+  gx: number;
+  gy: number;
+  /** unit drag direction */
+  nx: number;
+  ny: number;
+  /** unit crease direction (perpendicular to the drag) */
+  ux: number;
+  uy: number;
+  /** capped finger travel (px) — the fold's depth driver */
+  bend: number;
+  /** crease depth along the drag = bend/2 (px) */
+  apex: number;
+  /** half-width of the pinch parabola (px) */
+  half: number;
+  /** straight side fold vs corner pinch */
+  edge: boolean;
+  /** 0..1 — drives the peek/reveal thresholds */
+  progress: number;
+  /** CSS gradient angle (deg): 0 up, clockwise */
+  angle: number;
+}
+
 /**
- * The fold for a pinch at (gx, gy) dragged to (fx, fy), like real card
- * stock: the crease sits at the midpoint of grab→finger, and the opening
- * is a bend — widest at the fingers, curving closed toward the card's
- * corners. Edge pips read first; the corner index stays covered until the
- * pull goes deep. The curve is a parabola (apex on the crease), built by
- * clipping the card to its tangent half-planes.
+ * The grip for a pinch at (gx, gy) dragged to (fx, fy): the local frame
+ * (drag and crease directions), the capped bend depth, the pinch
+ * parabola's width, and whether this reads as a clean side pull.
  *
  * Null when there is nothing to fold: no travel, a degenerate rect, or a
  * pull away from the card (that lifts the card, it doesn't bend it).
  */
-export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: Rect): Fold | null {
+export function gripFrom(gx: number, gy: number, fx: number, fy: number, rect: Rect): Grip | null {
   const { width: w, height: h } = rect;
   if (w === 0 || h === 0) return null;
   const g = { x: gx - rect.left, y: gy - rect.top };
@@ -127,6 +150,40 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
     const cross = axis % 2 === 0 ? g.x / w : g.y / h;
     edge = inBand && cross >= 0.2 && cross <= 0.8;
   }
+
+  return {
+    gx: g.x,
+    gy: g.y,
+    nx: nux,
+    ny: nuy,
+    ux,
+    uy,
+    bend,
+    apex,
+    half,
+    edge,
+    progress: Math.min(bend / reach, 1),
+    // CSS gradient angles: 0deg points up, clockwise from there
+    angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
+  };
+}
+
+/**
+ * The fold for a pinch at (gx, gy) dragged to (fx, fy), like real card
+ * stock: the crease sits at the midpoint of grab→finger, and the opening
+ * is a bend — widest at the fingers, curving closed toward the card's
+ * corners. Edge pips read first; the corner index stays covered until the
+ * pull goes deep. The curve is a parabola (apex on the crease), built by
+ * clipping the card to its tangent half-planes.
+ *
+ * Null when there is nothing to fold — see gripFrom.
+ */
+export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: Rect): Fold | null {
+  const grip = gripFrom(gx, gy, fx, fy, rect);
+  if (grip === null) return null;
+  const { width: w, height: h } = rect;
+  const g = { x: grip.gx, y: grip.gy };
+  const { nx: nux, ny: nuy, ux, uy, apex, half, edge } = grip;
 
   const rect4: Point[] = [
     { x: 0, y: 0 },
@@ -203,9 +260,8 @@ export function foldFrom(gx: number, gy: number, fx: number, fy: number, rect: R
       left: `${(((2 * cx) / w - 1) * 100).toFixed(1)}%`,
       top: `${(((2 * cy) / h - 1) * 100).toFixed(1)}%`,
     },
-    // CSS gradient angles: 0deg points up, clockwise from there
-    angle: (Math.atan2(nx, -ny) * 180) / Math.PI,
-    progress: Math.min(bend / reach, 1),
+    angle: grip.angle,
+    progress: grip.progress,
   };
 }
 
