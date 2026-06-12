@@ -149,3 +149,11 @@ test("a released peek lies flat again — back to the original unflipped state",
   expect(document.querySelector(".card-peel-flap")).toBeNull();
   expect(screen.getByLabelText(/peeked card/)).toBeInTheDocument();
 });
+
+test("without WebGL2 the squeeze stays on the CSS peel (no overlay canvas)", () => {
+  const { container } = render(<SqueezeCard card={faceDown} onPeek={() => {}} onReveal={() => {}} />);
+  const el = container.firstChild as Element;
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: 50, clientY: 120 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: 50, clientY: 60 });
+  expect(container.querySelector("canvas")).toBeNull();
+});
