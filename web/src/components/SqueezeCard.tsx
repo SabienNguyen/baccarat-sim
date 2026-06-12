@@ -63,6 +63,9 @@ function cardPaddingBox(wrapper: Element): Grab["rect"] {
 export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   const [fold, setFold] = useState<Fold | null>(null);
   const [glActive, setGlActive] = useState(false);
+  // the DOM card hides only once the overlay has painted its first frame
+  // (onReady) — hiding on pointer-down blinks the card out while GL warms up
+  const [glCover, setGlCover] = useState(false);
   const port = useRef<GesturePort>({ drag: null, release: null });
   const glRect = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -207,6 +210,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       } else {
         // a tap: nothing to animate from this gesture
         setGlActive(false);
+        setGlCover(false);
       }
       return;
     }
@@ -280,7 +284,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     >
       {/* opacity (not visibility) keeps the labels in the a11y tree while
           the GL overlay owns the pixels */}
-      <span style={glActive ? { opacity: 0 } : undefined}>
+      <span style={glCover ? { opacity: 0 } : undefined}>
         <Card card={card} fold={fold} restFlat />
       </span>
       {glActive && (
@@ -289,7 +293,11 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
           cardW={glRect.current.width}
           cardH={glRect.current.height}
           port={port}
-          onDone={() => setGlActive(false)}
+          onReady={() => setGlCover(true)}
+          onDone={() => {
+            setGlActive(false);
+            setGlCover(false);
+          }}
         />
       )}
     </div>

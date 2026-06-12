@@ -35,13 +35,33 @@ function makeFakeEngine() {
   };
 }
 
-function mount(port: GesturePort, engine: OverlayEngine, onDone: () => void) {
+function mount(port: GesturePort, engine: OverlayEngine, onDone: () => void, onReady?: () => void) {
   const ref = createRef<GesturePort>() as React.MutableRefObject<GesturePort>;
   ref.current = port;
   return render(
-    <CardGLOverlay card="FaceDown" cardW={90} cardH={126} port={ref} onDone={onDone} engineFactory={() => engine} />,
+    <CardGLOverlay
+      card="FaceDown"
+      cardW={90}
+      cardH={126}
+      port={ref}
+      onDone={onDone}
+      onReady={onReady}
+      engineFactory={() => engine}
+    />,
   );
 }
+
+test("the overlay paints a flat frame, THEN signals ready — never the reverse", () => {
+  const engine = makeFakeEngine();
+  let rendersAtReady = -1;
+  const onReady = () => {
+    rendersAtReady = engine.renders.length;
+  };
+  mount({ drag: null, release: null }, engine, () => {}, onReady);
+  // ready must fire with at least one frame already painted, before any rAF
+  expect(rendersAtReady).toBeGreaterThanOrEqual(1);
+  expect(engine.renders[0].apex).toBe(0); // and that frame is the flat card
+});
 
 test("a live drag renders curls that track the pointer", () => {
   const engine = makeFakeEngine();

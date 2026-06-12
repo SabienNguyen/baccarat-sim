@@ -6,8 +6,8 @@ import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { CardView } from "../engine/types";
 import { gripFrom } from "../squeeze";
-import { curlFromGrip, poseFrom, flipFrame, FLIP_MS } from "./curlMath";
-import type { CurlParams, BodyPose } from "./curlMath";
+import { curlFromGrip, poseFrom, flipSpecFrom, flipAt, FLIP_MS } from "./curlMath";
+import type { CurlParams, BodyPose, FlipSpec } from "./curlMath";
 import { springStep, flutterScale, type SpringState } from "./springs";
 import { buildFaceOps, buildBackOps, buildStockOps, paintTexture } from "./facePainter";
 import { CardGLEngine } from "./engine";
@@ -45,17 +45,29 @@ interface Props {
   cardH: number;
   port: MutableRefObject<GesturePort>;
   onDone: () => void;
+  /** fired after the overlay has PAINTED its first (flat) frame — only
+   *  then may the DOM card hide, or the card blinks out while GL warms up */
+  onReady?: () => void;
   /** test seam; production builds the real engine */
   engineFactory?: (canvas: HTMLCanvasElement, w: number, h: number, pad: number, dpr: number) => OverlayEngine;
 }
 
-export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory }: Props) {
+/** A flat, untouched card — the overlay's first frame, identical to the
+ *  DOM card it is about to replace. */
+const FLAT_CURL: CurlParams = { gx: 0, gy: 0, nx: 0, ny: -1, ux: 1, uy: 0, apex: 0, radius: 5, theta: 0, progress: 0 };
+const FLAT_POSE: BodyPose = { tipAxis: [1, 0], tipPivot: [0, 0], tipRad: 0, slide: [0, 0], scale: 1 };
+
+export function CardGLOverlay({ card, cardW, cardH, port, onDone, onReady, engineFactory }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef(card);
   cardRef.current = card;
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
-  const pad = Math.round(0.6 * cardW);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  // the flip folds the card over its far edge before sliding it home —
+  // the canvas must hold a full card-length of travel in any direction
+  const pad = Math.round(Math.hypot(cardW, cardH));
 
   useEffect(() => {
     const host = hostRef.current;
@@ -90,6 +102,11 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
     const stock = paintTexture(buildStockOps(), cardW, cardH, texScale);
     if (stock) engine.setBotTexture(stock);
 
+    // paint the flat card NOW and only then let the DOM card hide:
+    // hiding before the first GL frame blinks the card out of existence
+    engine.render(FLAT_CURL, FLAT_POSE);
+    onReadyRef.current?.();
+
     // The card's underside: blank stock until peeked, then the printed
     // face (indices covered, thumbs on edge grips), the full face once
     // it turns. Repainted only when the wanted kind changes.
@@ -120,10 +137,10 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
     let mode: "drag" | "settle" | "flip" = "drag";
     let t0 = 0;
     let from: { gx: number; gy: number; fx: number; fy: number } | null = null;
+    let spec: FlipSpec | null = null;
     let last = 0;
     let raf = 0;
     const rect = { left: 0, top: 0, width: cardW, height: cardH };
-    const minDim = Math.min(cardW, cardH);
 
     const frame = (now: number) => {
       const dt = Math.min(now - (last || now), 50);
@@ -135,6 +152,7 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
         mode = "drag";
         sprung = false;
         from = null;
+        spec = null;
       }
 
       if (mode === "drag" && p.release) {
@@ -202,10 +220,17 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
             botKind = tex.kind;
           }
         }
-        const ff = flipFrame(t);
         const curl = curlFromGrip(grip, cardW, cardH);
-        curl.apex *= ff.curlScale;
-        engine.render(curl, poseFrom(grip, cardW, cardH, { ...ff, lift: ff.lift * 0.35 * minDim }));
+        if (!spec) spec = flipSpecFrom(curl, cardW, cardH);
+        const f = flipAt(t, spec);
+        curl.apex = f.apex;
+        curl.radius = f.radius;
+        curl.theta = f.theta;
+        const pose = poseFrom(grip, cardW, cardH);
+        pose.tipRad *= f.tipScale;
+        pose.slide = [f.slideX, f.slideY];
+        pose.scale *= f.settle;
+        engine.render(curl, pose);
       }
       raf = requestAnimationFrame(frame);
     };

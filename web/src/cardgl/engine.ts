@@ -198,16 +198,15 @@ export class CardGLEngine {
     const cx = this.cardW / 2;
     const cy = this.cardH / 2;
     let m = scaleAboutPoint(pose.scale, [cx, cy, 0]);
-    if (pose.flipRad !== 0) {
-      m = multiply(m, rotationAboutAxis([cx, cy, 0], [pose.flipAxis[0], pose.flipAxis[1], 0], pose.flipRad));
-    }
     if (pose.tipRad !== 0) {
       m = multiply(
         m,
         rotationAboutAxis([pose.tipPivot[0], pose.tipPivot[1], 0], [pose.tipAxis[0], pose.tipAxis[1], 0], pose.tipRad),
       );
     }
-    if (pose.lift !== 0) m = multiply(translation(0, 0, pose.lift), m);
+    if (pose.slide[0] !== 0 || pose.slide[1] !== 0) {
+      m = multiply(translation(pose.slide[0], pose.slide[1], 0), m);
+    }
     return m;
   }
 

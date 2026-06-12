@@ -101,51 +101,103 @@ export interface BodyPose {
   tipPivot: [number, number];
   /** body tip toward the camera (rad) */
   tipRad: number;
-  /** crease direction — the reveal's turn axis */
-  flipAxis: [number, number];
-  /** 0 while squeezing; 0→π during the flip */
-  flipRad: number;
-  /** extra z translation (px) */
-  lift: number;
+  /** in-plane translation (px) — the flip sliding the card home */
+  slide: [number, number];
   /** grow toward the camera */
   scale: number;
 }
 
-export interface FlipFrame {
-  rotU: number;
-  lift: number;
-  curlScale: number;
-  settle: number;
-}
-
 /** Port of the CSS squeeze transform: tip about the edge opposite the
  *  pull, slight grow — exactly as Card.tsx computed it. */
-export function poseFrom(grip: Grip, cardW: number, cardH: number, flip?: FlipFrame): BodyPose {
+export function poseFrom(grip: Grip, cardW: number, cardH: number): BodyPose {
   const phi = (grip.angle * Math.PI) / 180;
   const p = grip.progress;
-  const curl = flip ? flip.curlScale : 1;
   return {
     tipAxis: [Math.cos(phi), Math.sin(phi)],
     tipPivot: [(0.5 + 0.5 * Math.sin(phi)) * cardW, (0.5 - 0.5 * Math.cos(phi)) * cardH],
-    tipRad: ((16 * p * Math.PI) / 180) * curl,
-    flipAxis: [grip.ux, grip.uy],
-    flipRad: flip ? flip.rotU : 0,
-    lift: flip ? flip.lift : 0,
-    scale: (1 + 0.02 * p) * (flip ? flip.settle : 1),
+    tipRad: (16 * p * Math.PI) / 180,
+    slide: [0, 0],
+    scale: 1 + 0.02 * p,
   };
 }
 
-/** The reveal: a rigid turn over the crease axis while the curl relaxes
- *  mid-air — the card lands face-up in its own slot. lift is 0..1 (the
- *  overlay scales it to px). Includes a small landing settle pop. */
-export const FLIP_MS = 560;
-export function flipFrame(tMs: number): FlipFrame {
-  const t = Math.min(Math.max(tMs / FLIP_MS, 0), 1);
-  const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+/**
+ * The reveal IS the peel completing: the fold sweeps across the whole
+ * card over the release crease (a dealer turning the card over its far
+ * edge), then the face-up card slides home into its slot. The mirror
+ * about the final crease displaces the card by 2·(aEnd − dv) along the
+ * drag; the slide is exactly that vector reversed, so the card lands
+ * back where it lay — face up.
+ */
+export const FLIP_MS = 640;
+/** Residual roll radius once the fold has fully closed (px). */
+const FLIP_R_END = 1.2;
+/** Fraction of the flip spent sweeping the fold; the rest slides home. */
+const SWEEP_END = 0.62;
+
+export interface FlipSpec {
+  a0: number;
+  r0: number;
+  theta0: number;
+  /** crease depth at which the fold has consumed the whole card */
+  aEnd: number;
+  /** the slide bringing the mirrored card back into its slot */
+  slideX: number;
+  slideY: number;
+}
+
+export function flipSpecFrom(curl: CurlParams, cardW: number, cardH: number): FlipSpec {
+  // the card's farthest extent along the drag, measured from the grab
+  let vMax = 0;
+  for (const [cx, cy] of [
+    [0, 0],
+    [cardW, 0],
+    [cardW, cardH],
+    [0, cardH],
+  ]) {
+    vMax = Math.max(vMax, (cx - curl.gx) * curl.nx + (cy - curl.gy) * curl.ny);
+  }
+  const aEnd = vMax + Math.PI * FLIP_R_END * 0.5 + 2;
+  const dvC = (cardW / 2 - curl.gx) * curl.nx + (cardH / 2 - curl.gy) * curl.ny;
   return {
-    rotU: Math.PI * ease,
-    lift: Math.sin(Math.PI * t),
-    curlScale: Math.max(1 - t / 0.55, 0),
-    settle: t > 0.92 ? 1 + 0.04 * Math.sin(((t - 0.92) / 0.08) * Math.PI) : 1,
+    a0: curl.apex,
+    r0: curl.radius,
+    theta0: curl.theta,
+    aEnd,
+    slideX: -2 * (aEnd - dvC) * curl.nx,
+    slideY: -2 * (aEnd - dvC) * curl.ny,
+  };
+}
+
+export interface FlipState {
+  apex: number;
+  radius: number;
+  theta: number;
+  slideX: number;
+  slideY: number;
+  /** scales the squeeze body tip away as the fold takes over */
+  tipScale: number;
+  /** landing pop */
+  settle: number;
+  done: boolean;
+}
+
+export function flipAt(tMs: number, spec: FlipSpec): FlipState {
+  const t = Math.min(Math.max(tMs / FLIP_MS, 0), 1);
+  const tA = Math.min(t / SWEEP_END, 1);
+  const eA = tA < 0.5 ? 4 * tA * tA * tA : 1 - Math.pow(-2 * tA + 2, 3) / 2;
+  const tB = Math.max((t - SWEEP_END) / (1 - SWEEP_END), 0);
+  const eB = 1 - Math.pow(1 - tB, 3);
+  return {
+    apex: spec.a0 + (spec.aEnd - spec.a0) * eA,
+    // the roll breathes wider mid-turn (a stiff card makes a lazy arc),
+    // then tightens so the card lands flat
+    radius: spec.r0 + (FLIP_R_END - spec.r0) * tA + 0.35 * spec.r0 * Math.sin(Math.PI * tA),
+    theta: spec.theta0 * (1 - tA),
+    slideX: spec.slideX * eB,
+    slideY: spec.slideY * eB,
+    tipScale: Math.max(1 - 2 * tA, 0),
+    settle: tB > 0.85 ? 1 + 0.04 * Math.sin(((tB - 0.85) / 0.15) * Math.PI) : 1,
+    done: tMs >= FLIP_MS,
   };
 }

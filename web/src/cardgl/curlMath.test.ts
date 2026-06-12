@@ -1,5 +1,5 @@
 import { gripFrom } from "../squeeze";
-import { curlFromGrip, deform, poseFrom, flipFrame, FLIP_MS, type CurlParams } from "./curlMath";
+import { curlFromGrip, deform, poseFrom, flipSpecFrom, flipAt, FLIP_MS, type CurlParams } from "./curlMath";
 
 const RECT = { left: 0, top: 0, width: 90, height: 126 };
 // bottom-edge pull: grab (45,124) → finger (45,60); bend 64, apex 32
@@ -78,25 +78,55 @@ test("poseFrom ports the CSS body tip", () => {
   const pose = poseFrom(grip, 90, 126);
   expect(pose.tipRad).toBeCloseTo((16 * grip.progress * Math.PI) / 180);
   expect(pose.scale).toBeCloseTo(1 + 0.02 * grip.progress);
-  expect(pose.flipRad).toBe(0);
-  expect(pose.lift).toBe(0);
+  expect(pose.slide).toEqual([0, 0]);
   // straight up pull (angle 0): hinge pivot is the top edge midpoint
   expect(pose.tipPivot[0]).toBeCloseTo(45);
   expect(pose.tipPivot[1]).toBeCloseTo(0);
 });
 
-test("the flip turns the card exactly over and settles flat", () => {
-  expect(flipFrame(0).rotU).toBeCloseTo(0);
-  expect(flipFrame(0).curlScale).toBeCloseTo(1);
-  expect(flipFrame(FLIP_MS).rotU).toBeCloseTo(Math.PI);
-  expect(flipFrame(FLIP_MS).curlScale).toBe(0);
-  expect(flipFrame(FLIP_MS).lift).toBeCloseTo(0, 5);
-  expect(flipFrame(FLIP_MS / 2).lift).toBeCloseTo(1, 5); // peak mid-air
-  // rotation is monotonic
+// --- the flip: the peel completing — fold sweeps the card, then it slides home ---
+
+const spec = flipSpecFrom(base, 90, 126);
+
+test("the flip starts exactly where the release curl left off", () => {
+  const f = flipAt(0, spec);
+  expect(f.apex).toBeCloseTo(base.apex);
+  expect(f.radius).toBeCloseTo(base.radius);
+  expect(f.theta).toBeCloseTo(base.theta);
+  expect(f.slideX).toBeCloseTo(0);
+  expect(f.slideY).toBeCloseTo(0);
+  expect(f.done).toBe(false);
+});
+
+test("the sweep consumes the whole card before the slide begins", () => {
+  // by the end of the sweep every card point must be past the roll
+  const f = flipAt(FLIP_MS * 0.62, spec);
+  const end = { ...base, apex: f.apex, radius: f.radius, theta: 0 };
+  for (let y = 0; y <= 126; y += 14) {
+    const d = deform(end, 45, y);
+    expect(d.z).toBeGreaterThan(0); // nothing left flat on the felt
+    expect(d.z).toBeLessThanOrEqual(2 * f.radius + 1e-6); // all folded over, none mid-roll
+  }
+});
+
+test("the flip lands the card face-up exactly in its slot", () => {
+  const f = flipAt(FLIP_MS, spec);
+  expect(f.done).toBe(true);
+  expect(f.theta).toBe(0);
+  const end = { ...base, apex: f.apex, radius: f.radius, theta: 0 };
+  // the mirrored card plus the slide returns every point to its column:
+  // the center must land back on the center (the slide cancels the mirror)
+  const c = deform(end, 45, 63);
+  expect(c.x + f.slideX).toBeCloseTo(45, 0);
+  expect(c.y + f.slideY).toBeCloseTo(63, 0);
+  expect(c.z).toBeLessThan(4); // flat on the felt, bar the residual roll
+});
+
+test("the fold sweep is monotonic", () => {
   let prev = -1;
   for (let t = 0; t <= FLIP_MS; t += 20) {
-    const r = flipFrame(t).rotU;
-    expect(r).toBeGreaterThanOrEqual(prev);
-    prev = r;
+    const a = flipAt(t, spec).apex;
+    expect(a).toBeGreaterThanOrEqual(prev);
+    prev = a;
   }
 });
