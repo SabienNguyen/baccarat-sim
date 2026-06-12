@@ -45,6 +45,8 @@ export class CardGLEngine {
   private texBot: WebGLTexture;
   private cardW: number;
   private cardH: number;
+  private canvas: HTMLCanvasElement;
+  private lostHandler: (e: Event) => void;
   onContextLost?: () => void;
 
   static isSupported(): boolean {
@@ -65,10 +67,12 @@ export class CardGLEngine {
     const gl = canvas.getContext("webgl2", { alpha: true, antialias: true, premultipliedAlpha: false });
     if (!gl) throw new Error("webgl2 unavailable");
     this.gl = gl;
-    canvas.addEventListener("webglcontextlost", (e) => {
+    this.canvas = canvas;
+    this.lostHandler = (e: Event) => {
       e.preventDefault();
       this.onContextLost?.();
-    });
+    };
+    canvas.addEventListener("webglcontextlost", this.lostHandler);
 
     this.program = this.link(VERT, FRAG);
     gl.useProgram(this.program);
@@ -128,6 +132,10 @@ export class CardGLEngine {
     const view = translation(-cardW / 2, -cardH / 2, -FOCAL);
     const pv = multiply(proj, multiply(flipY, view));
 
+    // y-down world through a y-flipping projection: what's CCW on the
+    // card reads as CW in NDC — declare CW the front so the flat card's
+    // up-side is gl_FrontFacing (verified against the glprobe page)
+    gl.frontFace(gl.CW);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.viewport(0, 0, canvas.width, canvas.height);
@@ -235,6 +243,12 @@ export class CardGLEngine {
   }
 
   dispose() {
+    // Detach the listener FIRST: loseContext() fires webglcontextlost
+    // asynchronously, after a disposing owner has already moved on —
+    // a stale event must never reach onContextLost (StrictMode mounts
+    // the owner twice and the ghost event would kill the live engine).
+    this.canvas.removeEventListener("webglcontextlost", this.lostHandler);
+    this.onContextLost = undefined;
     this.gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 }

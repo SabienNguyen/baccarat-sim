@@ -50,7 +50,7 @@ interface Props {
 }
 
 export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef(card);
   cardRef.current = card;
   const onDoneRef = useRef(onDone);
@@ -58,18 +58,32 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
   const pad = Math.round(0.6 * cardW);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const host = hostRef.current;
+    if (!host) return;
+    // The canvas is created HERE, per effect run: a disposed GL context
+    // kills its canvas for good, and StrictMode double-mounts the effect —
+    // each run must own a fresh canvas or the remount inherits a corpse.
+    const canvas = document.createElement("canvas");
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
+    host.appendChild(canvas);
     const dpr = Math.min(typeof devicePixelRatio !== "undefined" ? devicePixelRatio : 1, 2);
     const texScale = Math.min(dpr * 2, 3);
     let engine: OverlayEngine;
     try {
       engine = (engineFactory ?? ((c, w, h, p, d) => new CardGLEngine(c, w, h, p, d)))(canvas, cardW, cardH, pad, dpr);
-    } catch {
+    } catch (err) {
+      // fall back to the CSS peel, but never silently
+      console.warn("cardgl: engine unavailable, using CSS peel", err);
+      host.removeChild(canvas);
       onDoneRef.current();
       return;
     }
-    engine.onContextLost = () => onDoneRef.current();
+    engine.onContextLost = () => {
+      console.warn("cardgl: context lost mid-gesture, handing back to the CSS peel");
+      onDoneRef.current();
+    };
 
     const back = paintTexture(buildBackOps(), cardW, cardH, texScale);
     if (back) engine.setTopTexture(back);
@@ -200,14 +214,15 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, engineFactory 
     return () => {
       cancelAnimationFrame(raf);
       engine.dispose();
+      canvas.remove();
     };
     // mount-once: the loop reads everything live through refs
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
+      ref={hostRef}
       aria-hidden
       style={{
         position: "absolute",
