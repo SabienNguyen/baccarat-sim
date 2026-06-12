@@ -24,7 +24,6 @@ const UNIFORMS = [
   "uDir",
   "uPerp",
   "uApex",
-  "uHalf",
   "uRadius",
   "uTheta",
   "uModel",
@@ -226,7 +225,6 @@ export class CardGLEngine {
     gl.uniform2f(this.uni.uDir, curl.nx, curl.ny);
     gl.uniform2f(this.uni.uPerp, curl.ux, curl.uy);
     gl.uniform1f(this.uni.uApex, curl.apex);
-    gl.uniform1f(this.uni.uHalf, curl.half);
     gl.uniform1f(this.uni.uRadius, curl.radius);
     gl.uniform1f(this.uni.uTheta, curl.theta);
     gl.uniformMatrix4fv(this.uni.uModel, false, this.modelMatrix(pose));

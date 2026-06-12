@@ -5,10 +5,7 @@
 // lockstep with deform().
 import type { Grip } from "../squeeze";
 
-/** Pinch parabola half-width standing in for "infinite" on edge grips:
- *  the falloff term vanishes and the roll is a pure cylinder. */
-export const EDGE_HALF = 1e6;
-/** Roll radius floor (px) — guards the division as the roll dies out. */
+/** Roll radius floor (px) — guards the division in the wrap. */
 export const R_MIN = 0.75;
 
 export interface CurlParams {
@@ -23,9 +20,7 @@ export interface CurlParams {
   uy: number;
   /** crease depth (px) */
   apex: number;
-  /** parabola half-width (px) */
-  half: number;
-  /** roll radius at the grab column (px) */
+  /** roll radius (px) */
   radius: number;
   /** lift of the free flap past the roll (rad) */
   theta: number;
@@ -46,7 +41,6 @@ export function curlFromGrip(grip: Grip, cardW: number, cardH: number): CurlPara
     ux: grip.ux,
     uy: grip.uy,
     apex: grip.apex,
-    half: grip.edge ? EDGE_HALF : grip.half,
     radius,
     theta,
     progress: grip.progress,
@@ -60,24 +54,24 @@ export interface DeformedPoint {
 }
 
 /**
- * The u-modulated roll: per crease-parallel column, a 2D cylinder roll in
- * the drag direction, its amplitude shaped by the pinch parabola. The
- * contact line vt = a + (πr/2)·fall budgets the material the roll
- * consumes, which makes the fold's invariant exact: at full falloff and
- * theta 0 the grabbed edge lands at 2·apex — under the finger, exactly
- * like the CSS mirror model it replaces.
+ * A uniform cylinder roll about the crease: card stock is inextensible
+ * and STIFF, so a squeeze folds it about a line — every point displaces
+ * identically at equal depth into the fold (no shear: artwork stays
+ * rigid, the card's straight edges stay straight). Edge pulls and corner
+ * pinches differ only in where the gesture puts the crease. The contact
+ * line vt = apex + πr/2 budgets the material the roll consumes, keeping
+ * the fold's invariant exact: at theta 0 the grabbed edge lands at
+ * 2·apex — under the finger, exactly like the CSS mirror model.
  */
 export function deform(p: CurlParams, x: number, y: number): DeformedPoint {
   const dxg = x - p.gx;
   const dyg = y - p.gy;
   const du = dxg * p.ux + dyg * p.uy;
   const dv = dxg * p.nx + dyg * p.ny;
-  const t = du / p.half;
-  const fall = Math.max(1 - t * t, 0);
-  if (fall <= 0 || p.apex < 1e-3) return { x, y, z: 0 };
-  const a = p.apex * fall;
-  const r = Math.max(p.radius * fall, R_MIN);
-  const vt = a + Math.PI * r * 0.5 * fall;
+  if (p.apex < 1e-3) return { x, y, z: 0 };
+  const a = p.apex;
+  const r = Math.max(p.radius, R_MIN);
+  const vt = a + Math.PI * r * 0.5;
   const s = vt - dv;
   let v2: number;
   let z: number;

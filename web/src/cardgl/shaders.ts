@@ -7,7 +7,7 @@ precision highp float;
 in vec2 aPos;
 uniform vec2 uCard;
 uniform vec2 uGrab, uDir, uPerp;
-uniform float uApex, uHalf, uRadius, uTheta;
+uniform float uApex, uRadius, uTheta;
 uniform mat4 uModel, uPV;
 uniform float uShadowPass;
 out vec2 vUV;
@@ -21,12 +21,10 @@ vec3 deform(vec2 p) {
   vec2 d = p - uGrab;
   float du = dot(d, uPerp);
   float dv = dot(d, uDir);
-  float t = du / uHalf;
-  float fall = max(1.0 - t * t, 0.0);
-  if (fall <= 0.0 || uApex < 1e-3) return vec3(p, 0.0);
-  float a = uApex * fall;
-  float r = max(uRadius * fall, R_MIN);
-  float vt = a + 0.5 * PI * r * fall;
+  if (uApex < 1e-3) return vec3(p, 0.0);
+  float a = uApex;
+  float r = max(uRadius, R_MIN);
+  float vt = a + 0.5 * PI * r;
   float s = vt - dv;
   float v2; float z;
   if (s <= 0.0) { v2 = dv; z = 0.0; }

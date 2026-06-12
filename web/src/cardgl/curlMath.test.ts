@@ -1,5 +1,5 @@
 import { gripFrom } from "../squeeze";
-import { curlFromGrip, deform, poseFrom, flipFrame, EDGE_HALF, FLIP_MS, type CurlParams } from "./curlMath";
+import { curlFromGrip, deform, poseFrom, flipFrame, FLIP_MS, type CurlParams } from "./curlMath";
 
 const RECT = { left: 0, top: 0, width: 90, height: 126 };
 // bottom-edge pull: grab (45,124) → finger (45,60); bend 64, apex 32
@@ -7,9 +7,8 @@ const grip = gripFrom(45, 124, 45, 60, RECT)!;
 const base = curlFromGrip(grip, 90, 126);
 const flatTipped: CurlParams = { ...base, theta: 0 };
 
-test("curl params inherit the grip frame; edge grips flatten the falloff", () => {
+test("curl params inherit the grip frame", () => {
   expect(base.apex).toBeCloseTo(32);
-  expect(base.half).toBe(EDGE_HALF); // straight bottom-edge pull = cylinder
   expect(base.radius).toBeGreaterThan(4);
   expect(base.theta).toBeGreaterThan(0);
 });
@@ -49,12 +48,23 @@ test("the card never sinks through the table", () => {
   }
 });
 
-test("a pinch dies out past the parabola's rim", () => {
-  const pinch = curlFromGrip(gripFrom(85, 120, 30, 60, RECT)!, 90, 126);
-  expect(pinch.half).toBeLessThan(EDGE_HALF);
-  // walk along the crease direction well past half: undeformed
-  const far = deform(pinch, 85 + pinch.ux * (pinch.half + 30), 120 + pinch.uy * (pinch.half + 30));
-  expect(far.z).toBe(0);
+test("a pinch folds rigidly — no shear along the crease", () => {
+  // card stock is inextensible: two points the same depth into the fold
+  // must displace identically, wherever they sit along the crease.
+  // Anything else stretches the artwork and bends the card's edges.
+  const pinch = curlFromGrip(gripFrom(45, 123, 70, 83, RECT)!, 90, 126);
+  const v0 = 5; // both points sit in the lifted flap
+  const at = (u: number) => {
+    const x = 45 + u * pinch.ux + v0 * pinch.nx;
+    const y = 123 + u * pinch.uy + v0 * pinch.ny;
+    const d = deform(pinch, x, y);
+    return { dx: d.x - x, dy: d.y - y, z: d.z };
+  };
+  const a = at(0);
+  const b = at(-20);
+  expect(b.dx).toBeCloseTo(a.dx, 5);
+  expect(b.dy).toBeCloseTo(a.dy, 5);
+  expect(b.z).toBeCloseTo(a.z, 5);
 });
 
 test("an edge grip deforms uniformly across the card", () => {

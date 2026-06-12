@@ -16,8 +16,13 @@ const pulls: Array<[string, number, number, number, number]> = [
   ["edge light", 50, 138, 50, 105],
   ["edge half", 50, 138, 50, 70],
   ["edge deep", 50, 138, 50, 15],
-  ["corner pinch", 85, 130, 40, 75],
-  ["side pull", 5, 70, 60, 70],
+  ["corner br", 92, 135, 45, 80],
+  ["corner bl", 8, 135, 55, 80],
+  ["corner tl", 8, 8, 55, 65],
+  ["corner tr", 92, 8, 45, 65],
+  ["side left", 5, 70, 60, 70],
+  ["side right", 95, 70, 40, 70],
+  ["edge top", 50, 5, 50, 70],
 ];
 
 const root = document.getElementById("root")!;
