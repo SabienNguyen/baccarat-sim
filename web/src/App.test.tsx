@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App, GameTable } from "./App";
 import { createGameStore } from "./store/gameStore";
@@ -138,6 +138,55 @@ test("New Shoe opens the cut-the-deck ritual and only shuffles after the cut", a
   await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
   expect(newShoe).toHaveBeenCalledOnce();
   expect(screen.queryByRole("dialog", { name: "Cut the deck" })).toBeNull();
+});
+
+test("single-player shows no Settle or Next-hand buttons", () => {
+  const store = createGameStore(fakeSession(dealingSnapshot()));
+  render(<App store={store} />);
+  expect(screen.queryByRole("button", { name: "Settle" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Next hand" })).toBeNull();
+});
+
+test("single-player auto-settles once all cards are up, then auto-advances to Betting", () => {
+  vi.useFakeTimers();
+  try {
+    const allUp: RoundSnapshot = {
+      ...dealingSnapshot(),
+      player: {
+        cards: [
+          { FaceUp: { rank: "Nine", suit: "Hearts" } },
+          { FaceUp: { rank: "Four", suit: "Clubs" } },
+        ],
+        total: 3,
+      },
+      banker: {
+        cards: [
+          { FaceUp: { rank: "Two", suit: "Spades" } },
+          { FaceUp: { rank: "Three", suit: "Hearts" } },
+        ],
+        total: 5,
+      },
+    };
+    const settled: RoundSnapshot = {
+      ...allUp,
+      phase: "Settled",
+      bankroll: allUp.bankroll + 500,
+      outcome: "PlayerWin",
+      payouts: [{ bet: { kind: { Main: "Player" }, amount: 500 }, net: 500 }],
+    };
+    let snap = allUp;
+    const store = createGameStore(
+      fakeSession(allUp, { snapshot: () => snap, settle: () => okResult((snap = settled)) }),
+    );
+    render(<App store={store} />);
+    expect(store.getState().snapshot.phase).toBe("Dealing");
+    act(() => vi.advanceTimersByTime(600)); // AUTO_SETTLE_MS
+    expect(store.getState().snapshot.phase).toBe("Settled");
+    act(() => vi.advanceTimersByTime(1400)); // AUTO_ADVANCE_MS
+    expect(store.getState().snapshot.phase).toBe("Betting");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("busting offers a re-buy and a way out", async () => {

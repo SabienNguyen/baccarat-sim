@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
@@ -23,6 +23,11 @@ import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
 import { playSfx } from "./audio/sfx";
+
+/** Beat after the final card flips before the round resolves itself. */
+const AUTO_SETTLE_MS = 600;
+/** How long the win/loss popup lingers before the next hand opens. */
+const AUTO_ADVANCE_MS = 1400;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -156,6 +161,31 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
     !isFaceUp(snapshot.player.cards[0] ?? "FaceDown") ||
     !isFaceUp(snapshot.player.cards[1] ?? "FaceDown");
 
+  // Single-player only: the round settles itself once every card is face-up,
+  // then clears to the next hand after the win popup. Multiplayer keeps its
+  // buttons (the authoritative server paces coups).
+  const settledThisCoup = useRef(false);
+  useEffect(() => {
+    if (seats !== null) return;
+    if (snapshot.phase !== "Dealing") {
+      if (snapshot.phase === "Betting") settledThisCoup.current = false;
+      return;
+    }
+    const all = [...snapshot.player.cards, ...snapshot.banker.cards];
+    const allUp = all.length > 0 && all.every((c) => isFaceUp(c));
+    if (!allUp || settledThisCoup.current) return;
+    settledThisCoup.current = true;
+    const t = setTimeout(settle, AUTO_SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [seats, snapshot, settle]);
+
+  useEffect(() => {
+    if (seats !== null) return;
+    if (snapshot.phase !== "Settled" || busted || goalReached) return;
+    const t = setTimeout(newHand, AUTO_ADVANCE_MS);
+    return () => clearTimeout(t);
+  }, [seats, snapshot.phase, busted, goalReached, newHand]);
+
   return (
     <div className="app">
       <Hud
@@ -200,8 +230,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           snapshot={snapshot}
           onDeal={deal}
           onRevealAll={seats === null ? revealAll : undefined}
-          onSettle={settle}
-          onNewHand={newHand}
+          onSettle={seats !== null ? settle : undefined}
+          onNewHand={seats !== null ? newHand : undefined}
           onNewShoe={() => setCutting(true)}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
