@@ -6,7 +6,7 @@ interface ControlsProps {
   onDeal: () => void;
   /** Flip everything (single player; live tables follow squeeze rights). */
   onRevealAll?: () => void;
-  onSettle: () => void;
+  onSettle?: () => void;
   onNewHand?: () => void;
   onNewShoe: () => void;
   explainOn?: boolean;
@@ -46,12 +46,16 @@ export function Controls({
           Reveal all
         </button>
       )}
-      <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
-        Settle
-      </button>
-      <button type="button" className="btn" disabled={!settled} onClick={onNewHand}>
-        Next hand
-      </button>
+      {onSettle && (
+        <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
+          Settle
+        </button>
+      )}
+      {onNewHand && (
+        <button type="button" className="btn" disabled={!settled} onClick={onNewHand}>
+          Next hand
+        </button>
+      )}
       <button type="button" className="btn" disabled={dealing} onClick={onNewShoe}>
         New Shoe
       </button>

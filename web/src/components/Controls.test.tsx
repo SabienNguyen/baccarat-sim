@@ -62,8 +62,8 @@ test("Reveal all is disabled outside Dealing and enabled (and fires) in Dealing"
   expect(onRevealAll).toHaveBeenCalledOnce();
 });
 
-test("Settle is enabled in Dealing; no per-card Reveal buttons exist", () => {
-  render(
+test("Settle and Next hand render only when their handlers are given", () => {
+  const { rerender } = render(
     <Controls
       snapshot={dealingSnapshot()}
       onDeal={vi.fn()}
@@ -73,6 +73,12 @@ test("Settle is enabled in Dealing; no per-card Reveal buttons exist", () => {
     />,
   );
   expect(screen.getByRole("button", { name: "Settle" })).toBeEnabled();
+  // single-player wiring passes neither handler → neither button exists
+  rerender(
+    <Controls snapshot={dealingSnapshot()} onDeal={vi.fn()} onRevealAll={vi.fn()} onNewShoe={vi.fn()} />,
+  );
+  expect(screen.queryByRole("button", { name: "Settle" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Next hand" })).toBeNull();
   expect(screen.queryByRole("button", { name: /^Reveal (Player|Banker) / })).toBeNull();
 });
 
