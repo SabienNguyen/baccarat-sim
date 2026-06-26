@@ -335,6 +335,11 @@
   cursor: pointer;
   padding: 4px 2px;
 }
+/* the collapsed drawer: outrank `.side-bets { display: grid }`, which the
+   bare [hidden] UA rule can't (a grid's display wins over UA display:none) */
+.side-bets[hidden] {
+  display: none;
+}
 .side-bets--open {
   animation: side-reveal 180ms ease-out;
 }

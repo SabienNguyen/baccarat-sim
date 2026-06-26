@@ -158,7 +158,7 @@ export function BetRail({
               aria-controls="side-bets"
               onClick={toggleSide}
             >
-              {sideOpen ? "▾" : "▸"} Side bets
+              {sideOpen ? "- " : "+ "}Side bets
             </button>
             <button
               type="button"
