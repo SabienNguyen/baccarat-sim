@@ -83,11 +83,9 @@
   color: #f3eede;
 }
 
-/* the ⓘ on the felt that opens this menu */
+/* the ⓘ that opens this menu — sits inline in the side-bet drawer header */
 .bonus-info-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  position: static;
   width: 24px;
   height: 24px;
   border-radius: 50%;

@@ -6,6 +6,22 @@ import { Chip, MiniChip } from "./Chip";
 import { BonusInfoModal } from "./BonusInfoModal";
 import "./betrail.css";
 
+const SIDE_OPEN_KEY = "baccarat.sidebets.open";
+function loadSideOpen(): boolean {
+  try {
+    return localStorage.getItem(SIDE_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function saveSideOpen(open: boolean): void {
+  try {
+    localStorage.setItem(SIDE_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    /* storage unavailable — fine */
+  }
+}
+
 interface BetRailProps {
   snapshot: RoundSnapshot;
   denoms: number[];
@@ -120,30 +136,21 @@ export function BetRail({
   const handTotal = hand.reduce((a, b) => a + b, 0);
   const [showBonusInfo, setShowBonusInfo] = useState(false);
 
+  const sideStaked = snapshot.bets.some(
+    (b) => typeof b.kind === "object" && "Side" in b.kind,
+  );
+  const [sideOpenPref, setSideOpenPref] = useState(loadSideOpen);
+  // a live side bet forces the drawer open; otherwise the saved preference wins
+  const sideOpen = sideOpenPref || sideStaked;
+  const toggleSide = () => {
+    const next = !sideOpen;
+    setSideOpenPref(next);
+    saveSideOpen(next);
+  };
+
   return (
     <section aria-label="Bet rail" className="bet-rail">
       <div className="felt" aria-label="Spots">
-        <button
-          type="button"
-          className="bonus-info-btn"
-          aria-label="What are the bonus bets?"
-          onClick={() => setShowBonusInfo(true)}
-        >
-          i
-        </button>
-        <div className="side-bets">
-          {SIDE_SPOTS.map((spot) => (
-            <BetSpot
-              key={spot.label}
-              spot={spot}
-              betting={canBet}
-              chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
-              shape="side"
-              onPlaceHand={onPlaceHand}
-              onPlaceChip={onPlaceChip}
-            />
-          ))}
-        </div>
         <div className="main-bets">
           {MAIN_SPOTS.map((spot) => (
             <BetSpot
@@ -156,6 +163,44 @@ export function BetRail({
               onPlaceChip={onPlaceChip}
             />
           ))}
+        </div>
+        <div className="side-drawer">
+          <div className="side-drawer-head">
+            <button
+              type="button"
+              className="side-toggle"
+              aria-expanded={sideOpen}
+              aria-controls="side-bets"
+              onClick={toggleSide}
+            >
+              {sideOpen ? "▾" : "▸"} Side bets
+            </button>
+            <button
+              type="button"
+              className="bonus-info-btn"
+              aria-label="What are the bonus bets?"
+              onClick={() => setShowBonusInfo(true)}
+            >
+              i
+            </button>
+          </div>
+          <div
+            id="side-bets"
+            className={`side-bets${sideOpen ? " side-bets--open" : ""}`}
+            hidden={!sideOpen}
+          >
+            {SIDE_SPOTS.map((spot) => (
+              <BetSpot
+                key={spot.label}
+                spot={spot}
+                betting={canBet}
+                chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
+                shape="side"
+                onPlaceHand={onPlaceHand}
+                onPlaceChip={onPlaceChip}
+              />
+            ))}
+          </div>
         </div>
       </div>
 

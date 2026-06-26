@@ -6,6 +6,15 @@ import { buyIn, CHIP_DENOMINATIONS } from "../chips";
 
 const rack = buyIn(1_000_000).rack;
 
+// keep the side-bet drawer's saved state from leaking between tests
+beforeEach(() => {
+  try {
+    localStorage.removeItem("baccarat.sidebets.open");
+  } catch {
+    /* storage unavailable in this env — fine */
+  }
+});
+
 const noopProps = {
   denoms: CHIP_DENOMINATIONS,
   rack,
@@ -122,4 +131,17 @@ test("the felt's info icon opens the bonus-bets explainer", async () => {
 test("Clear bets is disabled when nothing is staged", () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   expect(screen.getByRole("button", { name: "Clear bets" })).toBeDisabled();
+});
+
+test("side bets are hidden until the drawer is opened", async () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  expect(screen.queryByRole("button", { name: "Bet Dragon 7" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: /Side bets/ }));
+  expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toBeInTheDocument();
+});
+
+test("a staked side bet forces the drawer open", () => {
+  const snap = bettingSnapshot({ bets: [{ kind: { Side: "Dragon7" }, amount: 500 }] });
+  render(<BetRail snapshot={snap} {...noopProps} stagedChips={[[500]]} />);
+  expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toBeInTheDocument();
 });
