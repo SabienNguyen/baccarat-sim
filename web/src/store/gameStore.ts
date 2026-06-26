@@ -6,18 +6,7 @@ import { lastFlipBetween, type Flip } from "../cards";
 /** What the dealer can refuse with: an engine error or server speech. */
 export type DealerError = CommandError | { Message: string };
 import type { GameSession, CommandResult } from "../engine/adapter";
-import {
-  CHIP_DENOMINATIONS,
-  type Rack,
-  buyIn,
-  toChips,
-  addChips,
-  removeChips,
-  breakChip,
-  colorUp,
-  mintChange,
-  acquire,
-} from "../chips";
+import { CHIP_DENOMINATIONS } from "../chips";
 
 export { CHIP_DENOMINATIONS };
 
@@ -67,30 +56,14 @@ export interface GameState {
 
   /** The chip denominations this table stocks. */
   denoms: number[];
-  /** Your chips, by denomination. rack + change + hand + staged === bankroll. */
-  rack: Rack;
-  /** Loose cents that don't make a whole chip yet (commission change). */
-  change: number;
-  /** Chips currently picked up, ready to drop on a spot. */
-  hand: number[];
-  /** The chips sitting on the felt, parallel to snapshot.bets. */
-  stagedChips: number[][];
+  /** The armed chip denomination (cents) — tap a spot to stake it. */
+  selectedChip: number;
 
   toggleExplain: () => void;
-  /** Pick one chip of `denom` up from the rack into your hand. */
-  pickChip: (denom: number) => void;
-  /** Put everything in your hand back in the rack. */
-  returnHand: () => void;
-  /** Drop the whole hand on a spot as a single bet. */
-  placeHand: (kind: BetKind) => void;
-  /** Place one chip on a spot (drag-and-drop path). */
-  placeChip: (kind: BetKind, denom: number) => void;
-  /** Ask the dealer to break one chip into smaller ones. */
-  exchangeBreak: (denom: number) => void;
-  /** Ask the dealer to color up smaller chips into this denomination. */
-  exchangeColorUp: (denom: number) => void;
-  /** Buy one chip of this denomination with whatever you hold. */
-  exchangeAcquire: (denom: number) => void;
+  /** Arm a denomination to bet. */
+  selectChip: (denom: number) => void;
+  /** Stake a chip on a spot: the armed one, or `denom` (drag-and-drop). */
+  stake: (kind: BetKind, denom?: number) => void;
   clearBets: () => void;
   deal: () => void;
   peek: (side: Side, index: number) => void;
@@ -147,8 +120,6 @@ export function createGameStore(
       }, DEALER_FLIP_MS);
     };
 
-    const initial = buyIn(session.snapshot().bankroll, denoms);
-
     return {
       snapshot: session.snapshot(),
       lastError: null,
@@ -165,91 +136,25 @@ export function createGameStore(
       dismissGoal: () => set({ goalReached: false }),
       busted: false,
       denoms,
-      rack: initial.rack,
-      change: initial.change,
-      hand: [],
-      stagedChips: [],
+      selectedChip: denoms[0],
 
       toggleExplain: () => set({ explainOn: !get().explainOn }),
 
-      pickChip: (denom) => {
-        // Touching your chips after a settled round opens the next hand,
-        // like a real table: the dealer pays, you grab chips and rebet.
+      selectChip: (denom) => set({ selectedChip: denom }),
+
+      stake: (kind, denom) => {
+        // Touching the felt after a settled round opens the next hand.
         if (get().snapshot.phase === "Settled") get().newHand();
-        const taken = removeChips(get().rack, [denom]);
-        if (taken === null) return;
-        set({ rack: taken, hand: [...get().hand, denom] });
+        const amount = denom ?? get().selectedChip;
+        const bankroll = session.snapshot().bankroll;
+        const staked = get().snapshot.bets.reduce((a, b) => a + b.amount, 0);
+        if (amount <= 0 || amount > bankroll - staked) return; // can't afford it
+        apply(session.placeBet(kind, amount));
       },
 
-      returnHand: () => {
-        const { rack, hand } = get();
-        if (hand.length === 0) return;
-        set({ rack: addChips(rack, hand), hand: [] });
-      },
-
-      placeHand: (kind) => {
-        if (get().snapshot.phase === "Settled") get().newHand();
-        const hand = get().hand;
-        if (hand.length === 0) return;
-        const amount = hand.reduce((a, b) => a + b, 0);
-        const result = session.placeBet(kind, amount);
-        if (result.ok) {
-          set({ stagedChips: [...get().stagedChips, hand], hand: [] });
-        }
-        apply(result);
-      },
-
-      placeChip: (kind, denom) => {
-        if (get().snapshot.phase === "Settled") get().newHand();
-        const taken = removeChips(get().rack, [denom]);
-        if (taken === null) return;
-        // A dragged chip brings the picked-up hand along with it, so "grab a
-        // stack, drag one on top" stakes everything you're holding.
-        const hand = get().hand;
-        const chips = [...hand, denom];
-        const amount = chips.reduce((a, b) => a + b, 0);
-        const result = session.placeBet(kind, amount);
-        if (result.ok) {
-          set({
-            rack: taken,
-            hand: [],
-            stagedChips: [...get().stagedChips, chips],
-          });
-        }
-        apply(result);
-      },
-
-      exchangeBreak: (denom) => {
-        const next = breakChip(get().rack, denom, denoms);
-        if (next !== null) set({ rack: next });
-      },
-
-      exchangeColorUp: (denom) => {
-        const next = colorUp(get().rack, denom, denoms);
-        if (next !== null) set({ rack: next });
-      },
-
-      exchangeAcquire: (denom) => {
-        const next = acquire(get().rack, denom, denoms);
-        if (next !== null) set({ rack: next.rack, change: get().change + next.loose });
-      },
-
-      clearBets: () => {
-        const result = session.clearBets();
-        if (result.ok) {
-          const returned = get().stagedChips.flat();
-          set({
-            rack: addChips(get().rack, returned),
-            stagedChips: [],
-            lastDelta: null,
-          });
-        }
-        apply(result);
-      },
+      clearBets: () => apply(session.clearBets()),
 
       deal: () => {
-        // Chips can't stay in your hand once the cards come out.
-        get().returnHand();
         set({ lastDelta: null, lastFlip: null });
         apply(session.deal());
       },
@@ -264,30 +169,7 @@ export function createGameStore(
         const before = session.snapshot().bankroll;
         const result = session.settle();
         if (result.ok) {
-          // Resolve the felt like a dealer: losses are swept, pushes and wins
-          // come back, winnings are paid in chips largest-first.
-          const staged = get().stagedChips;
-          const payouts = result.snapshot.payouts ?? [];
-          let rack = get().rack;
-          let change = get().change;
-          payouts.forEach((p, i) => {
-            const chips = staged[i] ?? toChips(p.bet.amount, denoms).chips;
-            if (p.net >= 0) {
-              rack = addChips(rack, chips);
-              if (p.net > 0) {
-                const paid = toChips(p.net, denoms);
-                rack = addChips(rack, paid.chips);
-                change += paid.remainder;
-              }
-            }
-            // net < 0: the dealer sweeps those chips.
-          });
-          const minted = mintChange(change, denoms);
-          rack = addChips(rack, minted.chips);
           set({
-            rack,
-            change: minted.change,
-            stagedChips: [],
             lastDelta: result.snapshot.bankroll - before,
             settleSeq: get().settleSeq + 1,
             // celebrate the moment the roll crosses the table's goal
@@ -304,8 +186,7 @@ export function createGameStore(
 
       // After a settled round the engine is already back in Betting, but a
       // table view keeps showing Settled (payouts on the felt) until the next
-      // wager. Sweep the felt locally — same shoe, no reshuffle — exactly
-      // like the multiplayer client does.
+      // wager. Sweep the felt locally — same shoe, no reshuffle.
       newHand: () =>
         set({
           snapshot: {
@@ -322,10 +203,7 @@ export function createGameStore(
           lastFlip: null,
         }),
 
-      newShoe: () => {
-        get().returnHand();
-        apply(session.newShoe());
-      },
+      newShoe: () => apply(session.newShoe()),
     };
   });
 }

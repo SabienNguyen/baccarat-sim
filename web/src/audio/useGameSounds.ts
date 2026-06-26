@@ -3,8 +3,8 @@ import type { StoreApi } from "zustand/vanilla";
 import type { GameState } from "../store/gameStore";
 import { playSfx, startAmbience, stopAmbience, type SfxName } from "./sfx";
 
-function stagedCount(s: GameState): number {
-  return s.stagedChips.reduce((n, chips) => n + chips.length, 0);
+function stakedTotal(s: GameState): number {
+  return s.snapshot.bets.reduce((n, b) => n + b.amount, 0);
 }
 
 function peekedCount(s: GameState): number {
@@ -15,14 +15,16 @@ function peekedCount(s: GameState): number {
 /** The sounds one store transition makes. Pure, so the mapping is testable. */
 export function soundsFor(prev: GameState, next: GameState): SfxName[] {
   const out: SfxName[] = [];
-  if (next.hand.length > prev.hand.length) out.push("chipPick");
-  if (stagedCount(next) > stagedCount(prev)) out.push("chipPlace");
-  // chips sliding home: hand returned to the rack, or bets cleared off the
-  // felt — but the dealer's settle sweep is not a return (settleSeq guard)
-  const handReturned =
-    next.hand.length < prev.hand.length && stagedCount(next) <= stagedCount(prev);
-  const feltCleared = stagedCount(next) < stagedCount(prev);
-  if ((handReturned || feltCleared) && next.settleSeq === prev.settleSeq)
+  // arming a different chip clicks; staking it on a spot drops it on the felt
+  if (next.selectedChip !== prev.selectedChip) out.push("chipPick");
+  if (stakedTotal(next) > stakedTotal(prev)) out.push("chipPlace");
+  // bets pulled off the felt clatter back — but only a player clear (still in
+  // Betting), never the dealer's settle sweep into a resolved hand
+  if (
+    stakedTotal(next) < stakedTotal(prev) &&
+    next.settleSeq === prev.settleSeq &&
+    next.snapshot.phase === "Betting"
+  )
     out.push("chipReturn");
   if (prev.snapshot.phase === "Betting" && next.snapshot.phase === "Dealing") out.push("deal");
   if (peekedCount(next) > peekedCount(prev)) out.push("squeeze");

@@ -18,7 +18,6 @@ import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
 import { CutDeckModal } from "./components/CutDeckModal";
-import { ExchangeModal } from "./components/ExchangeModal";
 import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
@@ -68,7 +67,6 @@ interface GameTableProps {
 
 export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
-  const [exchanging, setExchanging] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
   const lastFlip = useStore(active, (s) => s.lastFlip);
@@ -76,16 +74,9 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const lastDelta = useStore(active, (s) => s.lastDelta);
   const settleSeq = useStore(active, (s) => s.settleSeq);
   const denoms = useStore(active, (s) => s.denoms);
-  const rack = useStore(active, (s) => s.rack);
-  const change = useStore(active, (s) => s.change);
-  const hand = useStore(active, (s) => s.hand);
-  const stagedChips = useStore(active, (s) => s.stagedChips);
-  const pickChip = useStore(active, (s) => s.pickChip);
-  const returnHand = useStore(active, (s) => s.returnHand);
-  const placeHand = useStore(active, (s) => s.placeHand);
-  const placeChip = useStore(active, (s) => s.placeChip);
-  const exchangeBreak = useStore(active, (s) => s.exchangeBreak);
-  const exchangeAcquire = useStore(active, (s) => s.exchangeAcquire);
+  const selectedChip = useStore(active, (s) => s.selectedChip);
+  const selectChip = useStore(active, (s) => s.selectChip);
+  const stake = useStore(active, (s) => s.stake);
   const clearBets = useStore(active, (s) => s.clearBets);
   const deal = useStore(active, (s) => s.deal);
   const peek = useStore(active, (s) => s.peek);
@@ -160,6 +151,11 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const bankerLocked =
     !isFaceUp(snapshot.player.cards[0] ?? "FaceDown") ||
     !isFaceUp(snapshot.player.cards[1] ?? "FaceDown");
+
+  // free to bet = the roll minus live wagers. In Settled the bets are
+  // already resolved (the bankroll reflects them), so the whole roll is free.
+  const staked = snapshot.bets.reduce((a, b) => a + b.amount, 0);
+  const available = snapshot.phase === "Settled" ? snapshot.bankroll : snapshot.bankroll - staked;
 
   // Single-player only: the round settles itself once every card is face-up,
   // then clears to the next hand after the win popup. Multiplayer keeps its
@@ -240,16 +236,11 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         <BetRail
           snapshot={snapshot}
           denoms={denoms}
-          rack={rack}
-          hand={hand}
-          change={change}
-          stagedChips={stagedChips}
-          onPickChip={pickChip}
-          onReturnHand={returnHand}
-          onPlaceHand={placeHand}
-          onPlaceChip={placeChip}
+          selectedChip={selectedChip}
+          available={available}
+          onSelectChip={selectChip}
+          onStake={stake}
           onClear={clearBets}
-          onOpenExchange={() => setExchanging(true)}
         />
       </main>
       <div className="board-dock">
@@ -289,16 +280,6 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
             onReset();
             onLeave();
           }}
-        />
-      )}
-      {exchanging && (
-        <ExchangeModal
-          denoms={denoms}
-          rack={rack}
-          change={change}
-          onBreak={exchangeBreak}
-          onAcquire={exchangeAcquire}
-          onClose={() => setExchanging(false)}
         />
       )}
     </div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RoundSnapshot, BetKind, PlacedBet } from "../engine/types";
 import { formatCents } from "../format";
-import { type Rack } from "../chips";
+import { toChips } from "../chips";
 import { Chip, MiniChip } from "./Chip";
 import { BonusInfoModal } from "./BonusInfoModal";
 import "./betrail.css";
@@ -25,16 +25,13 @@ function saveSideOpen(open: boolean): void {
 interface BetRailProps {
   snapshot: RoundSnapshot;
   denoms: number[];
-  rack: Rack;
-  hand: number[];
-  change: number;
-  stagedChips: number[][];
-  onPickChip: (denom: number) => void;
-  onReturnHand: () => void;
-  onPlaceHand: (kind: BetKind) => void;
-  onPlaceChip: (kind: BetKind, denom: number) => void;
+  /** The armed chip denomination. */
+  selectedChip: number;
+  /** Cents free to bet (bankroll − staked). */
+  available: number;
+  onSelectChip: (denom: number) => void;
+  onStake: (kind: BetKind, denom?: number) => void;
   onClear: () => void;
-  onOpenExchange: () => void;
 }
 
 interface Spot {
@@ -62,48 +59,42 @@ const SIDE_SPOTS: Spot[] = [
   { label: "Tiger", display: "TIGER", payout: "varies", kind: { Side: "Tiger" } },
 ];
 
-/** The chips sitting on one spot: flatten staged chips whose bet matches. */
-function chipsOn(kind: BetKind, bets: PlacedBet[], stagedChips: number[][]): number[] {
+/** Total cents staked on one spot. */
+function stakedOn(kind: BetKind, bets: PlacedBet[]): number {
   const key = JSON.stringify(kind);
-  const out: number[] = [];
-  bets.forEach((bet, i) => {
-    if (JSON.stringify(bet.kind) === key) out.push(...(stagedChips[i] ?? []));
-  });
-  return out;
+  return bets.reduce((sum, b) => (JSON.stringify(b.kind) === key ? sum + b.amount : sum), 0);
 }
 
 interface BetSpotProps {
   spot: Spot;
   betting: boolean;
-  chips: number[];
+  staked: number;
   shape: string;
-  onPlaceHand: (kind: BetKind) => void;
-  onPlaceChip: (kind: BetKind, denom: number) => void;
+  denoms: number[];
+  onStake: (kind: BetKind, denom?: number) => void;
 }
 
-function BetSpot({ spot, betting, chips, shape, onPlaceHand, onPlaceChip }: BetSpotProps) {
-  const staked = chips.reduce((a, b) => a + b, 0);
+function BetSpot({ spot, betting, staked, shape, denoms, onStake }: BetSpotProps) {
+  const chips = toChips(staked, denoms).chips;
   return (
     <button
       type="button"
       className={`spot spot--${shape}`}
       aria-label={`Bet ${spot.label}`}
       disabled={!betting}
-      onClick={() => onPlaceHand(spot.kind)}
+      onClick={() => onStake(spot.kind)}
       onDragOver={(e) => {
         if (betting) e.preventDefault(); // allow the chip to drop here
       }}
       onDrop={(e) => {
         e.preventDefault();
         const cents = Number(e.dataTransfer.getData("text/plain"));
-        if (betting && Number.isFinite(cents) && cents > 0) {
-          onPlaceChip(spot.kind, cents);
-        }
+        if (betting && Number.isFinite(cents) && cents > 0) onStake(spot.kind, cents);
       }}
     >
       <span className="spot-name">{spot.display}</span>
       <span className="spot-payout">{spot.payout}</span>
-      {chips.length > 0 && (
+      {staked > 0 && (
         <span className="spot-chips">
           {chips.slice(0, 8).map((c, i) => (
             <MiniChip key={i} cents={c} />
@@ -118,22 +109,16 @@ function BetSpot({ spot, betting, chips, shape, onPlaceHand, onPlaceChip }: BetS
 export function BetRail({
   snapshot,
   denoms,
-  rack,
-  hand,
-  change,
-  stagedChips,
-  onPickChip,
-  onReturnHand,
-  onPlaceHand,
-  onPlaceChip,
+  selectedChip,
+  available,
+  onSelectChip,
+  onStake,
   onClear,
-  onOpenExchange,
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
-  // After a settle the engine is already back in Betting; touching chips or
-  // spots implicitly opens the next hand, so they stay live in Settled too.
+  // After a settle the engine is already back in Betting; touching a spot
+  // implicitly opens the next hand, so spots stay live in Settled too.
   const canBet = betting || snapshot.phase === "Settled";
-  const handTotal = hand.reduce((a, b) => a + b, 0);
   const [showBonusInfo, setShowBonusInfo] = useState(false);
 
   const sideStaked = snapshot.bets.some(
@@ -157,10 +142,10 @@ export function BetRail({
               key={spot.label}
               spot={spot}
               betting={canBet}
-              chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
+              staked={stakedOn(spot.kind, snapshot.bets)}
               shape={spot.label.toLowerCase()}
-              onPlaceHand={onPlaceHand}
-              onPlaceChip={onPlaceChip}
+              denoms={denoms}
+              onStake={onStake}
             />
           ))}
         </div>
@@ -194,10 +179,10 @@ export function BetRail({
                 key={spot.label}
                 spot={spot}
                 betting={canBet}
-                chips={chipsOn(spot.kind, snapshot.bets, stagedChips)}
+                staked={stakedOn(spot.kind, snapshot.bets)}
                 shape="side"
-                onPlaceHand={onPlaceHand}
-                onPlaceChip={onPlaceChip}
+                denoms={denoms}
+                onStake={onStake}
               />
             ))}
           </div>
@@ -205,27 +190,13 @@ export function BetRail({
       </div>
 
       <div className="rail-row">
-        {hand.length > 0 ? (
-          <div className="hand-tray" aria-label="Chips in hand">
-            <span className="hand-chips">
-              {hand.map((c, i) => (
-                <MiniChip key={i} cents={c} />
-              ))}
-            </span>
-            <span className="hand-total">{formatCents(handTotal)} in hand — tap a spot</span>
-            <button type="button" className="hand-return" onClick={onReturnHand}>
-              Return
-            </button>
-          </div>
-        ) : (
-          <p className="rail-hint">
-            {betting
-              ? "Tap chips to pick up a stack, then tap a spot. Or drag a chip."
-              : snapshot.phase === "Settled"
-                ? "Hand over — grab chips to play the next one."
-                : "Bets are locked — squeeze the cards."}
-          </p>
-        )}
+        <p className="rail-hint">
+          {betting
+            ? "Tap a chip, then tap a spot. Or drag a chip onto a spot."
+            : snapshot.phase === "Settled"
+              ? "Hand over — tap a spot to play the next one."
+              : "Bets are locked — squeeze the cards."}
+        </p>
         <button
           type="button"
           className="clear-bets"
@@ -234,9 +205,6 @@ export function BetRail({
         >
           Clear bets
         </button>
-        <button type="button" className="exchange-btn" onClick={onOpenExchange}>
-          Exchange
-        </button>
       </div>
 
       <div aria-label="Chips" className="chips">
@@ -244,12 +212,12 @@ export function BetRail({
           <Chip
             key={cents}
             cents={cents}
-            count={rack[cents] ?? 0}
-            onPick={onPickChip}
-            disabled={!canBet}
+            selected={cents === selectedChip}
+            disabled={!canBet || cents > available}
+            onSelect={onSelectChip}
           />
         ))}
-        {change > 0 && <span className="change-note">+{formatCents(change)} change</span>}
+        <span className="change-note">{formatCents(available)} to bet</span>
       </div>
 
       {showBonusInfo && <BonusInfoModal onClose={() => setShowBonusInfo(false)} />}

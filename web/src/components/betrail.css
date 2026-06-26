@@ -51,27 +51,15 @@
   filter: grayscale(0.6) brightness(0.7);
   cursor: not-allowed;
 }
+.chip--armed {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
 .chip-face {
   font-family: var(--font-display);
   font-size: 10px;
   color: #fff;
   text-shadow: 1px 1px 0 var(--ink);
-}
-.chip-count {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 20px;
-  height: 20px;
-  border-radius: 10px;
-  background: var(--panel-face);
-  border: 2px solid var(--ink);
-  color: #f3eede;
-  font-family: var(--font-text);
-  font-size: 13px;
-  line-height: 16px;
-  text-align: center;
-  padding: 0 3px;
 }
 
 /* Real casino colors: $1 white, $5 red, $25 green, $100 black, $500 purple, $1k gold. */
@@ -110,12 +98,11 @@
   color: #b9aee0;
 }
 
-/* --- hand tray + actions row --- */
+/* --- hint + actions row --- */
 .rail-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  /* tall enough for the hand tray, so picking chips never shifts the page */
   min-height: 50px;
 }
 .rail-hint {
@@ -125,36 +112,7 @@
   color: #f0ead6;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
 }
-.hand-tray {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel-bevel-lo);
-  border: 2px solid var(--ink);
-  border-radius: 8px;
-  padding: 6px 10px;
-}
-.hand-chips {
-  display: inline-flex;
-}
-.hand-total {
-  font-family: var(--font-text);
-  font-size: 17px;
-  color: var(--gold);
-}
-.hand-return {
-  font-family: var(--font-display);
-  font-size: 8px;
-  color: #fff;
-  background: var(--panel-bevel-hi);
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
-}
-.clear-bets,
-.exchange-btn {
+.clear-bets {
   font-family: var(--font-display);
   font-size: 9px;
   color: #fff;
@@ -163,9 +121,6 @@
   border-radius: 8px;
   padding: 10px 12px;
   cursor: pointer;
-}
-.exchange-btn {
-  background: #1d7a3a;
 }
 .clear-bets:disabled {
   filter: brightness(0.7);

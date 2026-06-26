@@ -34,7 +34,7 @@ test("dealing without a bet gets the dealer's no-bets line, not table jargon", (
 test("bet Banker only: the dealer announces and turns the Player hand one card per beat", () => {
   vi.useFakeTimers();
   const store = createGameStore(createTableSession(CONFIG));
-  store.getState().placeChip({ Main: "Banker" }, 10000);
+  store.getState().stake({ Main: "Banker" }, 10000);
   store.getState().deal();
 
   // I hold the Banker cards; the Player hand is the dealer's.
@@ -80,7 +80,7 @@ test("bet Banker only: the dealer announces and turns the Player hand one card p
 test("bet Player only: I flip my hand first, then the dealer takes the Banker hand", () => {
   vi.useFakeTimers();
   const store = createGameStore(createTableSession(CONFIG));
-  store.getState().placeChip({ Main: "Player" }, 10000);
+  store.getState().stake({ Main: "Player" }, 10000);
   store.getState().deal();
 
   expect(store.getState().squeezers).toEqual({ player: 0, banker: null });
@@ -102,8 +102,8 @@ test("bet Player only: I flip my hand first, then the dealer takes the Banker ha
 test("bet both sides: every card is mine, the dealer never steps in", () => {
   vi.useFakeTimers();
   const store = createGameStore(createTableSession(CONFIG));
-  store.getState().placeChip({ Main: "Player" }, 10000);
-  store.getState().placeChip({ Main: "Banker" }, 10000);
+  store.getState().stake({ Main: "Player" }, 10000);
+  store.getState().stake({ Main: "Banker" }, 10000);
   store.getState().deal();
 
   expect(store.getState().squeezers).toEqual({ player: 0, banker: 0 });
@@ -119,9 +119,9 @@ test("chips placed straight out of a settled table round stay consistent", () =>
   vi.useFakeTimers();
   const store = createGameStore(createTableSession(CONFIG));
   for (let round = 0; round < 10; round++) {
-    store.getState().placeChip({ Main: "Player" }, 10000);
+    store.getState().stake({ Main: "Player" }, 10000);
     expect(store.getState().lastError).toBeNull();
-    store.getState().placeChip({ Main: "Banker" }, 10000);
+    store.getState().stake({ Main: "Banker" }, 10000);
     expect(store.getState().snapshot.phase).toBe("Betting");
 
     store.getState().deal();

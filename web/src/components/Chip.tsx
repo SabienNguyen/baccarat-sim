@@ -21,31 +21,30 @@ export function chipFace(cents: number): string {
 
 interface ChipProps {
   cents: number;
-  /** How many of this chip are in the rack. */
-  count: number;
-  /** Pick one up into the hand. */
-  onPick: (cents: number) => void;
+  /** The armed chip is highlighted. */
+  selected: boolean;
+  /** Greyed when the balance can't cover it. */
   disabled?: boolean;
+  onSelect: (cents: number) => void;
 }
 
-/** A casino chip in your rack. Click to pick one up; drag one onto a spot. */
-export function Chip({ cents, count, onPick, disabled }: ChipProps) {
-  const empty = count <= 0;
+/** A casino chip denomination. Click to arm it; drag one onto a spot. */
+export function Chip({ cents, selected, disabled, onSelect }: ChipProps) {
   return (
     <button
       type="button"
-      className={`chip ${CHIP_COLOR[cents] ?? ""}`}
+      className={`chip ${CHIP_COLOR[cents] ?? ""}${selected ? " chip--armed" : ""}`}
       aria-label={`${formatCents(cents)} chip`}
-      disabled={disabled || empty}
-      draggable={!disabled && !empty}
+      aria-pressed={selected}
+      disabled={disabled}
+      draggable={!disabled}
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", String(cents));
         e.dataTransfer.effectAllowed = "copy";
       }}
-      onClick={() => onPick(cents)}
+      onClick={() => onSelect(cents)}
     >
       <span className="chip-face">{chipFace(cents)}</span>
-      <span className="chip-count">{count}</span>
     </button>
   );
 }

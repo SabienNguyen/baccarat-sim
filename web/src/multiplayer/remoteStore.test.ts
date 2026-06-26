@@ -1,6 +1,5 @@
 import { createRemoteStore } from "./remoteStore";
 import type { ClientMsg, TableViewMsg } from "./protocol";
-import { rackTotal } from "../chips";
 
 function view(over: Partial<TableViewMsg> = {}): TableViewMsg {
   return {
@@ -29,16 +28,6 @@ function view(over: Partial<TableViewMsg> = {}): TableViewMsg {
   };
 }
 
-function held(store: ReturnType<typeof createRemoteStore>): number {
-  const s = store.getState();
-  return (
-    rackTotal(s.rack) +
-    s.change +
-    s.hand.reduce((a, b) => a + b, 0) +
-    s.stagedChips.flat().reduce((a, b) => a + b, 0)
-  );
-}
-
 function setup() {
   const sent: ClientMsg[] = [];
   const store = createRemoteStore({
@@ -49,44 +38,44 @@ function setup() {
   return { store, sent };
 }
 
-test("buys in from the joined view and exposes the seats", () => {
+test("mirrors the joined view: bankroll, seats, smallest chip armed, no win-con", () => {
   const { store } = setup();
-  expect(held(store)).toBe(1_000_000);
+  expect(store.getState().snapshot.bankroll).toBe(1_000_000);
   expect(store.getState().seats).toHaveLength(1);
-  expect(store.getState().goal).toBeNull(); // no win-con at a live table
+  expect(store.getState().selectedChip).toBe(store.getState().denoms[0]); // smallest denom armed
+  expect(store.getState().goal).toBeNull();
 });
 
-test("a bet goes over the wire and lands on the felt when the push confirms it", () => {
+test("staking the armed chip sends a bet over the wire", () => {
   const { store, sent } = setup();
-  store.getState().pickChip(10000);
-  store.getState().placeHand({ Main: "Player" });
+  store.getState().selectChip(10000);
+  store.getState().stake({ Main: "Player" });
   expect(sent).toEqual([{ type: "bet", kind: { Main: "Player" }, amount: 10000 }]);
-  // not staged yet — in flight
-  expect(store.getState().stagedChips).toEqual([]);
-
-  store.handle({
-    type: "state",
-    view: view({ bets: [{ kind: { Main: "Player" }, amount: 10000 }] }),
-  });
-  expect(store.getState().stagedChips).toEqual([[10000]]);
-  expect(held(store)).toBe(1_000_000);
 });
 
-test("a refused bet returns the chips and the dealer speaks", () => {
+test("a dragged denomination overrides the armed chip", () => {
+  const { store, sent } = setup();
+  store.getState().stake({ Main: "Banker" }, 50000);
+  expect(sent).toEqual([{ type: "bet", kind: { Main: "Banker" }, amount: 50000 }]);
+});
+
+test("stake refuses a chip the balance can't cover", () => {
+  const { store, sent } = setup();
+  // already fully staked per the snapshot → nothing free to bet
+  store.handle({ type: "state", view: view({ bets: [{ kind: { Main: "Player" }, amount: 1_000_000 }] }) });
+  store.getState().stake({ Main: "Tie" }, 50000);
+  expect(sent).toEqual([]);
+});
+
+test("an error push surfaces the dealer's words", () => {
   const { store } = setup();
-  store.getState().placeChip({ Main: "Player" }, 10000);
   store.handle({ type: "error", message: "Too rich for this table." });
-  expect(held(store)).toBe(1_000_000);
   expect(store.getState().lastError).toEqual({ Message: "Too rich for this table." });
 });
 
-test("a settle push pays the rack and fires the win pop-up", () => {
+test("a settle push records the round's delta and fires the win pop-up", () => {
   const { store } = setup();
-  store.getState().placeChip({ Main: "Player" }, 10000);
-  store.handle({
-    type: "state",
-    view: view({ bets: [{ kind: { Main: "Player" }, amount: 10000 }] }),
-  });
+  store.handle({ type: "state", view: view({ phase: "Dealing", bets: [{ kind: { Main: "Player" }, amount: 10000 }] }) });
   store.handle({
     type: "state",
     view: view({
@@ -96,22 +85,12 @@ test("a settle push pays the rack and fires the win pop-up", () => {
       seats: [{ id: 0, name: "me", bankroll: 1_010_000, staked: 0, sitting_out: false, decided: false }],
     }),
   });
-  expect(held(store)).toBe(1_010_000);
+  expect(store.getState().snapshot.bankroll).toBe(1_010_000);
   expect(store.getState().lastDelta).toBe(10000);
   expect(store.getState().settleSeq).toBe(1);
 });
 
-test("the drift guard re-racks if the client ever disagrees with the server", () => {
-  const { store } = setup();
-  // server says we suddenly have a different bankroll (e.g. missed pushes)
-  store.handle({
-    type: "state",
-    view: view({ bankroll: 750_000, seats: [{ id: 0, name: "me", bankroll: 750_000, staked: 0, sitting_out: false, decided: false }] }),
-  });
-  expect(held(store)).toBe(750_000);
-});
-
-test("other players' actions arrive as seat updates without touching my chips", () => {
+test("other players' actions arrive as seat updates", () => {
   const { store } = setup();
   store.handle({
     type: "state",
@@ -123,19 +102,15 @@ test("other players' actions arrive as seat updates without touching my chips", 
     }),
   });
   expect(store.getState().seats).toHaveLength(2);
-  expect(held(store)).toBe(1_000_000);
 });
 
-test("sitting out sends the choice and returns any held chips", () => {
+test("sitting out sends the choice", () => {
   const { store, sent } = setup();
-  store.getState().pickChip(10000);
   store.getState().sitOut();
-  expect(store.getState().hand).toEqual([]);
-  expect(held(store)).toBe(1_000_000);
   expect(sent.at(-1)).toEqual({ type: "sit_out" });
 });
 
-test("the dealer's announcement speaks until the next flip arrives", () => {
+test("the dealer's announcement speaks until the next push arrives", () => {
   const { store } = setup();
   store.handle({ type: "announce", message: "Turning the Banker hand…" });
   expect(store.getState().announcement).toBe("Turning the Banker hand…");

@@ -22,10 +22,15 @@ function state(over: Partial<GameState> = {}): GameState {
   return { ...createGameStore(okSession()).getState(), ...over };
 }
 
-test("picking up and placing chips click", () => {
+function withBets(amount: number, over: Partial<GameState> = {}): GameState {
+  const base = state(over);
+  return { ...base, snapshot: { ...base.snapshot, bets: [{ kind: { Main: "Player" }, amount }] } };
+}
+
+test("arming a chip clicks; staking one drops it on the felt", () => {
   const before = state();
-  expect(soundsFor(before, state({ hand: [100] }))).toEqual(["chipPick"]);
-  expect(soundsFor(before, state({ stagedChips: [[100, 100]] }))).toEqual(["chipPlace"]);
+  expect(soundsFor(before, state({ selectedChip: 2500 }))).toEqual(["chipPick"]);
+  expect(soundsFor(before, withBets(200))).toEqual(["chipPlace"]);
 });
 
 test("the deal swishes and a flip snaps", () => {
@@ -84,24 +89,14 @@ test("bending a card up rustles", () => {
   expect(soundsFor(peeked, state({ snapshot: peeked.snapshot }))).toEqual([]);
 });
 
-test("chips coming back off the felt or out of the hand clatter", () => {
-  // returnHand: hand empties, nothing staged
-  expect(soundsFor(state({ hand: [100, 500] }), state({ hand: [] }))).toEqual(["chipReturn"]);
-  // clearBets: the felt empties outside a settle
-  expect(soundsFor(state({ stagedChips: [[100]] }), state({ stagedChips: [] }))).toEqual([
-    "chipReturn",
-  ]);
-});
-
-test("staking the hand is a place, not a return", () => {
-  const held = state({ hand: [100] });
-  const staked = state({ hand: [], stagedChips: [[100]] });
-  expect(soundsFor(held, staked)).toEqual(["chipPlace"]);
+test("clearing bets off the felt clatters", () => {
+  // clearBets in Betting: the felt empties outside a settle
+  expect(soundsFor(withBets(100), state())).toEqual(["chipReturn"]);
 });
 
 test("the settle sweep is not a chip return", () => {
-  const before = state({ stagedChips: [[100]] });
-  const after = state({ stagedChips: [], settleSeq: 1, lastDelta: -100 });
+  const before = withBets(100); // bets on the felt
+  const after = state({ settleSeq: 1, lastDelta: -100 }); // swept and resolved
   expect(soundsFor(before, after)).toEqual(["lose"]);
 });
 
