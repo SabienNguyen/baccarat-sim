@@ -21,7 +21,7 @@ export const RED = "#c0202a";
 export const BLACK = "#1a1a1a";
 export const THUMB_SKIN = "#d9a679";
 const FONT_TEXT = '"VT323", ui-monospace, monospace';
-const FONT_DISPLAY = '"Press Start 2P", ui-monospace, monospace';
+const FONT_DISPLAY = '"Silkscreen", ui-monospace, monospace';
 
 export type PaintOp =
   | { op: "roundRect"; x: number; y: number; w: number; h: number; r: number; fill?: string; stroke?: string; lineWidth?: number }

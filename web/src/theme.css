@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Silkscreen:wght@700&family=VT323&display=swap");
 
 :root {
   /* The table IS the dark theme: declaring it stops forced-dark
@@ -18,8 +18,10 @@
   /* structure */
   --ink: #15110f;
   --shadow: rgba(0, 0, 0, 0.45);
-  /* type */
-  --font-display: "Press Start 2P", ui-monospace, monospace;
+  /* type — Silkscreen (chunky arcade pixel, unambiguous digits) for
+     headings/labels, VT323 for body. NB: Press Start 2P was dropped (its "8"
+     reads as "&") and Pixelify Sans too (its "5" reads as "S"). */
+  --font-display: "Silkscreen", ui-monospace, monospace;
   --font-text: "VT323", ui-monospace, monospace;
 }
 

@@ -14,7 +14,7 @@ import { CardGLEngine } from "./engine";
 
 // best effort: warm the card fonts so the first texture paint is crisp
 if (typeof document !== "undefined" && "fonts" in document) {
-  document.fonts.load('14px "Press Start 2P"').catch(() => {});
+  document.fonts.load('14px "Silkscreen"').catch(() => {});
   document.fonts.load('17px "VT323"').catch(() => {});
 }
 

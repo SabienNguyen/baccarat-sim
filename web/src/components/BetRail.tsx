@@ -45,7 +45,7 @@ const SIDE_SPOTS: Spot[] = [
   { label: "Dragon 7", display: "DRAGON 7", payout: "40:1", kind: { Side: "Dragon7" } },
   { label: "Panda 8", display: "PANDA 8", payout: "25:1", kind: { Side: "Panda8" } },
   { label: "Dragon Bonus", display: "DRAGON", payout: "BONUS", kind: { Side: { DragonBonus: "Player" } } },
-  { label: "Tiger", display: "TIGER", payout: "varies", kind: { Side: "Tiger" } },
+  { label: "Tiger", display: "TIGER", payout: "12-20:1", kind: { Side: "Tiger" } },
 ];
 
 function isSide(kind: BetKind): boolean {
