@@ -314,31 +314,53 @@
   }
 }
 
-/* --- side-bet drawer --- */
-.side-drawer {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.side-drawer-head {
+/* --- MAIN / BONUS segmented switch --- */
+.felt-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  position: relative;
 }
-.side-toggle {
-  background: none;
-  border: none;
-  color: var(--gold);
+.seg {
+  display: flex;
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.seg-half {
+  position: relative;
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 1px;
+  color: #cfc7b0;
+  background: var(--panel-bevel-lo);
+  padding: 11px 20px;
   cursor: pointer;
-  padding: 4px 2px;
+  border: none;
 }
-/* the collapsed drawer: outrank `.side-bets { display: grid }`, which the
-   bare [hidden] UA rule can't (a grid's display wins over UA display:none) */
-.side-bets[hidden] {
-  display: none;
+.seg-half.seg-on {
+  color: #fff7e6;
+  background: #1f7c49;
+  box-shadow: inset 0 0 0 2px rgba(244, 196, 48, 0.5);
+}
+.seg-badge {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--gold);
+  color: #1a1208;
+  font-size: 9px;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+/* the felt-head centers the switch; the info button sits at the right edge */
+.felt-head .bonus-info-btn {
+  position: absolute;
+  right: 0;
 }
 .side-bets--open {
   animation: side-reveal 180ms ease-out;
@@ -353,8 +375,13 @@
     transform: translateY(0);
   }
 }
+.main-bets,
+.side-bets {
+  animation: side-reveal 160ms ease-out;
+}
 @media (prefers-reduced-motion: reduce) {
-  .side-bets--open {
+  .main-bets,
+  .side-bets {
     animation: none;
   }
 }

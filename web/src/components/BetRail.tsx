@@ -6,22 +6,6 @@ import { Chip, MiniChip } from "./Chip";
 import { BonusInfoModal } from "./BonusInfoModal";
 import "./betrail.css";
 
-const SIDE_OPEN_KEY = "baccarat.sidebets.open";
-function loadSideOpen(): boolean {
-  try {
-    return localStorage.getItem(SIDE_OPEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-function saveSideOpen(open: boolean): void {
-  try {
-    localStorage.setItem(SIDE_OPEN_KEY, open ? "1" : "0");
-  } catch {
-    /* storage unavailable — fine */
-  }
-}
-
 interface BetRailProps {
   snapshot: RoundSnapshot;
   denoms: number[];
@@ -32,7 +16,12 @@ interface BetRailProps {
   onSelectChip: (denom: number) => void;
   onStake: (kind: BetKind, denom?: number) => void;
   onClear: () => void;
+  /** The nudge can fling the felt to the bonus view to show off a spot. */
+  view?: BetView;
+  onView?: (view: BetView) => void;
 }
+
+export type BetView = "main" | "bonus";
 
 interface Spot {
   /** Accessible label; the button's name is `Bet {label}`. */
@@ -58,6 +47,10 @@ const SIDE_SPOTS: Spot[] = [
   { label: "Dragon Bonus", display: "DRAGON", payout: "BONUS", kind: { Side: { DragonBonus: "Player" } } },
   { label: "Tiger", display: "TIGER", payout: "varies", kind: { Side: "Tiger" } },
 ];
+
+function isSide(kind: BetKind): boolean {
+  return typeof kind === "object" && "Side" in kind;
+}
 
 /** Total cents staked on one spot. */
 function stakedOn(kind: BetKind, bets: PlacedBet[]): number {
@@ -114,6 +107,8 @@ export function BetRail({
   onSelectChip,
   onStake,
   onClear,
+  view,
+  onView,
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
   // After a settle the engine is already back in Betting; touching a spot
@@ -121,71 +116,64 @@ export function BetRail({
   const canBet = betting || snapshot.phase === "Settled";
   const [showBonusInfo, setShowBonusInfo] = useState(false);
 
-  const sideStaked = snapshot.bets.some(
-    (b) => typeof b.kind === "object" && "Side" in b.kind,
-  );
-  const [sideOpenPref, setSideOpenPref] = useState(loadSideOpen);
-  // a live side bet forces the drawer open; otherwise the saved preference wins
-  const sideOpen = sideOpenPref || sideStaked;
-  const toggleSide = () => {
-    const next = !sideOpen;
-    setSideOpenPref(next);
-    saveSideOpen(next);
-  };
+  // The MAIN/BONUS switch can be driven from outside (the nudge) or locally;
+  // default to the calm MAIN view.
+  const [localView, setLocalView] = useState<BetView>("main");
+  const active = view ?? localView;
+  const setActive = (v: BetView) => (onView ? onView(v) : setLocalView(v));
+
+  // how many bets sit on each side, so the switch can badge where your money is
+  const mainCount = snapshot.bets.filter((b) => !isSide(b.kind)).length;
+  const bonusCount = snapshot.bets.filter((b) => isSide(b.kind)).length;
+  const spots = active === "main" ? MAIN_SPOTS : SIDE_SPOTS;
 
   return (
     <section aria-label="Bet rail" className="bet-rail">
       <div className="felt" aria-label="Spots">
-        <div className="main-bets">
-          {MAIN_SPOTS.map((spot) => (
+        <div className="felt-head">
+          <div className="seg" role="tablist" aria-label="Bet category">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={active === "main"}
+              className={`seg-half${active === "main" ? " seg-on" : ""}`}
+              onClick={() => setActive("main")}
+            >
+              MAIN BETS
+              {mainCount > 0 && <span className="seg-badge">{mainCount}</span>}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={active === "bonus"}
+              className={`seg-half${active === "bonus" ? " seg-on" : ""}`}
+              onClick={() => setActive("bonus")}
+            >
+              ★ BONUS
+              {bonusCount > 0 && <span className="seg-badge">{bonusCount}</span>}
+            </button>
+          </div>
+          <button
+            type="button"
+            className="bonus-info-btn"
+            aria-label="What are the bonus bets?"
+            onClick={() => setShowBonusInfo(true)}
+          >
+            i
+          </button>
+        </div>
+        <div className={active === "main" ? "main-bets" : "side-bets"}>
+          {spots.map((spot) => (
             <BetSpot
               key={spot.label}
               spot={spot}
               betting={canBet}
               staked={stakedOn(spot.kind, snapshot.bets)}
-              shape={spot.label.toLowerCase()}
+              shape={active === "main" ? spot.label.toLowerCase() : "side"}
               denoms={denoms}
               onStake={onStake}
             />
           ))}
-        </div>
-        <div className="side-drawer">
-          <div className="side-drawer-head">
-            <button
-              type="button"
-              className="side-toggle"
-              aria-expanded={sideOpen}
-              aria-controls="side-bets"
-              onClick={toggleSide}
-            >
-              {sideOpen ? "- " : "+ "}Side bets
-            </button>
-            <button
-              type="button"
-              className="bonus-info-btn"
-              aria-label="What are the bonus bets?"
-              onClick={() => setShowBonusInfo(true)}
-            >
-              i
-            </button>
-          </div>
-          <div
-            id="side-bets"
-            className={`side-bets${sideOpen ? " side-bets--open" : ""}`}
-            hidden={!sideOpen}
-          >
-            {SIDE_SPOTS.map((spot) => (
-              <BetSpot
-                key={spot.label}
-                spot={spot}
-                betting={canBet}
-                staked={stakedOn(spot.kind, snapshot.bets)}
-                shape="side"
-                denoms={denoms}
-                onStake={onStake}
-              />
-            ))}
-          </div>
         </div>
       </div>
 

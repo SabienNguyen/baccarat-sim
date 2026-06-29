@@ -13,15 +13,6 @@ const noopProps = {
   onClear: vi.fn(),
 };
 
-// keep the side-bet drawer's saved state from leaking between tests
-beforeEach(() => {
-  try {
-    localStorage.removeItem("baccarat.sidebets.open");
-  } catch {
-    /* storage unavailable in this env — fine */
-  }
-});
-
 test("clicking a chip arms its denomination", async () => {
   const onSelectChip = vi.fn();
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onSelectChip={onSelectChip} />);
@@ -81,17 +72,39 @@ test("bet spots are disabled outside the Betting phase", () => {
   expect(screen.getByRole("button", { name: "Bet Player" })).toBeDisabled();
 });
 
-test("side bets are hidden until the drawer is opened", async () => {
+test("bonuses are hidden on the MAIN view; the BONUS tab reveals them and hides the mains", async () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   expect(screen.queryByRole("button", { name: "Bet Dragon 7" })).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: /Side bets/ }));
+  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
   expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Bet Player" })).toBeNull();
 });
 
-test("a staked side bet forces the drawer open", () => {
-  const snap = bettingSnapshot({ bets: [{ kind: { Side: "Dragon7" }, amount: 500 }] });
+test("the BONUS view stakes the side kind", async () => {
+  const onStake = vi.fn();
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onStake={onStake} />);
+  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
+  await userEvent.click(screen.getByRole("button", { name: "Bet Panda 8" }));
+  expect(onStake).toHaveBeenCalledWith({ Side: "Panda8" });
+});
+
+test("staked bets badge their side of the switch", () => {
+  const snap = bettingSnapshot({
+    bets: [
+      { kind: { Main: "Player" }, amount: 500 },
+      { kind: { Side: "Dragon7" }, amount: 500 },
+      { kind: { Side: "Panda8" }, amount: 500 },
+    ],
+  });
   render(<BetRail snapshot={snap} {...noopProps} />);
-  expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: /MAIN BETS/ })).toHaveTextContent("1");
+  expect(screen.getByRole("tab", { name: /BONUS/ })).toHaveTextContent("2");
+});
+
+test("an external view prop drives the felt (the nudge can open BONUS)", () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} view="bonus" onView={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Bet Tiger" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Bet Player" })).toBeNull();
 });
 
 test("the info icon opens the bonus-bets explainer", async () => {
