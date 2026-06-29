@@ -189,6 +189,36 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
   }
 });
 
+test("single-player: an unbet bonus that hit shows the nudge, and one tap bets it next hand", async () => {
+  const pairWin: RoundSnapshot = {
+    ...dealingSnapshot(),
+    phase: "Settled",
+    player: {
+      cards: [
+        { FaceUp: { rank: "Nine", suit: "Hearts" } },
+        { FaceUp: { rank: "Nine", suit: "Spades" } },
+      ],
+      total: 8,
+    },
+    banker: {
+      cards: [
+        { FaceUp: { rank: "Two", suit: "Clubs" } },
+        { FaceUp: { rank: "Three", suit: "Hearts" } },
+      ],
+      total: 5,
+    },
+    outcome: "PlayerWin",
+    payouts: [],
+    bets: [],
+  };
+  const placeBet = vi.fn(() => okResult(pairWin));
+  const store = createGameStore(fakeSession(pairWin, { placeBet }));
+  render(<App store={store} />);
+  expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /bet .* next hand/ }));
+  expect(placeBet).toHaveBeenCalledWith({ Side: "PlayerPair" }, expect.any(Number));
+});
+
 test("busting offers a re-buy and a way out", async () => {
   const user = userEvent.setup();
   const store = createGameStore(fakeSession(bettingSnapshot()));

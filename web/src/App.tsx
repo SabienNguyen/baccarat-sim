@@ -11,7 +11,10 @@ import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
-import { BetRail } from "./components/BetRail";
+import { BetRail, type BetView } from "./components/BetRail";
+import { BonusNudge } from "./components/BonusNudge";
+import { chipFace } from "./components/Chip";
+import { bonusWouldWin } from "./bonusNudge";
 import { Controls } from "./components/Controls";
 import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
@@ -27,6 +30,8 @@ import { playSfx } from "./audio/sfx";
 const AUTO_SETTLE_MS = 600;
 /** How long the win/loss popup lingers before the next hand opens. */
 const AUTO_ADVANCE_MS = 1400;
+/** A longer window when a bonus nudge is showing, so it can be read and tapped. */
+const NUDGE_ADVANCE_MS = 3600;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -67,6 +72,8 @@ interface GameTableProps {
 
 export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
+  // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
+  const [betView, setBetView] = useState<BetView>("main");
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
   const lastFlip = useStore(active, (s) => s.lastFlip);
@@ -175,12 +182,28 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
     return () => clearTimeout(t);
   }, [seats, snapshot, settle]);
 
+  // The "you would've won" nudge: a bonus that hit this resolved hand but the
+  // player didn't place. Single-player only, never under a bust/goal modal.
+  const nudge =
+    seats === null && snapshot.phase === "Settled" && !busted && !goalReached
+      ? bonusWouldWin(snapshot, snapshot.bets.map((b) => b.kind))
+      : null;
+  const hasNudge = nudge !== null;
+
   useEffect(() => {
     if (seats !== null) return;
     if (snapshot.phase !== "Settled" || busted || goalReached) return;
-    const t = setTimeout(newHand, AUTO_ADVANCE_MS);
+    const t = setTimeout(newHand, hasNudge ? NUDGE_ADVANCE_MS : AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [seats, snapshot.phase, busted, goalReached, newHand]);
+  }, [seats, snapshot.phase, busted, goalReached, newHand, hasNudge]);
+
+  /** Tap the nudge: open the next hand and drop the armed chip on that bonus. */
+  function betNudge() {
+    if (nudge === null) return;
+    setBetView("bonus");
+    newHand();
+    stake(nudge.kind);
+  }
 
   return (
     <div className="app">
@@ -233,6 +256,14 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
         />
+        {nudge !== null && (
+          <BonusNudge
+            hit={nudge}
+            betLabel={`bet ${chipFace(selectedChip)} next hand`}
+            onBet={betNudge}
+            onDismiss={newHand}
+          />
+        )}
         <BetRail
           snapshot={snapshot}
           denoms={denoms}
@@ -241,6 +272,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           onSelectChip={selectChip}
           onStake={stake}
           onClear={clearBets}
+          view={betView}
+          onView={setBetView}
         />
       </main>
       <div className="board-dock">
