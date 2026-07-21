@@ -35,6 +35,8 @@ pub fn glossary() -> Vec<GlossaryEntry> {
           "A two-card total of 8 or 9 is a Natural. Both hands stand immediately and no third card is drawn; the higher natural wins."),
         e("monkey", "Monkey", "Slang for any 10, J, Q, or K — a zero-value card.",
           "A Monkey is any ten-value card (10, Jack, Queen, King). It counts as zero, so drawing one never changes a hand's total. Pure table slang players call out when hoping to land a zero."),
+        e("snowman", "Snowman", "Table slang for an 8 — the figure-eight looks like one.",
+          "A Snowman is table slang for the number 8, whose figure-eight shape resembles a stacked snowman. Players call it out when hoping to draw an 8 (a strong total, and the top natural short of 9)."),
         e("pair", "Pair", "First two cards of a hand share the same rank.",
           "When a hand's first two cards are the same rank, that hand has a pair — the basis for the Player Pair and Banker Pair side bets, usually paying 11:1."),
         e("commission", "Commission", "The 5% fee on winning Banker bets.",
@@ -95,7 +97,7 @@ mod tests {
         }
 
         // A few stable keys front-ends depend on must exist.
-        for required in ["monkey", "player", "banker", "natural", "big-eye-boy"] {
+        for required in ["monkey", "snowman", "player", "banker", "natural", "big-eye-boy"] {
             assert!(keys.contains(required), "missing required term '{required}'");
         }
     }

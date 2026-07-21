@@ -199,8 +199,16 @@ function handsSnap(
 
 test("a third-card eight is a snowman", () => {
   const s = handsSnap("Dealing", [], [fu("Five"), fu("Five"), fu("Eight")], []);
-  const line = text(narrate(s, { side: "Player", card: { rank: "Eight", suit: "Clubs" } }));
-  expect(line).toMatch(/snowman/i);
+  const segs = narrate(s, { side: "Player", card: { rank: "Eight", suit: "Clubs" } });
+  expect(text(segs)).toMatch(/snowman/i);
+  // the slang is a tappable glossary term, not bare text a novice can't look up
+  expect(segs).toContainEqual({ text: "snowman", term: "snowman" });
+});
+
+test("the squeeze call links the glossary term", () => {
+  const segs = narrate(snap("Dealing"));
+  expect(text(segs)).toBe("No more bets. Cards are out — squeeze 'em.");
+  expect(segs).toContainEqual({ text: "squeeze", term: "squeeze" });
 });
 
 test("an eight in the first two cards is no snowman", () => {

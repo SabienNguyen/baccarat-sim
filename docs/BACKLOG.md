@@ -26,6 +26,10 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
 | A6 | Jack rendered as a chess knight ♞ (a horse) — a Jack/Knave isn't a knight; use a J-appropriate glyph or the index treatment | S | `cardArt.ts:107` (cosmetic, deliberate retro styling) |
+| N1 | Shoe progress readout — cards remaining / shoe %, cut-card marker, shoe number; every real table shows this and it teaches shoe pacing. Needs `shoe.remaining()` exposed across the wasm boundary + a HUD chip | M | engine field + `Hud.tsx` |
+| N5 | Per-spot bet-limit signage incl. a side-bet max (distinct from F8's min enforcement) — real tables post per-position limits | S | `BetRail.tsx` |
+| N7 | Commission-owed running tally for the shoe — authenticity + teaches the drag of the vig (per-hand deduction stays; add a display) | S | `Hud.tsx` |
+| N8 | Multiplayer betting-window countdown / "no more bets" clock (ties S3 squeeze-timeout) | M | server timer + client ring |
 
 ## Accessibility
 
@@ -36,6 +40,18 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | Y3 | `win-float` (every settle) and `felt-swirl` (infinite) ignored `prefers-reduced-motion` | S | ✅ fixed 2026-07-20 (motion-free fade for the popup; felt frozen) |
 | Y4 | Full modal a11y pass: `aria-modal`, focus-in-on-open, focus-restore-on-close, Tab trap across all 5 dialogs; add Escape to BustModal/VictoryModal | M | open (CutDeckModal got aria-modal + Escape as part of Y2) |
 | Y5 | Full keyboard-play audit of bet spots/chips + visible focus styling throughout | M | open |
+
+## Teaching / onboarding
+
+The app is billed as a learning tool; these close the gaps between "plays correctly" and "teaches a novice."
+
+| # | Item | Effort | Status |
+|---|------|--------|--------|
+| N3 | Dealer slang defined + orphan glossary entries reachable — "snowman"/"le grand"/"squeeze" were spoken with no definition; "commission"/"squeeze" entries existed but were never linked | S | ✅ done 2026-07-21 (added `snowman` entry; linked snowman ×2, le grand→natural, squeeze in the dealer line, commission in the ExplainPanel) |
+| N4 | Default Explain ON at the Low "Learn the ropes" table (it's the only feature that teaches the drawing rules, hidden behind a toggle by default) + a static third-card tableau reference | S | open |
+| N6 | House-edge caption on the bet spots ("Banker best, Tie worst") — teaches bankroll sense at the moment of the bet, not just in the hidden Explain panel | S | open |
+| N2 | First-run "How to play" / coach overlay — a true novice is dropped straight onto the felt with no primer | M | open |
+| N3b | Wire remaining orphan glossary entries `shoe` and `ez-baccarat` (ez only relevant once A3 ruleset toggle lands) | S | open |
 
 ## Features
 
@@ -153,3 +169,12 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
   message (new `ServerMsg::Closed { reason }`), which also unblocks a table an
   idle seat was stalling. Verified end-to-end (client receives the reason
   before the socket closes). Partially addresses S4 and F6.
+- **2026-07-21 (Opus 4.8, real-table fidelity + onboarding — the audit lens
+  pivoted from code to experience):** No logic bugs. Found teaching gaps: the
+  app narrates slang ("snowman", "le grand") and shows terms ("commission",
+  "squeeze") a novice can't look up. **Started building** from here — shipped
+  N3 (glossary wiring + snowman definition). Logged onboarding items (N2/N4/N6,
+  N3b) and real-table gaps (N1 shoe readout, N5 limit signage, N7 vig tally,
+  N8 MP countdown). Build-next ranking: N4 (Explain-on-by-default) and N6
+  (edge captions on spots) next, both S. This is the pivot point — the loop is
+  now building down the backlog rather than hunting increasingly rare defects.

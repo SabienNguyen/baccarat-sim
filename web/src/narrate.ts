@@ -105,7 +105,11 @@ function winSpecials(
     out.push({ text: " " }, { text: "Panda eight", term: "panda-8" }, { text: "!" });
   }
   if (b.cards.length === 2 && win.banker === 3 && thirdRank(p) === "Eight") {
-    out.push({ text: " The snowman froze the Banker on three." });
+    out.push(
+      { text: " The " },
+      { text: "snowman", term: "snowman" },
+      { text: " froze the Banker on three." },
+    );
   }
   if (win.result === "Tie" && win.player === 6) {
     out.push({ text: " Six–six — " }, { text: "Tiger", term: "tiger" }, { text: " tie!" });
@@ -116,7 +120,11 @@ function winSpecials(
     Math.min(win.player, win.banker) === 8 &&
     Math.max(win.player, win.banker) === 9;
   if (naturals) {
-    out.push({ text: " Le grand over le petit — nine beats eight." });
+    out.push(
+      { text: " " },
+      { text: "Le grand over le petit", term: "natural" },
+      { text: " — nine beats eight." },
+    );
   }
   return out;
 }
@@ -218,7 +226,11 @@ function flipLine(flip: Flip, snapshot: RoundSnapshot): NarrationSegment[] {
     third.FaceUp.rank === flip.card.rank &&
     third.FaceUp.suit === flip.card.suit;
   if (isThird && flip.card.rank === "Eight") {
-    return [{ text: `${name} to the ${flip.side} — snowman!` }];
+    return [
+      { text: `${name} to the ${flip.side} — ` },
+      { text: "snowman", term: "snowman" },
+      { text: "!" },
+    ];
   }
   if (MONKEY_RANKS.includes(flip.card.rank)) {
     return [
@@ -286,5 +298,9 @@ export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): 
   if (anyCardShowing(snapshot)) {
     return [{ text: "Take your time — bend that corner." }];
   }
-  return [{ text: "No more bets. Cards are out — squeeze 'em." }];
+  return [
+    { text: "No more bets. Cards are out — " },
+    { text: "squeeze", term: "squeeze" },
+    { text: " 'em." },
+  ];
 }
