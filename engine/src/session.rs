@@ -197,6 +197,12 @@ impl Session {
         if amount < table_min {
             return Err(CommandError::BetBelowMinimum { min: table_min, got: amount });
         }
+        // Reject any single wager over the posted max up front. Besides being
+        // correct, this bounds `amount` to table_max before the sums below, so
+        // a client-supplied i64::MAX can't overflow them past the guards.
+        if amount > table_max {
+            return Err(CommandError::BetAboveMaximum { max: table_max, got: amount });
+        }
         // the posted limit binds the whole stack on a spot, not each chip
         let on_spot: i64 = bets.iter().filter(|b| b.kind == kind).map(|b| b.amount).sum();
         if on_spot + amount > table_max {
@@ -499,6 +505,17 @@ mod tests {
         let mut s = Session::new(cfg());
         let err = s.place_bet(BetKind::Main(BetSpot::Banker), 60_000).unwrap_err();
         assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
+    }
+
+    #[test]
+    fn absurd_bet_amount_cannot_overflow_the_limit_check() {
+        // A client-supplied i64 near the max must be rejected as over-limit,
+        // not wrap the `on_spot + amount` sum negative and slip past the guard.
+        let mut s = Session::new(cfg());
+        let err = s.place_bet(BetKind::Main(BetSpot::Player), i64::MAX).unwrap_err();
+        assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: i64::MAX });
+        // and it must not corrupt state — no bet landed
+        assert!(s.snapshot().bets.is_empty());
     }
 
     #[test]

@@ -218,6 +218,11 @@ impl Table {
         if amount < min {
             return Err(CommandError::BetBelowMinimum { min, got: amount }.into());
         }
+        // Reject any single wager over the posted max up front — also bounds
+        // `amount` to `max` so a hostile i64::MAX can't overflow the sums below.
+        if amount > max {
+            return Err(CommandError::BetAboveMaximum { max, got: amount }.into());
+        }
         // the posted limit binds the whole stack on a spot, not each chip
         let on_spot: i64 =
             player.bets.iter().filter(|b| b.kind == kind).map(|b| b.amount).sum();
@@ -638,6 +643,23 @@ mod tests {
         t.join("a", 10_000).unwrap();
         t.join("b", 10_000).unwrap();
         assert_eq!(t.join("c", 10_000), Err(TableError::TableFull));
+    }
+
+    #[test]
+    fn hostile_bet_amount_cannot_overflow_the_limit_check() {
+        // A raw socket can send any i64; a near-max value must be rejected as
+        // over-limit, never wrap `on_spot + amount` past the max/bankroll guards.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        let err = t.place_bet(a, BetKind::Main(BetSpot::Player), i64::MAX);
+        assert!(matches!(
+            err,
+            Err(TableError::Command(CommandError::BetAboveMaximum { .. }))
+        ));
+        // the legit bet is untouched; nothing hostile landed
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.bets.iter().map(|b| b.amount).sum::<i64>(), 5_000);
     }
 
     #[test]

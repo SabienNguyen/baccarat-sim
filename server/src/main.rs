@@ -106,14 +106,24 @@ async fn handle_command(
             let rooms = registry.list_public().await;
             let _ = tx.send(ServerMsg::Rooms { rooms });
         }
-        ClientMsg::CreateRoom { name, tier, private } => match registry.create(tier, private).await {
-            Some(room) => sit(room, &name, tx, seat).await,
-            None => {
-                let _ = tx.send(ServerMsg::Error {
-                    message: "The floor is full — join an open table instead.".into(),
-                });
+        ClientMsg::CreateRoom { name, tier, private } => {
+            // Guard before allocating: `sit` refuses when already seated, and a
+            // room created for a refused sit would orphan (empty rooms are only
+            // reclaimed on Leave/disconnect). A seated client spamming create —
+            // or a double-clicked button — would leak rooms up to MAX_ROOMS.
+            if seat.is_some() {
+                let _ = tx.send(ServerMsg::Error { message: "You're already at a table.".into() });
+            } else {
+                match registry.create(tier, private).await {
+                    Some(room) => sit(room, &name, tx, seat).await,
+                    None => {
+                        let _ = tx.send(ServerMsg::Error {
+                            message: "The floor is full — join an open table instead.".into(),
+                        });
+                    }
+                }
             }
-        },
+        }
         ClientMsg::JoinRoom { room, name } => match registry.get(&room).await {
             Some(room) => sit(room, &name, tx, seat).await,
             None => {

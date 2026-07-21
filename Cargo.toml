@@ -1,3 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["engine", "engine-wasm", "server"]
+
+# Keep integer-overflow checks on in release. This is a money engine facing
+# untrusted socket input; a silent wrap is a validation-bypass vector, not a
+# micro-optimization worth trading away.
+[profile.release]
+overflow-checks = true
