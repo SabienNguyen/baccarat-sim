@@ -46,7 +46,7 @@ pub fn glossary() -> Vec<GlossaryEntry> {
         e("panda-8", "Panda 8", "Side bet: Player wins with a three-card total of 8.",
           "The Panda 8 is an EZ Baccarat side bet that pays 25:1 when the Player wins with exactly three cards totaling 8."),
         e("dragon-bonus", "Dragon Bonus", "Side bet on a big or natural win margin.",
-          "The Dragon Bonus pays on the chosen hand winning by a large margin (up to 30:1 for a 9-point gap) or winning with a natural; a non-natural win for the other side loses."),
+          "The Dragon Bonus pays when the chosen hand wins by a wide margin — 1:1 at a 4-point gap up to 30:1 at 9 — or wins with a natural (a natural win pays 1:1, a natural tie pushes). A non-natural win by only 1–3 points pays nothing, and any loss loses the bet."),
         e("tiger", "Tiger", "Side bet: Banker wins on a total of 6.",
           "The Tiger pays 12:1 when the Banker wins with a two-card 6 and 20:1 with a three-card 6."),
         e("big-tiger", "Big Tiger", "Side bet: Banker wins with a three-card 6.",

@@ -23,6 +23,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | A3 | Ruleset toggle: Commission vs EZ Baccarat (no-commission, Dragon-7 bar) — engine fully implements `EzBaccarat`, UI hard-wires `Commission` | S | `tables.ts:76`, `rooms.rs:48`, `adapter.ts` |
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
+| A6 | Jack rendered as a chess knight ♞ (a horse) — a Jack/Knave isn't a knight; use a J-appropriate glyph or the index treatment | S | `cardArt.ts:107` (cosmetic, deliberate retro styling) |
 
 ## Accessibility
 
@@ -79,6 +80,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | T1 | Single-player auto-settle-once effect (`App.tsx:171`) — the `settledThisCoup` ref guards against double-settle / stuck-in-Dealing; no test | S | highest value; a regression here hangs or double-pays a coup |
 | T2 | Dealer-pacer sound count over a full paced coup (exactly one `deal` + N `flip`, no double `win`) | S | the double-play surface audits keep probing |
 | T3 | `DerivedRoadView` mark rendering — a `"Red"` cell renders filled `●`/red and `"Blue"` hollow `○`/blue in the right cell (data→pixel faithfulness) | S | `roads.test.tsx` only covers BigRoad follow-latest |
+| T1b | ~~Side-bet paytables had no statistical assertion~~ | S | ✅ done 2026-07-20 (`statistics.rs` now asserts realized edge for all 10 side bets vs published) |
 | T4 | Goal crossing on a side-bet-only win (`gameStore.ts:176`) — covered only via a main-bet payout | S | |
 
 (Note: bust exactly at `table_min` IS covered — `gameStore.test.ts:221`, roll==min → not busted.)
@@ -122,3 +124,15 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
   logged: storage schema versioning (H15), goal-reached persistence (H16), MP
   ambience sounds (H17), autoplay latent (H18). Ranked the top untested
   behaviors T1–T4 (auto-settle-once the highest value).
+- **2026-07-20 (Opus 4.8, EMPIRICAL — 5M-coup Monte Carlo + card art +
+  glossary):** No bugs. Ran 5,000,000 real coups: every outcome frequency
+  (Banker 45.83%, Player 44.65%, Tie 9.53%, pairs 7.47%) and every realized
+  house edge (Player 1.18%, Banker 1.11%, Tie 14.27%, and all 10 side bets)
+  landed within ~1.5 SE of published 8-deck figures — the engine's output
+  distribution is statistically indistinguishable from real punto banco. Card
+  pip layouts, suit colors, and font-safety all correct; glossary/house-edge
+  copy factually correct. Acted on same day: added per-side-bet edge
+  assertions to `statistics.rs` (T1b), completed the Dragon Bonus glossary
+  definition (was silent on small non-natural wins losing). Logged the Jack
+  glyph nit (A6). Reference note: the exotic hit-rates in some odds tables
+  ("Panda 8 ~1.83%") are wrong; the engine's ~3.47% is correct.
