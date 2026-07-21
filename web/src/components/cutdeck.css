@@ -37,11 +37,16 @@
 .deck-card {
   width: 12px;
   height: 84px;
+  padding: 0;
   border-radius: 2px;
   background: repeating-linear-gradient(45deg, #3a2a55, #3a2a55 3px, #4a3a6a 3px, #4a3a6a 6px);
   border: 1px solid var(--ink);
   cursor: pointer;
   position: relative;
+}
+.deck-card:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
 }
 .deck-card:hover {
   outline: 2px solid rgba(244, 196, 48, 0.6);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./cutdeck.css";
 
 interface CutDeckModalProps {
@@ -17,22 +17,34 @@ const SLOTS = 24;
 export function CutDeckModal({ onCut, onCancel }: CutDeckModalProps) {
   const [cutAt, setCutAt] = useState<number | null>(null);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
   return (
     <div className="cut-backdrop" onClick={onCancel}>
       <div
         role="dialog"
+        aria-modal="true"
         aria-label="Cut the deck"
         className="cut-modal panel"
         onClick={(e) => e.stopPropagation()}
       >
         <h3>Cut the deck</h3>
-        <p>Drag the cut card into the shoe — or tap where to cut.</p>
+        <p>Drag the cut card into the shoe — or tap (or arrow to) where to cut.</p>
 
-        <div className="deck" aria-label="Shoe">
+        <div className="deck" role="group" aria-label="Shoe">
           {Array.from({ length: SLOTS }).map((_, i) => (
-            <div
+            <button
               key={i}
+              type="button"
               className={`deck-card ${cutAt === i ? "is-cut" : ""}`}
+              aria-label={`Cut at position ${i + 1} of ${SLOTS}`}
+              aria-pressed={cutAt === i}
               onClick={() => setCutAt(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => setCutAt(i)}

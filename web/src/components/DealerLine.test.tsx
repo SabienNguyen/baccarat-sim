@@ -40,6 +40,19 @@ test("renders the dealer line in a live region with an interactive term", () => 
   expect(screen.getByRole("tooltip")).toHaveTextContent("A zero-value card.");
 });
 
+test("the live region is one stable node across new lines (announces to SR)", () => {
+  const { container, rerender } = render(
+    <DealerLine snapshot={snap({ phase: "Betting", events: [] })} lookup={lookup} />,
+  );
+  const live = container.querySelector('[aria-live="polite"]');
+  expect(live).toBeInTheDocument();
+  // a new line must mutate text inside the SAME live node, not replace it —
+  // a keyed remount would carry aria-live on a fresh element and go unspoken
+  rerender(<DealerLine snapshot={snap()} lookup={lookup} />);
+  expect(container.querySelector('[aria-live="polite"]')).toBe(live);
+  expect(live).toHaveTextContent(/for the Player!/);
+});
+
 test("plain (non-term) phases render without a button", () => {
   render(<DealerLine snapshot={snap({ phase: "Betting", events: [] })} lookup={lookup} />);
   expect(screen.getByText("Place your bets.")).toBeInTheDocument();

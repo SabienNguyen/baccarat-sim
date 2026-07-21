@@ -53,6 +53,13 @@ body {
   }
 }
 
+/* Hold the felt still for anyone who asked the OS to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
+  }
+}
+
 /* Shared beveled panel look used by the HUD and scoreboard docks. */
 .panel {
   background: var(--panel-face);

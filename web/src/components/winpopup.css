@@ -39,3 +39,26 @@
     transform: translate(-50%, -48px) scale(1);
   }
 }
+
+/* Reduced motion: still show and clear the amount, but don't fly it — a
+   plain fade holds the same 1.5s lifecycle so the popup never stays stuck. */
+@media (prefers-reduced-motion: reduce) {
+  .win-popup {
+    animation-name: win-fade;
+    transform: translate(-50%, 0);
+  }
+  @keyframes win-fade {
+    0% {
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}

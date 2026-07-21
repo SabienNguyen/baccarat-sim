@@ -36,10 +36,13 @@ export function DealerLine({
   return (
     <section aria-label="Dealer" className="dealer-line">
       <span className="dealer-tag">DEALER</span>
-      {/* keyed by the line so the pop-in replays whenever he says something new */}
-      <p aria-live="polite" key={lineKey}>
-        {/* one inline run, so multi-segment lines flow as a sentence */}
-        <span className="dealer-text">
+      {/* The live region node stays mounted; only its text changes, so screen
+          readers actually announce each new line. Keying the region itself
+          would remount it and go unspoken (the aria-live anti-pattern). */}
+      <p aria-live="polite">
+        {/* keyed by the line so the pop-in replays whenever he says something
+            new — the visual replay rides the inner run, not the live region */}
+        <span className="dealer-text" key={lineKey}>
           {segments.map((seg, i) =>
             seg.term ? (
               <GlossaryTerm key={i} term={seg.term} label={seg.text} entry={lookup(seg.term)} />

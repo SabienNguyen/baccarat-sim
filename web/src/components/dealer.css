@@ -41,7 +41,6 @@
     inset -2px -2px 0 var(--panel-bevel-lo),
     4px 4px 0 var(--shadow);
   padding: 16px 18px 12px;
-  animation: dealer-say 220ms ease-out;
 }
 /* speech-bubble tail pointing down at the table */
 .dealer-line p::after {
@@ -58,7 +57,10 @@
 }
 
 .dealer-text {
-  display: inline;
+  /* inline-block so the per-line pop-in transform applies (it's keyed, so it
+     remounts and replays each new line) while the text still wraps normally */
+  display: inline-block;
+  animation: dealer-say 220ms ease-out;
 }
 
 @keyframes dealer-say {
@@ -73,7 +75,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dealer-line p {
+  .dealer-text {
     animation: none;
   }
 }

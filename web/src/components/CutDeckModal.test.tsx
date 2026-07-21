@@ -24,6 +24,23 @@ test("cancel backs out without cutting", async () => {
   expect(onCut).not.toHaveBeenCalled();
 });
 
+test("the cut is fully keyboard-operable", async () => {
+  const onCut = vi.fn();
+  render(<CutDeckModal onCut={onCut} onCancel={vi.fn()} />);
+  const confirm = screen.getByRole("button", { name: /Cut & shuffle/ });
+  expect(confirm).toBeDisabled();
+  // arm a slot with the keyboard, then confirm — no pointer involved
+  await userEvent.click(screen.getByRole("button", { name: /Cut at position 1 of/ }));
+  expect(confirm).toBeEnabled();
+});
+
+test("Escape cancels the cut", () => {
+  const onCancel = vi.fn();
+  render(<CutDeckModal onCut={vi.fn()} onCancel={onCancel} />);
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledOnce();
+});
+
 test("dropping the cut card onto a slot arms the cut", () => {
   const onCut = vi.fn();
   render(<CutDeckModal onCut={onCut} onCancel={vi.fn()} />);

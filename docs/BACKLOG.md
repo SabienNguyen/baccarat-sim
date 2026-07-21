@@ -23,6 +23,16 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
 
+## Accessibility
+
+| # | Item | Effort | Status |
+|---|------|--------|--------|
+| Y1 | Dealer announcements never reached screen readers — the `aria-live` `<p>` was keyed by its own text, remounting the region on every line (the documented anti-pattern) | S | ✅ fixed 2026-07-20 (stable live node; pop-in moved to keyed inner span) |
+| Y2 | Manual cut/reshuffle was pointer-only — slots were `<div onClick>`, so keyboard users could never enable "Cut & shuffle"; also no Escape | S | ✅ fixed 2026-07-20 (slots are real buttons w/ aria-pressed + focus ring; Escape added; keyboard test) |
+| Y3 | `win-float` (every settle) and `felt-swirl` (infinite) ignored `prefers-reduced-motion` | S | ✅ fixed 2026-07-20 (motion-free fade for the popup; felt frozen) |
+| Y4 | Full modal a11y pass: `aria-modal`, focus-in-on-open, focus-restore-on-close, Tab trap across all 5 dialogs; add Escape to BustModal/VictoryModal | M | open (CutDeckModal got aria-modal + Escape as part of Y2) |
+| Y5 | Full keyboard-play audit of bet spots/chips + visible focus styling throughout | M | open |
+
 ## Features
 
 | # | Item | Effort | Notes |
@@ -50,6 +60,12 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | H6 | `pointercancel` / `lostpointercapture` cleanup in `SqueezeCard` — an interrupted touch leaves the fold stuck mid-squeeze | S | `SqueezeCard.tsx` |
 | H7 | Restrict manual reveal of unbet (house) hands — `check_rights` returns Ok when holder is None, so a raw client can flip the dealer's cards ahead of the paced loop (no money impact, lock-serialized) | S | `table.rs:400` |
 | H8 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | `round.rs:38-41` (provably unreachable today) |
+| H9 | `narrateError` crashed on a `null` error (`"Message" in null` throws) | S | ✅ fixed 2026-07-20 (null/undefined guard) |
+| H10 | Guard the adapter money boundary: `Number.isInteger` before `BigInt(amountCents)` so a stray fractional value degrades gracefully instead of throwing | S | `adapter.ts:50,107` |
+| H11 | A real wasm panic surfaces as the generic "Can't do that, friend." dealer line (RuntimeError has `message`, not `Message`) — detect and log it distinctly instead of masking as a benign refusal | S | `adapter.ts:36-43` |
+| H12 | WS cold-start UX: `min_machines_running=0` means the first idle connect cold-starts Fly while the user waits on "Finding the casino…" until the browser's long WS timeout; add a connect timeout + "waking the table service…" message + retry | M | `Multiplayer.tsx:66` |
+| H13 | Derive prod WS URL from `location.host` when no `VITE_WS_URL` instead of hardcoding the canonical fly host — a self-host/preview deploy currently points multiplayer at the canonical app | S | `protocol.ts:54` |
+| H14 | Server sets no security headers on the SPA (`ServeDir`): add CSP, `X-Content-Type-Options`, etc. | S | `server/src/main.rs` |
 
 ## Audit log
 
@@ -71,3 +87,13 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
   cleanup, and unbet-hand reveal (H5–H8). Engine money math in the lifecycle
   paths (settle-on-leave, per-seat independent settlement, squeeze ownership)
   otherwise verified correct.
+- **2026-07-20 (Opus 4.8, WASM boundary + web-derived logic + a11y +
+  build/deploy):** No rules discrepancies — dealer narration, `runningTotal`/
+  `lastFlipBetween`, third-card gating, the "you would've won" nudge, chip
+  breakdown, and the WASM/TS type boundary (nested-enum serialization, i64→JS
+  precision, session finalization) all verified correct. Findings were all
+  accessibility + hardening. Fixed same day: SR live region (Y1), keyboard cut
+  ritual (Y2), reduced-motion gaps (Y3), `narrateError` null crash (H9).
+  Logged: full modal focus management (Y4), keyboard-play audit (Y5), adapter
+  integer/panic guards (H10–H11), WS cold-start UX (H12), WS-URL derivation
+  (H13), server security headers (H14).

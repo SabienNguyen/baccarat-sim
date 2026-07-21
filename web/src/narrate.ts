@@ -178,6 +178,9 @@ function anyCardShowing(snapshot: RoundSnapshot): boolean {
 
 /** What the dealer says when a command is refused — house rules, kindly. */
 export function narrateError(error: CommandError | { Message: string }): NarrationSegment[] {
+  if (error === null || error === undefined) {
+    return [{ text: "Can't do that, friend." }];
+  }
   if (typeof error === "object" && "Message" in error) {
     return [{ text: error.Message }];
   }
