@@ -182,7 +182,7 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
     expect(store.getState().snapshot.phase).toBe("Dealing");
     act(() => vi.advanceTimersByTime(600)); // AUTO_SETTLE_MS
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(1400)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(2600)); // AUTO_ADVANCE_MS
     expect(store.getState().snapshot.phase).toBe("Betting");
   } finally {
     vi.useRealTimers();

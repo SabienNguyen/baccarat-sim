@@ -1,0 +1,41 @@
+name: Deploy table service (Fly.io)
+
+# Deploys the multiplayer WebSocket server (which also serves the SPA) to
+# Fly.io. No-ops politely until a FLY_API_TOKEN repo secret exists — create
+# the app once with `fly launch` locally, then `fly tokens create deploy`.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "engine/**"
+      - "engine-wasm/**"
+      - "web/**"
+      - "Dockerfile"
+      - "fly.toml"
+      - ".github/workflows/server-deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: fly-deploy
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check for Fly token
+        id: token
+        run: echo "have=${{ secrets.FLY_API_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip notice
+        if: steps.token.outputs.have != 'true'
+        run: echo "No FLY_API_TOKEN secret — skipping server deploy."
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.token.outputs.have == 'true'
+
+      - name: Deploy
+        if: steps.token.outputs.have == 'true'
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

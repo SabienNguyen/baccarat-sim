@@ -28,8 +28,9 @@ import { playSfx } from "./audio/sfx";
 
 /** Beat after the final card flips before the round resolves itself. */
 const AUTO_SETTLE_MS = 600;
-/** How long the win/loss popup lingers before the next hand opens. */
-const AUTO_ADVANCE_MS = 1400;
+/** How long the settled cards + win/loss popup linger before the next hand.
+ *  Long enough to read both hands and the result — they stay on the felt now. */
+const AUTO_ADVANCE_MS = 2600;
 /** A longer window when a bonus nudge is showing, so it can be read and tapped. */
 const NUDGE_ADVANCE_MS = 3600;
 

@@ -89,7 +89,21 @@ cargo run -p baccarat-server   # listens on PORT (default 8788)
 ```
 
 In production the server serves the built site itself (`SPA_DIR`, default
-`web/dist`) — a `Dockerfile` and `fly.toml` are included.
+`web/dist`) — a `Dockerfile` and `fly.toml` are included. To put live tables
+on the public site, deploy it once to Fly.io:
+
+```sh
+fly auth login
+fly launch --copy-config --no-deploy   # reuse fly.toml; creates the app
+fly deploy
+# then let CI redeploy on every push to main:
+fly tokens create deploy | # add as the FLY_API_TOKEN repo secret
+  gh secret set FLY_API_TOKEN
+```
+
+The GitHub Pages build connects to `wss://baccarat-sim.fly.dev/ws` (override
+at build time with `VITE_WS_URL`). Until the server is deployed, the
+multiplayer lobby explains itself and single player works untouched.
 
 Tests:
 
@@ -104,5 +118,5 @@ Every push runs both suites in CI and deploys the site to GitHub Pages.
 
 Complete and playable: single player (three tables, win goals, bust-outs,
 persistent bankrolls) and multiplayer (public/private rooms, authentic squeeze rights, a
-paced house dealer). The GitHub Pages deployment is the single-player build;
-multiplayer needs the Rust server running.
+paced house dealer). The GitHub Pages deployment plays single player offline;
+live tables light up once the table service is deployed (see above).

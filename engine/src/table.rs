@@ -128,6 +128,8 @@ pub struct Table {
     history: Vec<RoundRecord>,
     /// Outcome of the most recent settled round, until the next deal.
     last_outcome: Option<crate::round::Outcome>,
+    /// The settled round's cards, kept on the felt until the next deal.
+    last_round: Option<RoundResult>,
 }
 
 impl Table {
@@ -142,6 +144,7 @@ impl Table {
             next_player: 0,
             history: Vec::new(),
             last_outcome: None,
+            last_round: None,
         }
     }
 
@@ -289,6 +292,7 @@ impl Table {
             banker: vec![CardStatus::FaceDown; round.banker.cards.len()],
         };
         self.last_outcome = None;
+        self.last_round = None;
         for p in &mut self.players {
             p.payouts = None;
         }
@@ -491,6 +495,7 @@ impl Table {
             p.sitting_out = false; // fresh decision every coup
         }
         self.last_outcome = Some(round.outcome);
+        self.last_round = Some(round.clone());
         self.history.push(RoundRecord::from_round(&round));
         self.phase = Phase::Betting;
         Ok(())
@@ -540,6 +545,21 @@ impl Table {
             Phase::Betting => (None, None),
         };
 
+        // A settled coup keeps its cards on the felt, face up, until the next
+        // deal — the result should be readable, not swept away with the chips.
+        let settled_hands = |side: Side| -> HandView {
+            match (&self.last_round, player.payouts.is_some()) {
+                (Some(round), true) => {
+                    let hand = match side {
+                        Side::Player => &round.player,
+                        Side::Banker => &round.banker,
+                    };
+                    let all_up = vec![CardStatus::FaceUp; hand.cards.len()];
+                    hand_view(hand, &all_up)
+                }
+                _ => HandView { cards: Vec::new(), total: None },
+            }
+        };
         let view = match &self.phase {
             Phase::Betting => TableView {
                 phase: if player.payouts.is_some() {
@@ -547,8 +567,8 @@ impl Table {
                 } else {
                     PhaseTag::Betting
                 },
-                player: HandView { cards: Vec::new(), total: None },
-                banker: HandView { cards: Vec::new(), total: None },
+                player: settled_hands(Side::Player),
+                banker: settled_hands(Side::Banker),
                 bets: player.bets.clone(),
                 bankroll: player.bankroll,
                 table_min: self.config.table_min,
@@ -594,6 +614,7 @@ fn settle_one(bet: &PlacedBet, round: &RoundResult, ruleset: Ruleset) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session::CardView;
     use crate::settle::BetSpot;
 
     fn table() -> Table {
@@ -653,6 +674,36 @@ mod tests {
         // and the outcome is shared
         assert_eq!(va.outcome, vb.outcome);
         assert!(va.outcome.is_some());
+    }
+
+    #[test]
+    fn settled_view_keeps_the_rounds_cards_face_up() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
+        let dealt = t.view_for(a).unwrap();
+        t.settle().unwrap();
+
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Settled);
+        // the coup's cards stay on the felt, all face up, totals final
+        assert_eq!(v.player.cards.len(), dealt.player.cards.len());
+        assert_eq!(v.banker.cards.len(), dealt.banker.cards.len());
+        assert!(v
+            .player
+            .cards
+            .iter()
+            .chain(v.banker.cards.iter())
+            .all(|c| matches!(c, CardView::FaceUp(_))));
+        assert!(v.player.total.is_some() && v.banker.total.is_some());
+
+        // the next deal sweeps them for the fresh coup
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
+        let fresh = t.view_for(a).unwrap();
+        assert_eq!(fresh.phase, PhaseTag::Dealing);
+        assert!(fresh.player.cards.iter().all(|c| matches!(c, CardView::FaceDown)));
     }
 
     #[test]

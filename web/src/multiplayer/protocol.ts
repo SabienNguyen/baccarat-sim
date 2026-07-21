@@ -50,8 +50,20 @@ export type ServerMsg =
   | { type: "left" }
   | { type: "error"; message: string };
 
-/** Same-origin socket URL (vite dev proxies /ws to the server). */
+/** The deployed table service; static hosts (GitHub Pages) have no /ws. */
+const PROD_WS_URL = "wss://baccarat-sim.fly.dev/ws";
+
+/**
+ * Socket URL for the table service. Priority: VITE_WS_URL (build-time
+ * override), same-origin /ws in dev (vite proxies it to the local server),
+ * else the deployed service.
+ */
 export function socketUrl(): string {
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${location.host}/ws`;
+  const configured = import.meta.env.VITE_WS_URL as string | undefined;
+  if (configured) return configured;
+  if (import.meta.env.DEV) {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}/ws`;
+  }
+  return PROD_WS_URL;
 }
