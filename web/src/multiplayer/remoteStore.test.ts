@@ -90,6 +90,29 @@ test("a settle push records the round's delta and fires the win pop-up", () => {
   expect(store.getState().settleSeq).toBe(1);
 });
 
+test("a re-broadcast of the still-Settled view does not re-fire the win pop-up", () => {
+  const { store } = setup();
+  store.handle({ type: "state", view: view({ phase: "Dealing", bets: [{ kind: { Main: "Player" }, amount: 10000 }] }) });
+  const settled = view({
+    phase: "Settled",
+    bankroll: 1_010_000,
+    payouts: [{ bet: { kind: { Main: "Player" }, amount: 10000 }, net: 10000 }],
+  });
+  store.handle({ type: "state", view: settled });
+  expect(store.getState().settleSeq).toBe(1);
+
+  // Player taps a spot to bet the next coup: the store sweeps the felt to
+  // Betting locally, ahead of the server (which still shows Settled).
+  store.getState().newHand();
+  expect(store.getState().snapshot.phase).toBe("Betting");
+
+  // Another seat acts during the inter-coup window → the server re-broadcasts
+  // the SAME settled view. This must NOT count as a fresh settle: no seq bump,
+  // no $0 "push" popup/sound.
+  store.handle({ type: "state", view: settled });
+  expect(store.getState().settleSeq).toBe(1);
+});
+
 test("other players' actions arrive as seat updates", () => {
   const { store } = setup();
   store.handle({

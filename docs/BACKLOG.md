@@ -12,6 +12,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S2 | **`create_room` orphans rooms → floor-exhaustion DoS** — room inserted before `sit()`, which refuses when already seated, leaking rooms to MAX_ROOMS (also double-click leak) | S | ✅ fixed 2026-07-20 (guard `seat.is_some()` before allocating) |
 | S3 | Any seated player can `Settle` mid-Dealing, cutting off everyone else's squeeze (money stays correct — fairness/griefing only). Tension: it's also the only escape from a squeezer who won't reveal | M | open — gate settle on all-revealed, or restrict who settles + add a squeeze timeout |
 | S4 | Server has no WebSocket ping/pong; a half-open TCP drop leaves a ghost undecided seat that blocks `deal()` until OS timeout | M | open |
+| S5 | **Multiplayer settle popup/sound re-fired with a bogus $0 "push"** — `settleSeq` was keyed off `prev.phase !== "Settled"`, but the local `newHand()` sweeps phase to Betting while the server view stays Settled, so any other seat's action re-broadcast re-triggered it | S | ✅ fixed 2026-07-20 (fire only on genuine `Dealing→Settled` edge; regression test added) |
 
 ## Authenticity (gameplay matches a real pit)
 
@@ -66,6 +67,21 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | H12 | WS cold-start UX: `min_machines_running=0` means the first idle connect cold-starts Fly while the user waits on "Finding the casino…" until the browser's long WS timeout; add a connect timeout + "waking the table service…" message + retry | M | `Multiplayer.tsx:66` |
 | H13 | Derive prod WS URL from `location.host` when no `VITE_WS_URL` instead of hardcoding the canonical fly host — a self-host/preview deploy currently points multiplayer at the canonical app | S | `protocol.ts:54` |
 | H14 | Server sets no security headers on the SPA (`ServeDir`): add CSP, `X-Content-Type-Options`, etc. | S | `server/src/main.rs` |
+| H15 | Storage has no schema version tag — `loadBankroll` / `loadAudioSettings` parse a raw value, so a future shape change silently resets the saved roll/audio prefs with no migration | S | `bankrollStorage.ts:19`, `audio/settings.ts:24` |
+| H16 | `goalReached` isn't persisted: reloading after crossing the goal (roll already ≥ goal) never re-shows TABLE BEATEN because `before < goal` is now false — the victory moment is lost across a refresh | S | `gameStore.ts:176` (design call: persist-once vs re-celebrate) |
+| H17 | Confirm/mute MP ambience sounds for *other* players' bet/peek actions — `soundsFor` fires `chipPlace`/`squeeze` on aggregate-view deltas; may be intended table ambience or may be noise | S | `remoteStore.ts:60` |
+| H18 | Latent autoplay risk: `AudioContext` is created in a mount effect, fine today (table only mounts post-click) but would start suspended/silent if the app ever auto-loads into a table | S | `audio/sfx.ts:47` |
+
+## Test-coverage gaps (ranked by risk)
+
+| # | Untested behavior | Effort | Notes |
+|---|-------------------|--------|-------|
+| T1 | Single-player auto-settle-once effect (`App.tsx:171`) — the `settledThisCoup` ref guards against double-settle / stuck-in-Dealing; no test | S | highest value; a regression here hangs or double-pays a coup |
+| T2 | Dealer-pacer sound count over a full paced coup (exactly one `deal` + N `flip`, no double `win`) | S | the double-play surface audits keep probing |
+| T3 | `DerivedRoadView` mark rendering — a `"Red"` cell renders filled `●`/red and `"Blue"` hollow `○`/blue in the right cell (data→pixel faithfulness) | S | `roads.test.tsx` only covers BigRoad follow-latest |
+| T4 | Goal crossing on a side-bet-only win (`gameStore.ts:176`) — covered only via a main-bet payout | S | |
+
+(Note: bust exactly at `table_min` IS covered — `gameStore.test.ts:221`, roll==min → not busted.)
 
 ## Audit log
 
@@ -97,3 +113,12 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
   Logged: full modal focus management (Y4), keyboard-play audit (Y5), adapter
   integer/panic guards (H10–H11), WS cold-start UX (H12), WS-URL derivation
   (H13), server security headers (H14).
+- **2026-07-20 (Opus 4.8, audio + roads rendering + persistence + test
+  gaps):** One confirmed bug, fixed same day: multiplayer settle popup/sound
+  re-firing with a $0 "push" (S5). No rules discrepancies. Audio memory
+  hygiene, volume/mute persistence, and `devAlmostWin` prod-stripping all
+  verified clean; roads rendering is a faithful 1:1 of the verified data (the
+  only gap is the A2 dragon-tail / overflow, already logged). New hardening
+  logged: storage schema versioning (H15), goal-reached persistence (H16), MP
+  ambience sounds (H17), autoplay latent (H18). Ranked the top untested
+  behaviors T1–T4 (auto-settle-once the highest value).

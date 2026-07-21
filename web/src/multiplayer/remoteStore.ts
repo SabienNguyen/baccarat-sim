@@ -109,9 +109,14 @@ export function createRemoteStore(opts: {
     const prev = get().snapshot;
     const next = stripView(view);
 
-    // A settle push (Dealing→Settled) carries the round's bankroll change.
+    // A settle push carries the round's bankroll change. Fire only on the
+    // genuine Dealing→Settled edge: after a settle the local `newHand()` sweeps
+    // our phase to Betting while the server view stays Settled until the next
+    // deal, so any other seat's action re-broadcasts that Settled view. Keying
+    // off `prev !== "Settled"` would re-fire the pop-up (with a bogus $0 "push")
+    // on every such re-broadcast; a real settle only ever follows Dealing.
     let { lastDelta, settleSeq } = get();
-    if (next.phase === "Settled" && prev.phase !== "Settled") {
+    if (next.phase === "Settled" && prev.phase === "Dealing") {
       lastDelta = next.bankroll - prev.bankroll;
       settleSeq += 1;
     }
