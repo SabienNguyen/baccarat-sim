@@ -17,6 +17,11 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tower_http::services::{ServeDir, ServeFile};
 
+/// A connection silent for this long forfeits its seat (and unblocks the
+/// table it may be stalling). The web client sends a message on every action,
+/// so this only fires on a genuinely away player.
+const IDLE_LIMIT: std::time::Duration = std::time::Duration::from_secs(300);
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -67,18 +72,35 @@ async fn handle_socket(socket: WebSocket, registry: Registry) {
 
     let mut seat: Option<Seat> = None;
 
-    while let Some(Ok(msg)) = ws_rx.next().await {
-        let Message::Text(text) = msg else { continue };
-        if text.len() > 4096 {
-            let _ = tx.send(ServerMsg::Error { message: "Message too large.".into() });
-            continue;
+    loop {
+        // A silent client eventually forfeits its seat: with no messages for
+        // IDLE_LIMIT it's away, and a seated idler otherwise blocks the whole
+        // table's next deal. On timeout we tell them why before closing.
+        match tokio::time::timeout(IDLE_LIMIT, ws_rx.next()).await {
+            Ok(Some(Ok(Message::Text(text)))) => {
+                if text.len() > 4096 {
+                    let _ = tx.send(ServerMsg::Error { message: "Message too large.".into() });
+                    continue;
+                }
+                let Ok(cmd) = serde_json::from_str::<ClientMsg>(&text) else {
+                    let _ = tx.send(ServerMsg::Error { message: "Unrecognized message.".into() });
+                    continue;
+                };
+                handle_command(cmd, &registry, &tx, &mut seat).await;
+            }
+            Ok(Some(Ok(_))) => continue, // non-text frame (ping/binary): ignore
+            Ok(Some(Err(_))) | Ok(None) => break, // socket errored or closed
+            Err(_) => {
+                // Idle past the limit — away too long.
+                let reason = if seat.is_some() {
+                    "You were away too long — the table gave up your seat."
+                } else {
+                    "Closed for inactivity — reconnect when you're ready."
+                };
+                let _ = tx.send(ServerMsg::Closed { reason: reason.into() });
+                break;
+            }
         }
-        let parsed: Result<ClientMsg, _> = serde_json::from_str(&text);
-        let Ok(cmd) = parsed else {
-            let _ = tx.send(ServerMsg::Error { message: "Unrecognized message.".into() });
-            continue;
-        };
-        handle_command(cmd, &registry, &tx, &mut seat).await;
     }
 
     // Connection gone: stand up and tell the table.
@@ -92,7 +114,11 @@ async fn handle_socket(socket: WebSocket, registry: Registry) {
         maybe_pace(room);
         registry.sweep().await;
     }
-    writer.abort();
+    // Drop the outbound sender so the writer drains any queued message (the
+    // Closed notice above) and exits on its own — don't abort it out from
+    // under an unsent close reason.
+    drop(tx);
+    let _ = writer.await;
 }
 
 async fn handle_command(
@@ -193,7 +219,7 @@ async fn sit(
     let name = if name.trim().is_empty() { "guest" } else { name.trim() };
     match guard.table.join(&name.chars().take(24).collect::<String>(), buy_in) {
         Ok(pid) => {
-            guard.conns.insert(pid, tx.clone());
+            guard.seat(pid, tx.clone());
             let view = guard.table.view_for(pid).expect("just joined");
             let _ = tx.send(ServerMsg::Joined {
                 room: guard.id.clone(),

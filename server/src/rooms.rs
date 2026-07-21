@@ -18,6 +18,11 @@ pub const DEALER_FLIP_MS: u64 = 1100;
 /// The casino floor only has so much room.
 pub const MAX_ROOMS: usize = 200;
 
+/// How long a freshly created room may sit un-seated before the sweep may
+/// reap it. Long enough to cover the create→seat handoff; short enough that a
+/// creator who drops before seating can't strand an empty room for long.
+const SEAT_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -27,6 +32,11 @@ pub struct Room {
     pub conns: HashMap<PlayerId, mpsc::UnboundedSender<ServerMsg>>,
     /// A dealer-flip pacer task is already running for this room.
     pub pacing: bool,
+    /// When the room was created — gates the sweep during the create→seat gap.
+    created: std::time::Instant,
+    /// True once anyone has ever been seated; an empty room is only reaped
+    /// after it has held a player (or aged out un-seated, see SEAT_GRACE).
+    seated_once: bool,
 }
 
 impl Room {
@@ -50,7 +60,17 @@ impl Room {
             ),
             conns: HashMap::new(),
             pacing: false,
+            created: std::time::Instant::now(),
+            seated_once: false,
         }
+    }
+
+    /// Seat a connection. Marks the room as having been occupied, so a later
+    /// sweep may reap it once it empties — but never before its first seat
+    /// (which would strand a room a client created but hasn't sat down at yet).
+    pub fn seat(&mut self, pid: PlayerId, tx: mpsc::UnboundedSender<ServerMsg>) {
+        self.conns.insert(pid, tx);
+        self.seated_once = true;
     }
 
     pub fn info(&self) -> RoomInfo {
@@ -132,12 +152,16 @@ impl Registry {
         infos
     }
 
-    /// Drop rooms nobody is connected to anymore.
+    /// Drop rooms nobody is connected to anymore. A freshly created room is
+    /// spared until its creator seats (or it ages past SEAT_GRACE), so a
+    /// concurrent sweep can't strand a room during the create→seat handoff.
     pub async fn sweep(&self) {
         let mut rooms = self.rooms.lock().await;
         let mut dead = Vec::new();
         for (id, room) in rooms.iter() {
-            if room.lock().await.conns.is_empty() {
+            let room = room.lock().await;
+            let reapable = room.seated_once || room.created.elapsed() > SEAT_GRACE;
+            if room.conns.is_empty() && reapable {
                 dead.push(id.clone());
             }
         }
@@ -253,12 +277,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sweeping_removes_empty_rooms() {
+    async fn sweeping_removes_a_room_once_everyone_has_left() {
         let registry = Registry::new();
         let room = registry.create(Tier::Mid, false).await.unwrap();
         let id = room.lock().await.id.clone();
+        // someone sits, plays, then leaves — now the room is truly dead
+        {
+            let mut g = room.lock().await;
+            let (tx, _rx) = mpsc::unbounded_channel();
+            let pid = g.table.join("a", 1_000_000).unwrap();
+            g.seat(pid, tx);
+            g.conns.remove(&pid);
+        }
         registry.sweep().await;
         assert!(registry.get(&id).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn sweep_spares_a_room_created_but_not_yet_seated() {
+        // The create→seat handoff: a client holds the room's Arc but hasn't
+        // sat down when another client's disconnect fires a sweep. The room
+        // must survive, or the creator seats into a room the registry dropped.
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let id = room.lock().await.id.clone();
+
+        registry.sweep().await; // fires during the gap before the creator seats
+        assert!(registry.get(&id).await.is_some(), "room reaped mid-seat");
+
+        // the creator now seats — into the same room the registry still holds
+        {
+            let mut g = room.lock().await;
+            let (tx, _rx) = mpsc::unbounded_channel();
+            let pid = g.table.join("a", 1_000_000).unwrap();
+            g.seat(pid, tx);
+        }
+        assert!(registry.get(&id).await.is_some());
     }
 
     #[tokio::test]

@@ -86,6 +86,18 @@ test("creating a table sends the choice and joining mounts the live table", asyn
   expect(screen.getByText("sabien")).toBeInTheDocument();
 });
 
+test("an away-too-long close shows the server's reason, not a generic outage", () => {
+  const { socket } = mount();
+  socket.open();
+  socket.push({ type: "closed", reason: "You were away too long — the table gave up your seat." });
+  expect(
+    screen.getByText("You were away too long — the table gave up your seat."),
+  ).toBeInTheDocument();
+  // and it reads as a normal event, not "the service is down"
+  expect(screen.getByText(/take a seat again/)).toBeInTheDocument();
+  expect(screen.queryByText(/table service running/)).toBeNull();
+});
+
 test("a join error before seating shows in the lobby", () => {
   const { socket } = mount();
   socket.open();

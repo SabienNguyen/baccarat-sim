@@ -61,6 +61,9 @@ pub enum ServerMsg {
     State { view: TableView },
     Left,
     Error { message: String },
+    /// The server is closing this connection for a stated reason (e.g. the
+    /// seat was given up after being away). The client shows `reason`.
+    Closed { reason: String },
 }
 
 #[cfg(test)]

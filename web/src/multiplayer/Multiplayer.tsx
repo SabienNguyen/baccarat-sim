@@ -98,6 +98,11 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         storeRef.current = null;
         setStage({ at: "lobby" });
         socket.send(JSON.stringify({ type: "list_rooms" }));
+      } else if (msg.type === "closed") {
+        // The server is closing us on purpose (e.g. away too long). Show its
+        // reason and stop the onclose handler from overwriting it.
+        storeRef.current = null;
+        setStage({ at: "dead", why: msg.reason });
       } else if (msg.type === "error") {
         if (storeRef.current) storeRef.current.handle(msg);
         else setNotice(msg.message);
@@ -135,11 +140,16 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   }
 
   if (stage.at === "dead") {
+    // An away-too-long close is a normal event, not an outage — offer a way
+    // straight back to the lobby rather than the "service is down" subtext.
+    const wasAfk = stage.why.includes("away too long");
     return (
       <div className="mp-screen">
         <p className="mp-status">{stage.why}</p>
         <p className="mp-substatus">
-          Live tables need the table service running. Single player works offline.
+          {wasAfk
+            ? "Head back to the lobby to take a seat again."
+            : "Live tables need the table service running. Single player works offline."}
         </p>
         <button type="button" className="mp-back" onClick={onExit}>
           Back

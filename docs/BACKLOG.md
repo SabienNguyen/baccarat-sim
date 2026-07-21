@@ -11,8 +11,10 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S1 | **Bet-amount integer-overflow bypass** — client i64 `amount` near max wrapped `on_spot+amount` past the max/bankroll guards; no release overflow-checks | S | ✅ fixed 2026-07-20 (reject single bet > max in both engines + `[profile.release] overflow-checks=true`; tests added) |
 | S2 | **`create_room` orphans rooms → floor-exhaustion DoS** — room inserted before `sit()`, which refuses when already seated, leaking rooms to MAX_ROOMS (also double-click leak) | S | ✅ fixed 2026-07-20 (guard `seat.is_some()` before allocating) |
 | S3 | Any seated player can `Settle` mid-Dealing, cutting off everyone else's squeeze (money stays correct — fairness/griefing only). Tension: it's also the only escape from a squeezer who won't reveal | M | open — gate settle on all-revealed, or restrict who settles + add a squeeze timeout |
-| S4 | Server has no WebSocket ping/pong; a half-open TCP drop leaves a ghost undecided seat that blocks `deal()` until OS timeout | M | open |
+| S4 | Server WebSocket ping/pong for half-open TCP drops (instant ghost-seat detection) | M | partially addressed 2026-07-20: a 5-min idle timeout now evicts silent connections with a clear "away too long" message (`IDLE_LIMIT` in `main.rs`), which unblocks a table an idle seat was stalling and reaps ghost seats; a true ping/pong would detect a dead socket faster than 5 min |
+| S7 | `sweep`/`list_public` hold the global registry lock across every per-room `await` — one slow/held room lock stalls all creates/joins/lobby-refreshes floor-wide (O(rooms) serial locking each disconnect) | S/M | `rooms.rs:124` (snapshot the Arcs, release the map lock, then inspect) |
 | S5 | **Multiplayer settle popup/sound re-fired with a bogus $0 "push"** — `settleSeq` was keyed off `prev.phase !== "Settled"`, but the local `newHand()` sweeps phase to Betting while the server view stays Settled, so any other seat's action re-broadcast re-triggered it | S | ✅ fixed 2026-07-20 (fire only on genuine `Dealing→Settled` edge; regression test added) |
+| S6 | **`sweep()` orphaned a room during the create→seat handoff** — a freshly created room is empty until its creator seats, and any other client's disconnect-sweep in that gap dropped it from the registry while the creator seated into a now-unreachable room (under load, stranded 63/64) | S | ✅ fixed 2026-07-20 (`seated_once` flag + `SEAT_GRACE`; spare young un-seated rooms; 2 regression tests) |
 
 ## Authenticity (gameplay matches a real pit)
 
@@ -44,7 +46,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | F3 | Session statistics panel: P/B/T counts, pair frequency, longest streak | S | derive from `history`/scoreboard |
 | F4 | Multiplayer chat or emotes at the table | M | server protocol addition |
 | F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | `Multiplayer.tsx` |
-| F6 | Multiplayer bust handling: detect `bankroll < table_min`, show a rebuy/leave prompt, auto-sit-out so a broke AFK player can't block deals (`busted` hardcoded false in remoteStore; MP `GameTable` has no `onReset`) | M | `remoteStore.ts:52`, `Multiplayer.tsx:168`, `App.tsx:307` |
+| F6 | Multiplayer bust handling: detect `bankroll < table_min`, show a rebuy/leave prompt, auto-sit-out so a broke player can't block deals (`busted` hardcoded false in remoteStore; MP `GameTable` has no `onReset`) | M | `remoteStore.ts:52`, `Multiplayer.tsx:168`, `App.tsx:307` — partially mitigated by S4/AFK (an idle broke player is now evicted after 5 min) |
 | F7 | Reconnect token: rejoin resumes the same seat + bankroll instead of a fresh buy-in (today a disconnect forfeits winnings; a busted player rejoins for a free full rebuy) | L | `table.rs:194`, protocol addition |
 | F8 | Separate side-bet minimum from `table_min` — today a $5 side bet needs $25 at a $25-min table; real tables enforce the min on main bets only | M | both `place_bet`s + table config |
 | F9 | Optional warning when a player stakes both Player and Banker on one coup (allowed, but pure commission bleed) | S | `BetRail.tsx` |
@@ -136,3 +138,18 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
   definition (was silent on small non-natural wins losing). Logged the Jack
   glyph nit (A6). Reference note: the exotic hit-rates in some odds tables
   ("Panda 8 ~1.83%") are wrong; the engine's ~3.47% is correct.
+- **2026-07-20 (Opus 4.8, CONCURRENCY + property-based invariants):** One
+  confirmed race, fixed same day: `sweep()` orphaned a room during the
+  create→seat handoff (S6; a load harness stranded 63/64 seated rooms). All
+  other concurrency paths proven safe under a multi-threaded harness — no
+  double-deal, no double-pay, pacer-vs-settle safe, consistent lock ordering,
+  no room-id collision, broadcast-to-dropped-conn can't panic. Property-fuzzed
+  every engine invariant (money conservation, exhaustive tableau truth table,
+  paytable ceilings, scoreboard structure on pathological sequences, the
+  peek/reveal state machine) — zero failures. Logged S7. Recommended
+  build-next: A3 ruleset toggle, F1/F2 Tiger + banker Dragon Bonus, F3 stats.
+- **2026-07-20 (user request — AFK room closure):** Added a 5-minute idle
+  timeout: a silent connection forfeits its seat with a clear "away too long"
+  message (new `ServerMsg::Closed { reason }`), which also unblocks a table an
+  idle seat was stalling. Verified end-to-end (client receives the reason
+  before the socket closes). Partially addresses S4 and F6.

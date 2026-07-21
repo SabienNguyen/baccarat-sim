@@ -48,7 +48,8 @@ export type ServerMsg =
   | { type: "joined"; room: string; player: number; tier: TableTier; view: TableViewMsg }
   | { type: "state"; view: TableViewMsg }
   | { type: "left" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "closed"; reason: string };
 
 /** The deployed table service; static hosts (GitHub Pages) have no /ws. */
 const PROD_WS_URL = "wss://baccarat-sim.fly.dev/ws";
