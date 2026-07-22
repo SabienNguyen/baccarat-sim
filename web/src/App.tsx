@@ -9,6 +9,7 @@ import { SeatsStrip } from "./multiplayer/SeatsStrip";
 import type { TableTier } from "./tables";
 import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
+import { canSqueeze } from "./squeezeRights";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail, type BetView } from "./components/BetRail";
@@ -231,6 +232,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
             phase={snapshot.phase}
             visibleCount={playerVisible}
             winner={snapshot.outcome === "PlayerWin"}
+            squeezable={canSqueeze("Player", seats, squeezers)}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
           />
@@ -240,6 +242,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
             phase={snapshot.phase}
             visibleCount={bankerVisible}
             winner={snapshot.outcome === "BankerWin"}
+            squeezable={canSqueeze("Banker", seats, squeezers)}
             onPeek={(i) => peek("Banker", i)}
             onReveal={(i) => {
               if (!bankerLocked) reveal("Banker", i);

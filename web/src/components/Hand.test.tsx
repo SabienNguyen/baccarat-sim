@@ -50,6 +50,34 @@ test("shows no total before any card is revealed", () => {
   expect(screen.queryByText("Total")).not.toBeInTheDocument();
 });
 
+test("a hand the player holds is squeezable (interactive cards)", () => {
+  render(
+    <Hand
+      side="Player"
+      hand={{ cards: ["FaceDown", "FaceDown"], total: null }}
+      phase="Dealing"
+      onReveal={vi.fn()}
+    />,
+  );
+  expect(screen.getAllByRole("button").length).toBeGreaterThan(0);
+});
+
+test("a hand the player does NOT hold isn't squeezable — the dealer turns it", () => {
+  const onReveal = vi.fn();
+  render(
+    <Hand
+      side="Banker"
+      hand={{ cards: ["FaceDown", "FaceDown"], total: null }}
+      phase="Dealing"
+      squeezable={false}
+      onReveal={onReveal}
+    />,
+  );
+  // the cards are shown (the dealer will flip them) but are not grabbable
+  expect(screen.getAllByLabelText("face-down card")).toHaveLength(2);
+  expect(screen.queryByRole("button")).toBeNull();
+});
+
 test("renders only the first `visibleCount` cards, hiding an ungated third", () => {
   const hand: HandView = {
     cards: [

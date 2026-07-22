@@ -11,11 +11,23 @@ interface HandProps {
   visibleCount?: number;
   /** True when this hand won the round — the total goes gold. */
   winner?: boolean;
+  /** Whether the local player may squeeze this hand. Hands the house dealer
+   *  holds (a side nobody bet) are turned by its pacer, not grabbable. */
+  squeezable?: boolean;
   onPeek?: (index: number) => void;
   onReveal?: (index: number) => void;
 }
 
-export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal }: HandProps) {
+export function Hand({
+  side,
+  hand,
+  phase,
+  visibleCount,
+  winner,
+  squeezable = true,
+  onPeek,
+  onReveal,
+}: HandProps) {
   const dealing = phase === "Dealing";
   const shown = hand.cards.slice(0, visibleCount ?? hand.cards.length);
   // Run the total live off the face-up cards; the engine's total takes over
@@ -48,7 +60,7 @@ export function Hand({ side, hand, phase, visibleCount, winner, onPeek, onReveal
                 } as React.CSSProperties
               }
             >
-              {dealing ? (
+              {dealing && squeezable ? (
                 <SqueezeCard
                   card={card}
                   onPeek={() => onPeek?.(i)}
