@@ -76,7 +76,12 @@ test("a pair teaches its payout", () => {
 test("a third card narrates the tableau reason", () => {
   const segs = narrate(
     snap("Dealing", [
-      { ThirdCard: { side: "Player", reason: "Player 4 -> draws a third card (7)." } },
+      {
+        ThirdCard: {
+          side: "Player",
+          reason: "Player has 4 — draws a third card (7): players draw on 0–5.",
+        },
+      },
     ]),
   );
   expect(text(segs)).toBe("Card for the Player — drawing on 4, the tableau calls for it.");
@@ -225,7 +230,11 @@ test("an ace gets its one-counts call", () => {
 
 test("the banker drawing on six gets the only-six-or-seven call", () => {
   const e: Event = {
-    ThirdCard: { side: "Banker", reason: "Banker 6 -> draws a third card (7) per tableau." },
+    ThirdCard: {
+      side: "Banker",
+      reason:
+        "Banker has 6 — draws a third card (7): on 6 the Banker draws only when the Player's third card is 6–7 (it was 7).",
+    },
   };
   const line = text(narrate(snap("Dealing", [e])));
   expect(line).toMatch(/six or seven/i);

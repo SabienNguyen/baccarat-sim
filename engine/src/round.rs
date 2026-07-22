@@ -1,6 +1,6 @@
 use crate::card::Card;
 use crate::hand::Hand;
-use crate::rules::{banker_draws, player_draws};
+use crate::rules::{banker_draws, banker_reason, player_draws};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub fn play_round(source: &mut impl Iterator<Item = Card>) -> RoundResult {
     // Naturals end the round immediately, no third cards.
     if player.is_natural() || banker.is_natural() {
         trace.push(format!(
-            "Natural — player {} vs banker {}, no draws.",
+            "Natural — player {} vs banker {}: an 8 or 9 on the first two cards ends the hand, no draws.",
             player.total(),
             banker.total()
         ));
@@ -54,33 +54,44 @@ pub fn play_round(source: &mut impl Iterator<Item = Card>) -> RoundResult {
         return RoundResult { player, banker, outcome, trace };
     }
 
-    // Player draws on 0–5.
+    // Player draws on 0–5, stands on 6–7.
     let player_third: Option<u8> = if player_draws(player.total()) {
         let card = source.next().expect("card source exhausted mid-round");
         let cv = card.value();
         trace.push(format!(
-            "Player {} -> draws a third card ({}).",
+            "Player has {} — draws a third card ({}): players draw on 0–5.",
             player.total(),
             cv
         ));
         player.cards.push(card);
         Some(cv)
     } else {
-        trace.push(format!("Player stands on {}.", player.total()));
+        trace.push(format!(
+            "Player has {} — stands: players stand on 6–7.",
+            player.total()
+        ));
         None
     };
 
-    // Banker draws per the tableau.
-    if banker_draws(banker.total(), player_third) {
+    // Banker draws per the tableau — its move depends on its total and, once the
+    // Player has drawn, on the value of the Player's third card. Read the reason
+    // off the two-card total *before* any draw.
+    let bt = banker.total();
+    if banker_draws(bt, player_third) {
         let card = source.next().expect("card source exhausted mid-round");
         trace.push(format!(
-            "Banker {} -> draws a third card ({}) per tableau.",
-            banker.total(),
-            card.value()
+            "Banker has {} — draws a third card ({}): {}.",
+            bt,
+            card.value(),
+            banker_reason(bt, player_third)
         ));
         banker.cards.push(card);
     } else {
-        trace.push(format!("Banker stands on {}.", banker.total()));
+        trace.push(format!(
+            "Banker has {} — stands: {}.",
+            bt,
+            banker_reason(bt, player_third)
+        ));
     }
 
     let outcome = decide_outcome(&player, &banker);
@@ -138,6 +149,26 @@ mod tests {
         assert_eq!(r.player.total(), 6);
         assert_eq!(r.banker.total(), 6);
         assert_eq!(r.outcome, Outcome::Tie);
+    }
+
+    #[test]
+    fn trace_explains_why_the_counts_differ() {
+        // Player 2,3 = 5 -> draws (players draw 0–5). Banker 3,3 = 6.
+        // Player's third is an Ace (value 1): on 6 the Banker draws only against
+        // a 6–7, so it stands. Player ends with three cards, Banker with two —
+        // the trace must say *why*, not just "Banker stands on 6".
+        let cards = vec![
+            c(Rank::Two), c(Rank::Three), // P1, B1
+            c(Rank::Three), c(Rank::Three), // P2, B2  => P=5, B=6
+            c(Rank::Ace),                 // P third -> value 1
+        ];
+        let r = play_round(&mut cards.into_iter());
+        assert_eq!(r.player.cards.len(), 3);
+        assert_eq!(r.banker.cards.len(), 2);
+        let trace = r.trace.join(" ");
+        assert!(trace.contains("draws a third card"), "player draw explained: {trace}");
+        assert!(trace.contains("6–7"), "banker's tableau condition shown: {trace}");
+        assert!(trace.contains("it was 1"), "the player's actual third card named: {trace}");
     }
 
     #[test]

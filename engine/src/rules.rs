@@ -23,6 +23,31 @@ pub fn banker_draws(banker_total: u8, player_third: Option<u8>) -> bool {
     }
 }
 
+/// A plain-language reason for the Banker's third-card decision, given the
+/// Banker's two-card total and the value of the Player's third card (`None` if
+/// the Player stood). It names the tableau condition *and* the card actually
+/// turned, so a learner can see exactly why one hand has three cards and the
+/// other has two.
+pub fn banker_reason(banker_total: u8, player_third: Option<u8>) -> String {
+    match player_third {
+        None => {
+            if banker_total <= 5 {
+                "with the Player standing, the Banker draws on 0–5".to_string()
+            } else {
+                "with the Player standing, the Banker stands on 6–7".to_string()
+            }
+        }
+        Some(pt) => match banker_total {
+            0..=2 => "on 0–2 the Banker always draws, whatever the Player drew".to_string(),
+            3 => format!("on 3 the Banker draws unless the Player's third card is an 8 (it was {pt})"),
+            4 => format!("on 4 the Banker draws only when the Player's third card is 2–7 (it was {pt})"),
+            5 => format!("on 5 the Banker draws only when the Player's third card is 4–7 (it was {pt})"),
+            6 => format!("on 6 the Banker draws only when the Player's third card is 6–7 (it was {pt})"),
+            _ => "the Banker always stands on 7".to_string(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod player_tests {
     use super::*;
@@ -88,5 +113,24 @@ mod banker_tests {
                 );
             }
         }
+    }
+
+    // The plain-language reason must name the tableau condition AND the actual
+    // player third card, so a novice can see why the counts landed as they did.
+    #[test]
+    fn banker_reason_explains_each_branch() {
+        // player stood: the simple 0–5 draw / 6–7 stand split
+        assert!(banker_reason(4, None).contains("0–5"));
+        assert!(banker_reason(6, None).contains("6–7"));
+        // player drew: condition + the card that was actually turned
+        assert!(banker_reason(1, Some(9)).contains("always draws"));
+        let three = banker_reason(3, Some(8));
+        assert!(three.contains("unless") && three.contains("it was 8"));
+        let four = banker_reason(4, Some(5));
+        assert!(four.contains("2–7") && four.contains("it was 5"));
+        assert!(banker_reason(5, Some(3)).contains("4–7"));
+        let six = banker_reason(6, Some(1));
+        assert!(six.contains("6–7") && six.contains("it was 1"));
+        assert!(banker_reason(7, Some(2)).contains("stands on 7"));
     }
 }

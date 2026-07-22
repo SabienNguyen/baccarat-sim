@@ -48,8 +48,9 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | # | Item | Effort | Status |
 |---|------|--------|--------|
 | N3 | Dealer slang defined + orphan glossary entries reachable — "snowman"/"le grand"/"squeeze" were spoken with no definition; "commission"/"squeeze" entries existed but were never linked | S | ✅ done 2026-07-21 (added `snowman` entry; linked snowman ×2, le grand→natural, squeeze in the dealer line, commission in the ExplainPanel) |
-| N4 | Default Explain ON at the Low "Learn the ropes" table (it's the only feature that teaches the drawing rules, hidden behind a toggle by default) + a static third-card tableau reference | S | open |
-| N6 | House-edge caption on the bet spots ("Banker best, Tie worst") — teaches bankroll sense at the moment of the bet, not just in the hidden Explain panel | S | open |
+| N4 | Default Explain ON at the Low "Learn the ropes" table (it's the only feature that teaches the drawing rules, hidden behind a toggle by default) + a static third-card tableau reference | S | ✅ done 2026-07-21 (coach flag on the low table opens Explain; `ThirdCardChart` renders the tableau, faithful to `banker_draws`) |
+| N6 | House-edge caption on the bet spots ("Banker best, Tie worst") | S | ❌ dropped 2026-07-21 — user didn't want raw percentages on the felt; edges stay in the Explain panel only |
+| N9 | **Explain says _why_ the card counts differ.** The trace stated the decision ("Banker stands on 6") but never the tableau reason. Now every draw/stand line names the rule and the actual player third card. Focus of the continuous Explain-clarity loop — see `docs/EXPLAIN.md` | — | ✅ started 2026-07-21 (engine `banker_reason`; richer player/natural lines) |
 | N2 | First-run "How to play" / coach overlay — a true novice is dropped straight onto the felt with no primer | M | open |
 | N3b | Wire remaining orphan glossary entries `shoe` and `ez-baccarat` (ez only relevant once A3 ruleset toggle lands) | S | open |
 
@@ -178,3 +179,14 @@ The app is billed as a learning tool; these close the gaps between "plays correc
   N8 MP countdown). Build-next ranking: N4 (Explain-on-by-default) and N6
   (edge captions on spots) next, both S. This is the pivot point — the loop is
   now building down the backlog rather than hunting increasingly rare defects.
+- **2026-07-21 (user redirect — Explain-clarity loop):** User pointed out the
+  real gap: hands end with one side on three cards and the other on two and the
+  Explain feature never said *why*. Shipped N4 (Explain opens by default at the
+  learner's table + a static third-card tableau chart). Dropped N6 (no raw
+  percentages on the felt). Started N9: the engine trace now explains every
+  third-card decision — `banker_reason()` names the tableau condition and the
+  Player's actual third card, so "Banker stands on 6" becomes "…on 6 the Banker
+  draws only when the Player's third card is 6–7 (it was 3)." A dedicated loop
+  now continuously improves the Explain feature; its running log is
+  `docs/EXPLAIN.md`. Also a standing direction: de-Balatro the theme to a
+  generic pixel look (parked as the next dedicated task).

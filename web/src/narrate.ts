@@ -54,7 +54,7 @@ function winLine(
 
 /** Pull the pre-draw total out of the engine's trace-style reason, if it parses. */
 function drawnOn(reason: string): string | null {
-  const m = reason.match(/(?:Player|Banker) (\d+)/);
+  const m = reason.match(/(?:Player|Banker)\s+(?:has\s+)?(\d+)/);
   return m ? m[1] : null;
 }
 
