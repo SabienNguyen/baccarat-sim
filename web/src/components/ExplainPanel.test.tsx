@@ -38,6 +38,12 @@ test("shows a neutral hint when there is no trace", () => {
   expect(screen.getByText(/see the rules in action/i)).toBeInTheDocument();
 });
 
+test("always carries the third-card tableau reference", () => {
+  render(<ExplainPanel snapshot={snap({ explain: [] })} />);
+  const panel = screen.getByLabelText("Explain");
+  expect(within(panel).getByText(/Player draws on 0–5, stands on 6–7/i)).toBeInTheDocument();
+});
+
 test("shows house edge only for placed main bets, de-duplicated", () => {
   render(
     <ExplainPanel
@@ -50,8 +56,8 @@ test("shows house edge only for placed main bets, de-duplicated", () => {
       })}
     />,
   );
-  expect(screen.getByText(/Banker/)).toBeInTheDocument();
-  expect(screen.getByText(/1\.06%/)).toBeInTheDocument();
+  // the house-edge row itself (the static tableau below also names "Banker")
+  expect(screen.getByText(/Banker: 1\.06%/)).toBeInTheDocument();
   // only one Banker edge row despite two Banker bets
   expect(screen.getAllByText(/1\.06%/)).toHaveLength(1);
 });

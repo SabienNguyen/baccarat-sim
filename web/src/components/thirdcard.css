@@ -1,0 +1,52 @@
+.third-card {
+  margin-top: 10px;
+}
+.third-card h4 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--gold);
+}
+.tc-rule {
+  margin: 0 0 4px;
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.15;
+}
+.tc-muted {
+  opacity: 0.75;
+}
+.tc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-family: var(--font-text);
+  font-size: 14px;
+}
+.tc-caption {
+  caption-side: top;
+  text-align: left;
+  font-size: 12px;
+  opacity: 0.75;
+  padding-bottom: 3px;
+}
+.tc-table th,
+.tc-table td {
+  border: 2px solid var(--ink);
+  padding: 2px 6px;
+  text-align: left;
+}
+.tc-table thead th {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.tc-table tbody th {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--gold);
+  width: 3.5em;
+  text-align: center;
+}

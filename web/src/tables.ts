@@ -14,6 +14,8 @@ export interface TableSpec {
   denoms: number[];
   /** Beat the table by running the buy-in up to this (cents). */
   goal: number;
+  /** A learner's table: opens with the Explain panel already teaching. */
+  coach?: boolean;
 }
 
 export const TABLES: TableSpec[] = [
@@ -26,6 +28,7 @@ export const TABLES: TableSpec[] = [
     table_max: 50_000, // $500
     denoms: [100, 500, 2500, 10000, 50000], // $1 ... $500
     goal: 500_000, // $5,000 — 10x the buy-in
+    coach: true, // the learner's table: Explain mode opens on
   },
   {
     tier: "mid",

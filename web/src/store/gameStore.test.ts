@@ -174,6 +174,19 @@ test("explain mode is off by default and toggles", () => {
   expect(store.getState().explainOn).toBe(false);
 });
 
+test("a coaching table starts with explain mode already on", () => {
+  const store = createGameStore(
+    fakeSession({ ok: true, snapshot: snapshotWith() }),
+    undefined,
+    null,
+    true,
+  );
+  expect(store.getState().explainOn).toBe(true);
+  // still a toggle — the learner can dismiss the coaching
+  store.getState().toggleExplain();
+  expect(store.getState().explainOn).toBe(false);
+});
+
 test("crossing the table goal during a settle triggers the celebration once", () => {
   const before = snapshotWith({ phase: "Dealing", bankroll: 990_000 });
   const after = snapshotWith({

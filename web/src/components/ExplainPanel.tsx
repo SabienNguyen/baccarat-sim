@@ -2,6 +2,7 @@ import type { RoundSnapshot } from "../engine/types";
 import { mainBetEdge, type EdgeInfo } from "../houseEdge";
 import { GlossaryTerm } from "./GlossaryTerm";
 import { glossaryEntry } from "../glossaryData";
+import { ThirdCardChart } from "./ThirdCardChart";
 import "./explain.css";
 
 /** Render an edge's basis, linking the word "commission" to the glossary so a
@@ -55,6 +56,8 @@ export function ExplainPanel({ snapshot }: { snapshot: RoundSnapshot }) {
           </ul>
         </>
       )}
+
+      <ThirdCardChart />
     </section>
   );
 }

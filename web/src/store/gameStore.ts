@@ -78,6 +78,7 @@ export function createGameStore(
   session: GameSession,
   denoms: number[] = CHIP_DENOMINATIONS,
   goal: number | null = null,
+  explainByDefault = false,
 ): StoreApi<GameState> {
   return createStore<GameState>((set, get) => {
     const apply = (result: CommandResult) => {
@@ -130,7 +131,7 @@ export function createGameStore(
       announcement: null,
       lastDelta: null,
       settleSeq: 0,
-      explainOn: false,
+      explainOn: explainByDefault,
       goal,
       goalReached: false,
       dismissGoal: () => set({ goalReached: false }),

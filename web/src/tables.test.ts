@@ -48,3 +48,9 @@ test("every table's goal is 10x the buy-in", () => {
     expect(t.goal).toBe(t.starting_bankroll * 10);
   }
 });
+
+test("only the low 'learn the ropes' table is a coaching table", () => {
+  expect(tableSpec("low").coach).toBe(true);
+  expect(tableSpec("mid").coach).toBeFalsy();
+  expect(tableSpec("high").coach).toBeFalsy();
+});

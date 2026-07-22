@@ -17,7 +17,12 @@ export function storeFor(tier: TableTier): StoreApi<GameState> {
     const spec = tableSpec(tier);
     // Single player runs the SAME table rules as multiplayer, one seat: you
     // squeeze the sides you bet, the house dealer turns the rest.
-    store = createGameStore(createTableSession(configFor(tier, saved)), spec.denoms, spec.goal);
+    store = createGameStore(
+      createTableSession(configFor(tier, saved)),
+      spec.denoms,
+      spec.goal,
+      !!spec.coach, // the learner's table opens with Explain mode teaching
+    );
 
     let lastSaved = store.getState().snapshot.bankroll;
     saveBankroll(tier, lastSaved);
