@@ -1,4 +1,4 @@
-import { commissionNote, sideBetNotes } from "./settleExplain";
+import { commissionNote, sideBetNotes, pushNote } from "./settleExplain";
 import type { BetPayout } from "./engine/types";
 
 const pay = (kind: BetPayout["bet"]["kind"], amount: number, net: number): BetPayout => ({
@@ -61,6 +61,24 @@ test("handles the Dragon Bonus variable payout by its actual multiplier", () => 
   const notes = sideBetNotes([pay({ Side: { DragonBonus: "Player" } }, 100, 900)]);
   expect(notes[0]).toMatch(/Dragon Bonus/i);
   expect(notes[0]).toContain("9:1");
+});
+
+test("explains a push when a main bet ties", () => {
+  const note = pushNote([pay({ Main: "Player" }, 5_000, 0)]);
+  expect(note).not.toBeNull();
+  expect(note).toMatch(/push|tie/i);
+  expect(note).toMatch(/stake|returned|back/i);
+});
+
+test("a Banker bet also pushes on a tie", () => {
+  expect(pushNote([pay({ Main: "Banker" }, 5_000, 0)])).not.toBeNull();
+});
+
+test("no push note when a main bet won or lost, or only side bets are down", () => {
+  expect(pushNote([pay({ Main: "Player" }, 5_000, 5_000)])).toBeNull(); // won
+  expect(pushNote([pay({ Main: "Banker" }, 5_000, -5_000)])).toBeNull(); // lost
+  expect(pushNote([pay({ Side: "PlayerPair" }, 100, 1_100)])).toBeNull(); // side only
+  expect(pushNote(null)).toBeNull();
 });
 
 test("skips losing and pushed side bets, and main bets", () => {

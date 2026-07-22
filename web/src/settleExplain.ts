@@ -9,6 +9,27 @@ function sideKey(kind: BetKind): string | null {
   return null;
 }
 
+/**
+ * A tie leaves Player and Banker bets pushing — stake returned, nothing won or
+ * lost. That's non-obvious to a novice ("I bet Player, the Player didn't lose,
+ * but I wasn't paid?"). Fires only when the player actually has a main bet that
+ * pushed: a Player/Banker payout nets exactly zero only on a tie.
+ */
+export function pushNote(payouts: BetPayout[] | null): string | null {
+  if (!payouts) return null;
+  const pushed = payouts.some((p) => {
+    const k = p.bet.kind;
+    return (
+      typeof k === "object" &&
+      "Main" in k &&
+      (k.Main === "Player" || k.Main === "Banker") &&
+      p.net === 0
+    );
+  });
+  if (!pushed) return null;
+  return "Tie — the hands finished level, so Player and Banker bets push: your stake comes back, nothing won or lost. (Tie and pair bets settle on their own.)";
+}
+
 /** What each currently-offered side bet means when it hits, `m` = the multiplier. */
 const SIDE_DESC: Record<string, (m: number) => string> = {
   PlayerPair: (m) => `Player Pair — the Player's first two cards matched, paid ${m}:1.`,

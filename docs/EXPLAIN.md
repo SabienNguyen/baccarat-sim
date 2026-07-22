@@ -33,6 +33,7 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
 - [x] Banker 3 vs a Player 8 (the "stand" exception) — the stand line reads "…draws unless the Player's third card is an 8 (it was 8)"
 - [x] Commission on a Banker win — the settled panel now shows the per-hand vig ("your $100 wins $95… 5% commission ($5)"), derived from the payouts
 - [x] Pairs / side-bet outcomes — the settled panel now names each winning side bet and what triggered it ("Player Pair — the Player's first two cards matched, paid 11:1")
+- [x] Tie / push — the settled panel explains that a tie makes Player/Banker bets push (stake returned, nothing won or lost)
 
 ## Iteration log
 
@@ -82,6 +83,19 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
   the UI currently offers; a generic "<key> — paid N:1" catches any future ones
   (see backlog F2 Tiger family). Tests: `settleExplain` (9 total), ExplainPanel
   side-bet (1). Web 306 ✓, tsc ✓. No engine change.
+
+- **2026-07-21 — iteration 5 (tie / push):** Completed the settled-panel money
+  story. Commission (iter 3) covered Banker wins and side notes (iter 4) covered
+  bonus wins, but a *tie* — one of the three outcomes — left Player/Banker bets
+  pushing with no on-panel explanation; "push" (stake back, no win/loss) reliably
+  confuses beginners. Added `pushNote(payouts)`: fires only when the player holds
+  a main bet that netted exactly zero (a Player/Banker bet nets zero only on a
+  tie). Rendered beside the commission note. Tests: `settleExplain` (12 total),
+  ExplainPanel push (1). Web 310 ✓, tsc ✓. No engine change.
+  **The settled-panel clarity checklist is now fully worked through** — expect
+  upcoming ticks to *hold* rather than churn. Remaining known work is scope, not
+  clarity: surfacing this panel in multiplayer (feature) and a server redeploy
+  for the iter-2 engine fix (deploy).
 
 ## Guardrails for the loop
 

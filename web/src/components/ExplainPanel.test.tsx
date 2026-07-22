@@ -69,6 +69,18 @@ test("connects a winning side bet to what happened", () => {
   expect(within(panel).getByText(/Player Pair.*11:1/i)).toBeInTheDocument();
 });
 
+test("explains a push when a main bet ties", () => {
+  render(
+    <ExplainPanel
+      snapshot={snap({
+        payouts: [{ bet: { kind: { Main: "Player" }, amount: 5_000 }, net: 0 }],
+      })}
+    />,
+  );
+  const panel = screen.getByLabelText("Explain");
+  expect(within(panel).getByText(/push/i)).toBeInTheDocument();
+});
+
 test("no commission note on a Player win", () => {
   render(
     <ExplainPanel
