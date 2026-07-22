@@ -209,6 +209,41 @@
   }
 }
 
+/* --- the dealer gathers the settled cards and sweeps them to the shoe --- */
+.card-stage.sweeping .card-dealt {
+  animation: muck-out 400ms cubic-bezier(0.4, 0.02, 0.7, 0.45) forwards;
+}
+.card-stage.sweeping .hand-total-badge {
+  animation: muck-fade 260ms ease-in forwards;
+}
+@keyframes muck-out {
+  0% {
+    transform: translate(0, 0) rotate(0) scale(1);
+    opacity: 1;
+  }
+  24% {
+    /* a small gather — the dealer collects before the sweep */
+    transform: translate(-5px, 7px) rotate(-2deg) scale(0.97);
+    opacity: 1;
+  }
+  100% {
+    /* swept back toward the shoe (mirrors deal-in's origin), fading out */
+    transform: translate(148px, -92px) rotate(12deg) scale(0.6);
+    opacity: 0;
+  }
+}
+@keyframes muck-fade {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-stage.sweeping .card-dealt,
+  .card-stage.sweeping .hand-total-badge {
+    animation: muck-fade 260ms ease-in forwards;
+  }
+}
+
 /* --- hands on the felt stage --- */
 .card-stage {
   display: flex;

@@ -32,6 +32,9 @@ const AUTO_SETTLE_MS = 600;
 /** How long the settled cards + win/loss popup linger before the next hand.
  *  Long enough to read both hands and the result — they stay on the felt now. */
 const AUTO_ADVANCE_MS = 4600;
+/** The dealer's sweep: the cards muck away over this window at the end of the
+ *  linger, so the felt clears with a gesture instead of the cards blinking out. */
+const SWEEP_MS = 400;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -76,6 +79,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [betView, setBetView] = useState<BetView>("main");
   // the settle the player closed the bonus notice on, so it stays up otherwise
   const [dismissedNudgeSeq, setDismissedNudgeSeq] = useState(-1);
+  // true during the muck: the settled cards animate off before the felt clears
+  const [sweeping, setSweeping] = useState(false);
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
   const lastFlip = useStore(active, (s) => s.lastFlip);
@@ -199,8 +204,16 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
     if (snapshot.phase !== "Settled" || busted || goalReached) return;
     // Every settled hand auto-advances; the bonus notice just rides along on the
     // settled window and clears with it (the player can also close it early).
-    const t = setTimeout(newHand, AUTO_ADVANCE_MS);
-    return () => clearTimeout(t);
+    // In the last stretch the cards muck away, then the felt clears.
+    const sweep = setTimeout(() => setSweeping(true), AUTO_ADVANCE_MS - SWEEP_MS);
+    const clear = setTimeout(() => {
+      newHand();
+      setSweeping(false);
+    }, AUTO_ADVANCE_MS);
+    return () => {
+      clearTimeout(sweep);
+      clearTimeout(clear);
+    };
   }, [seats, snapshot.phase, busted, goalReached, newHand]);
 
   /** Tap the nudge: open the next hand and drop the armed chip on that bonus. */
@@ -229,7 +242,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           lastFlip={lastFlip}
           announcement={announcement}
         />
-        <div className="card-stage">
+        <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
           <Hand
             side="Player"
             hand={snapshot.player}

@@ -258,6 +258,25 @@ test("single-player: a winning-bonus hand auto-advances after the delay, clearin
   }
 });
 
+test("single-player: the table sweeps the cards out before clearing to the next hand", () => {
+  vi.useFakeTimers();
+  try {
+    const store = createGameStore(fakeSession(pairWinHand()));
+    const { container } = render(<App store={store} />);
+    act(() => vi.advanceTimersByTime(4100)); // still holding — no sweep yet
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+    expect(store.getState().snapshot.phase).toBe("Settled");
+    act(() => vi.advanceTimersByTime(200)); // 4300: the sweep-out is playing
+    expect(container.querySelector(".card-stage.sweeping")).not.toBeNull();
+    expect(store.getState().snapshot.phase).toBe("Settled");
+    act(() => vi.advanceTimersByTime(300)); // 4600: cleared to the next hand
+    expect(store.getState().snapshot.phase).toBe("Betting");
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("single-player: closing the bonus nudge hides it without advancing the hand", async () => {
   const store = createGameStore(fakeSession(pairWinHand()));
   render(<App store={store} />);
