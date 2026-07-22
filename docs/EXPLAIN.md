@@ -97,6 +97,15 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
   clarity: surfacing this panel in multiplayer (feature) and a server redeploy
   for the iter-2 engine fix (deploy).
 
+- **2026-07-21 — iteration 6: HELD, no high-value gap.** The clarity checklist
+  is complete (8/8). Reviewed the remaining candidates — natural-win winner
+  (self-evident from the shown totals), losing hands (obvious from outcome), EZ
+  Baccarat push (ruleset inactive) — none clear the bar. Remaining work is scope,
+  not clarity: surface the panel in multiplayer (feature) and redeploy the server
+  (deploy). **Loop has reached steady state on Explain clarity** — further ticks
+  will hold until the surface changes or a new scenario appears. Recommend the
+  user pause or repoint the loop rather than accrue empty ticks.
+
 ## Guardrails for the loop
 
 - Test-first, always. Never commit a red build (`cargo test`, `vitest`, `tsc`).
