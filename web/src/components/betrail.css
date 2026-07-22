@@ -9,7 +9,7 @@
   border: 5px solid #6b4423; /* wood rail */
   border-radius: 18px;
   box-shadow:
-    inset 0 0 0 3px rgba(244, 196, 48, 0.55),
+    inset 0 0 0 3px rgba(240, 213, 138, 0.55),
     inset 0 0 36px rgba(0, 0, 0, 0.4),
     5px 5px 0 var(--shadow);
   padding: 18px;
@@ -95,7 +95,7 @@
 .change-note {
   font-family: var(--font-text);
   font-size: 16px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 
 /* --- hint + actions row --- */
@@ -208,7 +208,7 @@
 .spot--tie {
   min-height: 112px;
   border-radius: 12px;
-  background: radial-gradient(circle at 50% 30%, rgba(244, 196, 48, 0.4), rgba(0, 0, 0, 0.15));
+  background: radial-gradient(circle at 50% 30%, rgba(240, 213, 138, 0.4), rgba(0, 0, 0, 0.15));
   border-color: var(--gold);
 }
 /* Side bets: small circles. */
@@ -216,7 +216,7 @@
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   padding: 4px;
-  background: radial-gradient(circle at 50% 35%, rgba(244, 196, 48, 0.3), rgba(0, 0, 0, 0.4));
+  background: radial-gradient(circle at 50% 35%, rgba(240, 213, 138, 0.3), rgba(0, 0, 0, 0.4));
   border: 3px solid var(--gold);
 }
 .spot--side .spot-name {
@@ -342,7 +342,7 @@
 .seg-half.seg-on {
   color: #fff7e6;
   background: #1f7c49;
-  box-shadow: inset 0 0 0 2px rgba(244, 196, 48, 0.5);
+  box-shadow: inset 0 0 0 2px rgba(240, 213, 138, 0.5);
 }
 .seg-badge {
   display: inline-block;

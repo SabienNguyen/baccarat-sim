@@ -23,13 +23,13 @@
   border-bottom: 1px solid var(--panel-bevel-lo);
 }
 .explain-edges .basis {
-  color: #b9aee0;
+  color: var(--accent-2);
   font-size: 15px;
 }
 .explain-hint {
   margin: 0;
   font-size: 16px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 /* This hand's money math — why a Banker win pays less than even. */
 .explain-money {

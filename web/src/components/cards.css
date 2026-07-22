@@ -14,7 +14,7 @@
 }
 .card-back {
   background:
-    repeating-linear-gradient(45deg, #3a2a55, #3a2a55 6px, #4a3a6a 6px, #4a3a6a 12px);
+    repeating-linear-gradient(45deg, #3a1622, #3a1622 6px, #52222f 6px, #52222f 12px);
   box-shadow:
     inset 2px 2px 0 var(--panel-bevel-hi),
     inset -2px -2px 0 var(--panel-bevel-lo),
@@ -239,7 +239,7 @@
   margin: 0;
   padding: 0;
 }
-/* Balatro-style dramatic total: slams in big when it lands */
+/* Dramatic total: slams in big when it lands */
 .hand-total-badge {
   margin: 4px 0 0;
   display: flex;
@@ -252,7 +252,7 @@
   font-family: var(--font-display);
   font-size: 9px;
   letter-spacing: 2px;
-  color: #b9aee0;
+  color: var(--accent-2);
   text-shadow: 1px 1px 0 var(--ink);
 }
 .hand-total-num {

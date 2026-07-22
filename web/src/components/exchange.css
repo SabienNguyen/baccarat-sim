@@ -82,6 +82,6 @@
   color: var(--gold);
 }
 .exchange-note {
-  color: #b9aee0;
+  color: var(--accent-2);
   font-size: 15px;
 }

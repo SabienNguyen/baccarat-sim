@@ -18,7 +18,7 @@
   text-align: center;
 }
 
-/* Balatro-style inset stat boxes */
+/* Inset stat boxes */
 .hud-box {
   display: flex;
   flex-direction: column;
@@ -34,7 +34,7 @@
   font-family: var(--font-display);
   font-size: 8px;
   letter-spacing: 1px;
-  color: #b9aee0;
+  color: var(--accent-2);
   text-transform: uppercase;
 }
 .hud-box-value {

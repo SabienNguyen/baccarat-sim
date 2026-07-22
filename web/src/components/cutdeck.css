@@ -39,7 +39,7 @@
   height: 84px;
   padding: 0;
   border-radius: 2px;
-  background: repeating-linear-gradient(45deg, #3a2a55, #3a2a55 3px, #4a3a6a 3px, #4a3a6a 6px);
+  background: repeating-linear-gradient(45deg, #3a1622, #3a1622 3px, #52222f 3px, #52222f 6px);
   border: 1px solid var(--ink);
   cursor: pointer;
   position: relative;
@@ -49,7 +49,7 @@
   outline-offset: 1px;
 }
 .deck-card:hover {
-  outline: 2px solid rgba(244, 196, 48, 0.6);
+  outline: 2px solid rgba(240, 213, 138, 0.6);
 }
 .deck-card.is-cut {
   background: var(--chip-red);

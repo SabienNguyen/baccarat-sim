@@ -46,7 +46,7 @@
   margin: 0;
   font-family: var(--font-text);
   font-size: 16px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 @media (max-width: 760px) {
   .mp-lobby {
@@ -75,7 +75,7 @@
 .mp-substatus {
   font-family: var(--font-text);
   font-size: 18px;
-  color: #b9aee0;
+  color: var(--accent-2);
   margin: 0;
 }
 .mp-notice {
@@ -91,7 +91,7 @@
   gap: 6px;
   font-family: var(--font-display);
   font-size: 9px;
-  color: #b9aee0;
+  color: var(--accent-2);
   width: 100%;
 }
 .mp-input {
@@ -155,7 +155,7 @@
 .mp-tier span {
   font-family: var(--font-text);
   font-size: 14px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 .mp-tier.is-on {
   background: #1d7a3a;
@@ -217,13 +217,13 @@
   flex: 1;
   font-family: var(--font-text);
   font-size: 16px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 .mp-empty {
   margin: 0;
   font-family: var(--font-text);
   font-size: 17px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 .mp-refresh,
 .mp-back {
@@ -273,7 +273,7 @@
   font-family: var(--font-display);
   font-size: 7px;
   letter-spacing: 1px;
-  color: #b9aee0;
+  color: var(--accent-2);
   text-transform: uppercase;
 }
 .mp-roomtag strong {
@@ -312,7 +312,7 @@
 .seat-chip--holding {
   border-color: var(--gold);
   box-shadow:
-    0 0 0 2px rgba(244, 196, 48, 0.35),
+    0 0 0 2px rgba(240, 213, 138, 0.35),
     3px 3px 0 var(--shadow);
 }
 .seat-cards {
@@ -349,7 +349,7 @@
 .seat-status {
   font-family: var(--font-display);
   font-size: 9px;
-  color: #b9aee0;
+  color: var(--accent-2);
   letter-spacing: 1px;
 }
 .seat-status--wait {
@@ -429,7 +429,7 @@
 .mp-pagecount {
   font-family: var(--font-display);
   font-size: 9px;
-  color: #b9aee0;
+  color: var(--accent-2);
 }
 .mp-refresh:disabled {
   filter: brightness(0.6);

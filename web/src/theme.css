@@ -7,17 +7,19 @@
   /* felt */
   --felt-deep: #0b3d2e;
   --felt-light: #145c43;
-  /* chips / accents */
-  --gold: #f4c430;
+  /* chips / accents — ivory-gold, the salon's metal */
+  --gold: #f0d58a;
   --chip-red: #c0202a;
   --chip-blue: #1f6feb;
-  /* panels */
-  --panel-face: #2a2438;
-  --panel-bevel-hi: #4a4060;
-  --panel-bevel-lo: #140f1f;
+  /* panels — oxblood salon (was Balatro violet) */
+  --panel-face: #3a1720;
+  --panel-bevel-hi: #6a2b38;
+  --panel-bevel-lo: #1a0a0e;
   /* structure */
-  --ink: #15110f;
-  --shadow: rgba(0, 0, 0, 0.45);
+  --ink: #180a0d;
+  --shadow: rgba(0, 0, 0, 0.5);
+  /* soft secondary text/detail (was Balatro lavender #b9aee0) */
+  --accent-2: #d8c39a;
   /* type — Silkscreen (chunky arcade pixel, unambiguous digits) for
      headings/labels, VT323 for body. NB: Press Start 2P was dropped (its "8"
      reads as "&") and Pixelify Sans too (its "5" reads as "S"). */
@@ -32,7 +34,7 @@
 body {
   margin: 0;
   font-family: var(--font-text);
-  color: #f3eede;
+  color: #f4ecd8;
   /* layered radial greens + a swirl that slowly drifts */
   background-color: var(--felt-deep);
   background-image:
