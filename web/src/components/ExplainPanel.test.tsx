@@ -57,6 +57,18 @@ test("explains the 5% commission on a settled Banker win", () => {
   expect(within(panel).getByText(/\$95\.00/)).toBeInTheDocument();
 });
 
+test("connects a winning side bet to what happened", () => {
+  render(
+    <ExplainPanel
+      snapshot={snap({
+        payouts: [{ bet: { kind: { Side: "PlayerPair" }, amount: 500 }, net: 5_500 }],
+      })}
+    />,
+  );
+  const panel = screen.getByLabelText("Explain");
+  expect(within(panel).getByText(/Player Pair.*11:1/i)).toBeInTheDocument();
+});
+
 test("no commission note on a Player win", () => {
   render(
     <ExplainPanel

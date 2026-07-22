@@ -1,4 +1,4 @@
-import { commissionNote } from "./settleExplain";
+import { commissionNote, sideBetNotes } from "./settleExplain";
 import type { BetPayout } from "./engine/types";
 
 const pay = (kind: BetPayout["bet"]["kind"], amount: number, net: number): BetPayout => ({
@@ -38,4 +38,37 @@ test("aggregates multiple winning Banker stakes", () => {
 test("no note without payouts", () => {
   expect(commissionNote(null)).toBeNull();
   expect(commissionNote([])).toBeNull();
+});
+
+test("connects a winning Player Pair to what happened on the felt", () => {
+  const notes = sideBetNotes([pay({ Side: "PlayerPair" }, 100, 1_100)]);
+  expect(notes).toHaveLength(1);
+  expect(notes[0]).toMatch(/Player Pair/i);
+  expect(notes[0]).toMatch(/matched|pair/i);
+  expect(notes[0]).toContain("11:1");
+});
+
+test("explains Dragon 7 and Panda 8 wins", () => {
+  expect(sideBetNotes([pay({ Side: "Dragon7" }, 100, 4_000)])[0]).toMatch(
+    /Dragon 7.*three-card 7.*40:1/i,
+  );
+  expect(sideBetNotes([pay({ Side: "Panda8" }, 100, 2_500)])[0]).toMatch(
+    /Panda 8.*three-card 8.*25:1/i,
+  );
+});
+
+test("handles the Dragon Bonus variable payout by its actual multiplier", () => {
+  const notes = sideBetNotes([pay({ Side: { DragonBonus: "Player" } }, 100, 900)]);
+  expect(notes[0]).toMatch(/Dragon Bonus/i);
+  expect(notes[0]).toContain("9:1");
+});
+
+test("skips losing and pushed side bets, and main bets", () => {
+  expect(
+    sideBetNotes([
+      pay({ Side: "BankerPair" }, 100, -100), // lost
+      pay({ Side: "Panda8" }, 100, 0), // push
+      pay({ Main: "Banker" }, 10_000, 9_500), // main bet, not a side note
+    ]),
+  ).toEqual([]);
 });

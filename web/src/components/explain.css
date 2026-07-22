@@ -40,3 +40,17 @@
   border-left: 3px solid var(--gold);
   padding-left: 8px;
 }
+/* Winning side bets, tied back to what happened on the felt. */
+.explain-bonuses {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1.15;
+}
+.explain-bonuses li {
+  color: var(--gold);
+  border-left: 3px solid var(--gold);
+  padding-left: 8px;
+  margin-top: 4px;
+}

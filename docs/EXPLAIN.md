@@ -32,7 +32,7 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
 - [x] Both draw — the banker line names the Player's actual third card ("…when the Player's third card is 2–7 (it was 6)"), so the causality/order reads through
 - [x] Banker 3 vs a Player 8 (the "stand" exception) — the stand line reads "…draws unless the Player's third card is an 8 (it was 8)"
 - [x] Commission on a Banker win — the settled panel now shows the per-hand vig ("your $100 wins $95… 5% commission ($5)"), derived from the payouts
-- [ ] Pairs / side-bet outcomes — does Explain connect the payout to what happened on the felt? **← top remaining gap**
+- [x] Pairs / side-bet outcomes — the settled panel now names each winning side bet and what triggered it ("Player Pair — the Player's first two cards matched, paid 11:1")
 
 ## Iteration log
 
@@ -70,6 +70,18 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
   shared by both clients, and this lands on the now-persistent settled panel
   (iteration 2). Tests: `settleExplain` (5), ExplainPanel commission (2).
   Web 301 ✓, tsc ✓. No engine change → no wasm rebuild.
+
+- **2026-07-21 — iteration 4 (side-bet payout explanations):** The Explain trace
+  is tableau-only, so pairs and side bets never appeared on the persistent panel —
+  a Player Pair or Dragon 7 just paid out with no on-surface "why". Added
+  `sideBetNotes(payouts)` (`settleExplain.ts`): one note per winning side bet,
+  tying the payout to what happened ("Player Pair — the Player's first two cards
+  matched, paid 11:1"; Dragon 7 / Panda 8 / Dragon Bonus / Tiger). The multiplier
+  is read from the payout (net = mult × stake), so it's correct even for the
+  variable-payout bets. Rendered under the commission note. Covers the 6 side bets
+  the UI currently offers; a generic "<key> — paid N:1" catches any future ones
+  (see backlog F2 Tiger family). Tests: `settleExplain` (9 total), ExplainPanel
+  side-bet (1). Web 306 ✓, tsc ✓. No engine change.
 
 ## Guardrails for the loop
 
