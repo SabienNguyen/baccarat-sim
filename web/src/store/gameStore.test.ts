@@ -174,6 +174,18 @@ test("explain mode is off by default and toggles", () => {
   expect(store.getState().explainOn).toBe(false);
 });
 
+test("starting a new hand clears the prior round's explain trace", () => {
+  // After settle the engine view carries the round's trace (so it shows on the
+  // settled felt); sweeping to a fresh hand must not leak it onto empty felt.
+  const settled = snapshotWith({
+    explain: ["Player has 5 — draws a third card (0): players draw on 0–5."],
+  });
+  const store = createGameStore(fakeSession({ ok: true, snapshot: settled }, settled));
+  store.getState().newHand();
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  expect(store.getState().snapshot.explain).toEqual([]);
+});
+
 test("a coaching table starts with explain mode already on", () => {
   const store = createGameStore(
     fakeSession({ ok: true, snapshot: snapshotWith() }),

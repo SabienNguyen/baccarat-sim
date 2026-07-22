@@ -196,6 +196,7 @@ export function createGameStore(
             payouts: null,
             outcome: null,
             events: [],
+            explain: [],
             player: { cards: [], total: null },
             banker: { cards: [], total: null },
           },

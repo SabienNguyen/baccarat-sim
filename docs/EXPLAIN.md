@@ -28,11 +28,11 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
 - [x] Player draws, Banker stands (asymmetric counts) — trace names the tableau condition + the player's actual third card (N9)
 - [x] Player stands, Banker draws — trace states the player-stood 0–5/6–7 split
 - [x] Natural 8/9 ends the hand — trace says why there are no draws
-- [ ] Both draw — is it clear the Banker's move was decided *after* seeing the Player's third card?
-- [ ] Banker 3 vs a Player 8 (the one "stand" exception on 3) — is the exception obvious?
-- [ ] Pairs / side-bet outcomes — does Explain connect the payout to what happened?
-- [ ] Commission on a Banker win — is the 5% vig shown in the money math?
-- [ ] Multiplayer parity — does a joiner see the same explanation single-player does?
+- [x] **Trace survives at settle** — the "why this round" narrative now stays on the settled felt (it was blanked the instant a coup resolved, the exact moment the learner studies it). Both clients — the fix is in the shared `view_for`.
+- [x] Both draw — the banker line names the Player's actual third card ("…when the Player's third card is 2–7 (it was 6)"), so the causality/order reads through
+- [x] Banker 3 vs a Player 8 (the "stand" exception) — the stand line reads "…draws unless the Player's third card is an 8 (it was 8)"
+- [ ] Commission on a Banker win — is the 5% vig shown in the money math (why a $100 Banker win pays $95)? **← top remaining gap**
+- [ ] Pairs / side-bet outcomes — does Explain connect the payout to what happened on the felt?
 
 ## Iteration log
 
@@ -44,6 +44,22 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
   phrasing. Tests: `rules::banker_reason_explains_each_branch`,
   `round::trace_explains_why_the_counts_differ`, plus updated narrate fixtures.
   Engine 145 ✓, web 293 ✓, tsc ✓.
+
+- **2026-07-21 — iteration 2 (settle-persistence bug):** Analysis found the
+  trace *disappeared* the instant a coup settled — `table.rs::view_for`'s Betting
+  arm (which produces the Settled display) hard-coded `explain: Vec::new()`,
+  while only the transient Dealing arm carried it. So every N9/N3 improvement was
+  invisible at the resting state where a learner actually studies the finished
+  3-vs-2 hand, and the panel showed a wrong "Place a bet and deal…" hint over a
+  resolved coup. Fixed engine-first: the Betting arm now reuses `last_round` +
+  `payouts.is_some()` (the same key the face-up cards use) to carry the trace
+  through the settled window. Cleared `explain` in both `newHand` sweeps
+  (`gameStore.ts`, `remoteStore.ts`) so the fresh felt shows the neutral hint,
+  not a stale trace. Tests: `table::settled_view_keeps_the_explain_trace`,
+  `gameStore` "starting a new hand clears the prior round's explain trace".
+  Engine 146 ✓, web 294 ✓, tsc ✓, wasm rebuilt. NB: the multiplayer **server**
+  binary also needs a rebuild+redeploy for remote play to get this (deferred to
+  the user's next push — loop commits locally only).
 
 ## Guardrails for the loop
 

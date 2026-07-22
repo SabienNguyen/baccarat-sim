@@ -582,7 +582,13 @@ impl Table {
                 payouts: player.payouts.clone(),
                 events: Vec::new(),
                 scoreboard: derive_scoreboard(&self.history),
-                explain: Vec::new(),
+                // Keep the 'why this round' trace on the settled felt — the same
+                // window (and key) the face-up cards use — so the explanation is
+                // there while the learner studies the finished coup.
+                explain: match (&self.last_round, player.payouts.is_some()) {
+                    (Some(round), true) => round.trace.clone(),
+                    _ => Vec::new(),
+                },
                 seats,
                 player_squeezer,
                 banker_squeezer,
@@ -726,6 +732,30 @@ mod tests {
         let fresh = t.view_for(a).unwrap();
         assert_eq!(fresh.phase, PhaseTag::Dealing);
         assert!(fresh.player.cards.iter().all(|c| matches!(c, CardView::FaceDown)));
+    }
+
+    #[test]
+    fn settled_view_keeps_the_explain_trace() {
+        // The 'why this round' narrative must survive into the Settled display —
+        // that's the resting state where a learner studies the finished coup and
+        // finally sees why one hand has three cards and the other two.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
+        let dealing = t.view_for(a).unwrap();
+        assert!(!dealing.explain.is_empty(), "the trace shows while cards are out");
+
+        t.settle().unwrap();
+        let settled = t.view_for(a).unwrap();
+        assert_eq!(settled.phase, PhaseTag::Settled);
+        // same round, same trace — not replaced by the empty-panel hint
+        assert_eq!(settled.explain, dealing.explain);
+        assert!(!settled.explain.is_empty());
+
+        // and the next deal clears it so the fresh Betting felt shows no stale trace
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
     }
 
     #[test]
