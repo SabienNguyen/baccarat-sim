@@ -3,6 +3,7 @@ import { mainBetEdge, type EdgeInfo } from "../houseEdge";
 import { GlossaryTerm } from "./GlossaryTerm";
 import { glossaryEntry } from "../glossaryData";
 import { ThirdCardChart } from "./ThirdCardChart";
+import { commissionNote } from "../settleExplain";
 import "./explain.css";
 
 /** Render an edge's basis, linking the word "commission" to the glossary so a
@@ -31,6 +32,7 @@ function uniqueEdges(snapshot: RoundSnapshot): EdgeInfo[] {
 
 export function ExplainPanel({ snapshot }: { snapshot: RoundSnapshot }) {
   const edges = uniqueEdges(snapshot);
+  const commission = commissionNote(snapshot.payouts);
   return (
     <section aria-label="Explain" className="explain-panel panel">
       <h4>Why this round</h4>
@@ -43,6 +45,8 @@ export function ExplainPanel({ snapshot }: { snapshot: RoundSnapshot }) {
       ) : (
         <p className="explain-hint">Place a bet and deal to see the rules in action.</p>
       )}
+
+      {commission && <p className="explain-money">{commission}</p>}
 
       {edges.length > 0 && (
         <>

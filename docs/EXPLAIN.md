@@ -31,8 +31,8 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
 - [x] **Trace survives at settle** — the "why this round" narrative now stays on the settled felt (it was blanked the instant a coup resolved, the exact moment the learner studies it). Both clients — the fix is in the shared `view_for`.
 - [x] Both draw — the banker line names the Player's actual third card ("…when the Player's third card is 2–7 (it was 6)"), so the causality/order reads through
 - [x] Banker 3 vs a Player 8 (the "stand" exception) — the stand line reads "…draws unless the Player's third card is an 8 (it was 8)"
-- [ ] Commission on a Banker win — is the 5% vig shown in the money math (why a $100 Banker win pays $95)? **← top remaining gap**
-- [ ] Pairs / side-bet outcomes — does Explain connect the payout to what happened on the felt?
+- [x] Commission on a Banker win — the settled panel now shows the per-hand vig ("your $100 wins $95… 5% commission ($5)"), derived from the payouts
+- [ ] Pairs / side-bet outcomes — does Explain connect the payout to what happened on the felt? **← top remaining gap**
 
 ## Iteration log
 
@@ -60,6 +60,16 @@ Default: Explain opens automatically at the Low "Learn the ropes" table (the
   Engine 146 ✓, web 294 ✓, tsc ✓, wasm rebuilt. NB: the multiplayer **server**
   binary also needs a rebuild+redeploy for remote play to get this (deferred to
   the user's next push — loop commits locally only).
+
+- **2026-07-21 — iteration 3 (commission money-math):** The #1 remaining gap:
+  a Banker win pays 0.95:1 and nothing explained why a $100 win paid $95 (the
+  win popup showed only the net; the house-edge line stated it abstractly). Added
+  `commissionNote(payouts)` (`web/src/settleExplain.ts`) — a pure helper that
+  sums the winning Banker main stakes and spells out the 5% vig — rendered in the
+  Explain panel under the trace. Web-layer by design: the payout data is already
+  shared by both clients, and this lands on the now-persistent settled panel
+  (iteration 2). Tests: `settleExplain` (5), ExplainPanel commission (2).
+  Web 301 ✓, tsc ✓. No engine change → no wasm rebuild.
 
 ## Guardrails for the loop
 

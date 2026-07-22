@@ -31,3 +31,12 @@
   font-size: 16px;
   color: #b9aee0;
 }
+/* This hand's money math — why a Banker win pays less than even. */
+.explain-money {
+  margin: 6px 0 0;
+  font-size: 16px;
+  line-height: 1.15;
+  color: var(--gold);
+  border-left: 3px solid var(--gold);
+  padding-left: 8px;
+}

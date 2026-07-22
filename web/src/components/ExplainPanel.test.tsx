@@ -44,6 +44,30 @@ test("always carries the third-card tableau reference", () => {
   expect(within(panel).getByText(/Player draws on 0–5, stands on 6–7/i)).toBeInTheDocument();
 });
 
+test("explains the 5% commission on a settled Banker win", () => {
+  render(
+    <ExplainPanel
+      snapshot={snap({
+        payouts: [{ bet: { kind: { Main: "Banker" }, amount: 10_000 }, net: 9_500 }],
+      })}
+    />,
+  );
+  const panel = screen.getByLabelText("Explain");
+  expect(within(panel).getByText(/5% commission/i)).toBeInTheDocument();
+  expect(within(panel).getByText(/\$95\.00/)).toBeInTheDocument();
+});
+
+test("no commission note on a Player win", () => {
+  render(
+    <ExplainPanel
+      snapshot={snap({
+        payouts: [{ bet: { kind: { Main: "Player" }, amount: 10_000 }, net: 10_000 }],
+      })}
+    />,
+  );
+  expect(screen.queryByText(/commission/i)).toBeNull();
+});
+
 test("shows house edge only for placed main bets, de-duplicated", () => {
   render(
     <ExplainPanel
