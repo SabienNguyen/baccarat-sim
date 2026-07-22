@@ -31,9 +31,7 @@ import { playSfx } from "./audio/sfx";
 const AUTO_SETTLE_MS = 600;
 /** How long the settled cards + win/loss popup linger before the next hand.
  *  Long enough to read both hands and the result — they stay on the felt now. */
-const AUTO_ADVANCE_MS = 2600;
-/** A longer window when a bonus nudge is showing, so it can be read and tapped. */
-const NUDGE_ADVANCE_MS = 3600;
+const AUTO_ADVANCE_MS = 4600;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -76,6 +74,8 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
+  // the settle the player closed the bonus notice on, so it stays up otherwise
+  const [dismissedNudgeSeq, setDismissedNudgeSeq] = useState(-1);
   const snapshot = useStore(active, (s) => s.snapshot);
   const lastError = useStore(active, (s) => s.lastError);
   const lastFlip = useStore(active, (s) => s.lastFlip);
@@ -191,13 +191,17 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
       ? bonusWouldWin(snapshot, snapshot.bets.map((b) => b.kind))
       : null;
   const hasNudge = nudge !== null;
+  // Keep the bonus notice up until the player closes it or bets — don't sweep it.
+  const showNudge = hasNudge && dismissedNudgeSeq !== settleSeq;
 
   useEffect(() => {
     if (seats !== null) return;
     if (snapshot.phase !== "Settled" || busted || goalReached) return;
-    const t = setTimeout(newHand, hasNudge ? NUDGE_ADVANCE_MS : AUTO_ADVANCE_MS);
+    // Every settled hand auto-advances; the bonus notice just rides along on the
+    // settled window and clears with it (the player can also close it early).
+    const t = setTimeout(newHand, AUTO_ADVANCE_MS);
     return () => clearTimeout(t);
-  }, [seats, snapshot.phase, busted, goalReached, newHand, hasNudge]);
+  }, [seats, snapshot.phase, busted, goalReached, newHand]);
 
   /** Tap the nudge: open the next hand and drop the armed chip on that bonus. */
   function betNudge() {
@@ -260,12 +264,12 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
         />
-        {nudge !== null && (
+        {showNudge && nudge !== null && (
           <BonusNudge
             hit={nudge}
             betLabel={`bet ${chipFace(selectedChip)} next hand`}
             onBet={betNudge}
-            onDismiss={newHand}
+            onDismiss={() => setDismissedNudgeSeq(settleSeq)}
           />
         )}
         <BetRail

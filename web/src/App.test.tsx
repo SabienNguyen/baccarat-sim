@@ -25,6 +25,31 @@ function fakeSession(initial: RoundSnapshot, spies: Partial<GameSession> = {}): 
   };
 }
 
+/** A settled hand where the Player made an unbet pair — fires the bonus nudge. */
+function pairWinHand(): RoundSnapshot {
+  return {
+    ...dealingSnapshot(),
+    phase: "Settled",
+    player: {
+      cards: [
+        { FaceUp: { rank: "Nine", suit: "Hearts" } },
+        { FaceUp: { rank: "Nine", suit: "Spades" } },
+      ],
+      total: 8,
+    },
+    banker: {
+      cards: [
+        { FaceUp: { rank: "Two", suit: "Clubs" } },
+        { FaceUp: { rank: "Three", suit: "Hearts" } },
+      ],
+      total: 5,
+    },
+    outcome: "PlayerWin",
+    payouts: [],
+    bets: [],
+  };
+}
+
 test("mounts the composed table with its core regions", () => {
   const store = createGameStore(fakeSession(bettingSnapshot()));
   render(<App store={store} />);
@@ -182,7 +207,7 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
     expect(store.getState().snapshot.phase).toBe("Dealing");
     act(() => vi.advanceTimersByTime(600)); // AUTO_SETTLE_MS
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(2600)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
     expect(store.getState().snapshot.phase).toBe("Betting");
   } finally {
     vi.useRealTimers();
@@ -217,6 +242,30 @@ test("single-player: an unbet bonus that hit shows the nudge, and one tap bets i
   expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /bet .* next hand/ }));
   expect(placeBet).toHaveBeenCalledWith({ Side: "PlayerPair" }, expect.any(Number));
+});
+
+test("single-player: a winning-bonus hand auto-advances after the delay, clearing the banner", () => {
+  vi.useFakeTimers();
+  try {
+    const store = createGameStore(fakeSession(pairWinHand()));
+    render(<App store={store} />);
+    expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
+    expect(store.getState().snapshot.phase).toBe("Betting");
+    expect(screen.queryByText(/PLAYER PAIR JUST HIT/)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("single-player: closing the bonus nudge hides it without advancing the hand", async () => {
+  const store = createGameStore(fakeSession(pairWinHand()));
+  render(<App store={store} />);
+  expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByText(/PLAYER PAIR JUST HIT/)).toBeNull();
+  // the hand stays settled — closing dismisses the notice, it doesn't move on
+  expect(store.getState().snapshot.phase).toBe("Settled");
 });
 
 test("busting offers a re-buy and a way out", async () => {
