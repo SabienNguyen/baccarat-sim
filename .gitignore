@@ -7,3 +7,7 @@ engine-wasm/pkg/
 smoke/node_modules/
 smoke/dist/
 web/dist/
+# Generated at build time by web/scripts/build-content.mjs (SEO content pages)
+web/public/how-to-play/
+web/public/glossary/
+web/public/baccarat-roads/
