@@ -48,3 +48,18 @@ test("floors fractional cents on save", () => {
   saveBankroll("mid", 1234.9, s);
   expect(loadBankroll("mid", s)).toBe(1234);
 });
+
+test("still reads a pre-versioning bare-number save", () => {
+  const s = fakeStorage();
+  s.setItem("baccarat.bankroll.mid", "88800"); // legacy format
+  expect(loadBankroll("mid", s)).toBe(88800);
+});
+
+test("saves carry the schema version and unknown versions are discarded", () => {
+  const s = fakeStorage();
+  saveBankroll("mid", 5000, s);
+  expect(JSON.parse(s.getItem("baccarat.bankroll.mid")!)).toEqual({ v: 1, cents: 5000 });
+  // a save from a future format is not misread as cents
+  s.setItem("baccarat.bankroll.mid", JSON.stringify({ v: 2, roll: { cents: 1 } }));
+  expect(loadBankroll("mid", s)).toBeNull();
+});

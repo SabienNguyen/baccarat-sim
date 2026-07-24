@@ -4,6 +4,12 @@ function keyFor(tier: string): string {
 }
 
 /**
+ * Bumped when the stored shape changes, so a loader can migrate (or
+ * knowingly discard) old values instead of silently resetting the roll.
+ */
+const SCHEMA_VERSION = 1;
+
+/**
  * Persist the player's bankroll (in cents) across reloads, per table tier.
  * All access is guarded so a disabled/unavailable Storage (private mode, SSR)
  * degrades to "no persistence" instead of throwing. Storage is injectable for
@@ -17,6 +23,16 @@ export function loadBankroll(
   try {
     const raw = storage.getItem(keyFor(tier));
     if (raw === null) return null;
+    // v1 envelope: {"v":1,"cents":N}. Pre-versioning saves were a bare
+    // number string — still read, so an upgrade never wipes a saved roll.
+    if (raw.startsWith("{")) {
+      const parsed = JSON.parse(raw) as { v?: number; cents?: number };
+      if (parsed.v !== SCHEMA_VERSION) return null;
+      const cents = parsed.cents;
+      return typeof cents === "number" && Number.isFinite(cents) && cents >= 0
+        ? Math.floor(cents)
+        : null;
+    }
     const n = Number(raw);
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
   } catch {
@@ -31,7 +47,7 @@ export function saveBankroll(
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(keyFor(tier), String(Math.floor(cents)));
+    storage.setItem(keyFor(tier), JSON.stringify({ v: SCHEMA_VERSION, cents: Math.floor(cents) }));
   } catch {
     /* ignore: persistence is best-effort */
   }

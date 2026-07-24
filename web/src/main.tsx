@@ -1,7 +1,33 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
 import "./theme.css";
+
+const root = createRoot(document.getElementById("root")!);
+
+// The wasm engine loads with the app's module graph. If that fails — no
+// WebAssembly support, a blocked or interrupted download — render a plain
+// notice instead of leaving a silent blank page.
+import("./App")
+  .then(({ App }) => {
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+  })
+  .catch((error: unknown) => {
+    console.error("failed to load the table:", error);
+    root.render(
+      <div style={{ maxWidth: "36rem", margin: "20vh auto 0", padding: "0 1.5rem", textAlign: "center" }}>
+        <h1>The casino didn&apos;t open</h1>
+        <p>
+          The game engine failed to load. Your browser may not support
+          WebAssembly, or the download was interrupted — a refresh usually
+          fixes it.
+        </p>
+      </div>,
+    );
+  });
 
 // Dev-only test hook (stripped from production builds): park a tier's saved
 // bankroll one minimum bet under its goal, so the next won hand triggers the
@@ -17,9 +43,3 @@ if (import.meta.env.DEV) {
     },
   );
 }
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);

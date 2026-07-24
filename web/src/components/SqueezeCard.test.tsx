@@ -150,6 +150,27 @@ test("a released peek lies flat again — back to the original unflipped state",
   expect(screen.getByLabelText(/peeked card/)).toBeInTheDocument();
 });
 
+test("an interrupted gesture (pointercancel) settles the fold instead of sticking", () => {
+  const onPeek = vi.fn();
+  const onReveal = vi.fn();
+  render(<SqueezeCard card={faceDown} onPeek={onPeek} onReveal={onReveal} />);
+  const el = screen.getByRole("button");
+  const card = el.querySelector(".card")!;
+  const box = (left: number, top: number, width: number, height: number) =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => "" }) as DOMRect;
+  vi.spyOn(el, "getBoundingClientRect").mockReturnValue(box(0, 0, 108, 154));
+  vi.spyOn(card as HTMLElement, "getBoundingClientRect").mockReturnValue(box(7, 7, 94, 140));
+  fireEvent.pointerDown(el, { pointerId: 1, clientX: 54, clientY: 140 });
+  fireEvent.pointerMove(el, { pointerId: 1, clientX: 54, clientY: 100 }); // mid-squeeze, fold up
+  expect(document.querySelector(".card-peel-under")).not.toBeNull();
+  // the browser takes the pointer away (incoming call, scroll takeover)
+  fireEvent.pointerCancel(el, { pointerId: 1, clientX: 54, clientY: 100 });
+  expect(document.querySelector(".card-peel-under")).toBeNull(); // no stuck fold
+  expect(onReveal).not.toHaveBeenCalled();
+  fireEvent.click(el); // any trailing synthetic click is swallowed too
+  expect(onReveal).not.toHaveBeenCalled();
+});
+
 test("without WebGL2 the squeeze stays on the CSS peel (no overlay canvas)", () => {
   const { container } = render(<SqueezeCard card={faceDown} onPeek={() => {}} onReveal={() => {}} />);
   const el = container.firstChild as Element;

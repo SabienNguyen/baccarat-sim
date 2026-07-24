@@ -38,6 +38,20 @@ test("a wrong-phase command returns ok:false with a typed error", () => {
   }
 });
 
+test("a stray non-integer amount degrades to a refusal, never a throw", () => {
+  const session = createSession(config);
+  // BigInt(100.5) would throw a RangeError at the wasm boundary; the
+  // adapter rounds instead, so the bet simply lands.
+  const fractional = session.placeBet({ Main: "Player" }, 100.5);
+  expect(fractional.ok).toBe(true);
+  // NaN can't be rounded — it becomes 0 and the dealer refuses it politely.
+  const nan = session.placeBet({ Main: "Player" }, Number.NaN);
+  expect(nan.ok).toBe(false);
+  if (!nan.ok) {
+    expect(nan.error).toHaveProperty("BetBelowMinimum");
+  }
+});
+
 test("glossary is non-empty and includes monkey", () => {
   const terms = getGlossary();
   expect(terms.length).toBeGreaterThanOrEqual(20);

@@ -134,6 +134,11 @@ pub struct Table {
 
 impl Table {
     pub fn new(config: TableConfig, seed: u64) -> Self {
+        // A malformed config doesn't error later — it silently rejects every
+        // bet (min>max fails one bound or the other). Catch it at the source.
+        debug_assert!(config.table_min >= 0, "negative table_min");
+        debug_assert!(config.table_min <= config.table_max, "table_min above table_max");
+        debug_assert!(config.max_seats >= 1, "a table needs at least one seat");
         Table {
             config,
             seed,
@@ -396,16 +401,24 @@ impl Table {
     }
 
     /// The squeeze belongs to the biggest bettor on that side, when there is one.
+    /// A hand nobody bet belongs to the house dealer: at a shared table only
+    /// the paced `dealer_flip_one` may turn it, so one impatient client can't
+    /// skip the ritual for everyone. Solo tables keep the old freedom (the
+    /// lone player IS the table, and "reveal all" flips house cards directly).
     fn check_rights(&self, pid: PlayerId, hand: Side) -> Result<(), TableError> {
         if let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &self.phase {
             let holder = match hand {
                 Side::Player => player_squeezer,
                 Side::Banker => banker_squeezer,
             };
-            if let Some(holder) = holder {
-                if *holder != pid {
+            match holder {
+                Some(holder) if *holder != pid => {
                     return Err(TableError::NotYourSqueeze { side: hand });
                 }
+                None if self.config.max_seats > 1 => {
+                    return Err(TableError::NotYourSqueeze { side: hand });
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -910,17 +923,51 @@ mod tests {
     fn cards_are_exposed_in_ritual_order() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.deal().unwrap();
         // Banker's first card may not be revealed before the Player hand is up
-        assert_eq!(t.reveal(a, Side::Banker, 0), Err(TableError::OutOfOrder));
+        assert_eq!(t.reveal(b, Side::Banker, 0), Err(TableError::OutOfOrder));
         t.reveal(a, Side::Player, 0).unwrap();
-        assert_eq!(t.reveal(a, Side::Banker, 0), Err(TableError::OutOfOrder));
+        assert_eq!(t.reveal(b, Side::Banker, 0), Err(TableError::OutOfOrder));
         t.reveal(a, Side::Player, 1).unwrap();
-        t.reveal(a, Side::Banker, 0).unwrap();
-        t.reveal(a, Side::Banker, 1).unwrap();
+        t.reveal(b, Side::Banker, 0).unwrap();
+        t.reveal(b, Side::Banker, 1).unwrap();
         // but peeking ahead is allowed — squeezers fiddle their cards early
         // (only rights gate peeks, not order)
+    }
+
+    #[test]
+    fn a_shared_table_reserves_unbet_hands_for_the_house_dealer() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        // nobody bet Banker: at a shared table only the paced dealer turns it
+        assert!(matches!(t.peek(a, Side::Banker, 0), Err(TableError::NotYourSqueeze { .. })));
+        assert!(matches!(t.reveal(a, Side::Banker, 0), Err(TableError::NotYourSqueeze { .. })));
+        // the dealer's own flip path is unaffected
+        t.reveal(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 1).unwrap();
+        assert!(t.dealer_flip_one());
+
+        // a solo table keeps the old freedom — "reveal all" turns house cards
+        let mut solo = Table::new(
+            TableConfig {
+                table_min: 100,
+                table_max: 1_000_000,
+                ruleset: Ruleset::Commission,
+                max_seats: 1,
+            },
+            7,
+        );
+        let p = solo.join("me", 100_000).unwrap();
+        solo.place_bet(p, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        solo.deal().unwrap();
+        solo.reveal(p, Side::Player, 0).unwrap();
+        solo.reveal(p, Side::Player, 1).unwrap();
+        solo.reveal(p, Side::Banker, 0).unwrap(); // house hand, solo: allowed
     }
 
     #[test]

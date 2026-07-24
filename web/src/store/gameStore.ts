@@ -137,7 +137,7 @@ export function createGameStore(
       dismissGoal: () => set({ goalReached: false }),
       busted: false,
       denoms,
-      selectedChip: denoms[0],
+      selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
 
       toggleExplain: () => set({ explainOn: !get().explainOn }),
 

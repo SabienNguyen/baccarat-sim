@@ -12,9 +12,14 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S2 | **`create_room` orphans rooms → floor-exhaustion DoS** — room inserted before `sit()`, which refuses when already seated, leaking rooms to MAX_ROOMS (also double-click leak) | S | ✅ fixed 2026-07-20 (guard `seat.is_some()` before allocating) |
 | S3 | Any seated player can `Settle` mid-Dealing, cutting off everyone else's squeeze (money stays correct — fairness/griefing only). Tension: it's also the only escape from a squeezer who won't reveal | M | open — gate settle on all-revealed, or restrict who settles + add a squeeze timeout |
 | S4 | Server WebSocket ping/pong for half-open TCP drops (instant ghost-seat detection) | M | partially addressed 2026-07-20: a 5-min idle timeout now evicts silent connections with a clear "away too long" message (`IDLE_LIMIT` in `main.rs`), which unblocks a table an idle seat was stalling and reaps ghost seats; a true ping/pong would detect a dead socket faster than 5 min |
-| S7 | `sweep`/`list_public` hold the global registry lock across every per-room `await` — one slow/held room lock stalls all creates/joins/lobby-refreshes floor-wide (O(rooms) serial locking each disconnect) | S/M | `rooms.rs:124` (snapshot the Arcs, release the map lock, then inspect) |
+| S7 | `sweep`/`list_public` hold the global registry lock across every per-room `await` — one slow/held room lock stalls all creates/joins/lobby-refreshes floor-wide (O(rooms) serial locking each disconnect) | S/M | ✅ fixed 2026-07-24 (snapshot Arcs, release map lock, inspect rooms unlocked; sweep re-verifies candidates under the map lock with `try_lock` so a racing join can't lose its room) |
 | S5 | **Multiplayer settle popup/sound re-fired with a bogus $0 "push"** — `settleSeq` was keyed off `prev.phase !== "Settled"`, but the local `newHand()` sweeps phase to Betting while the server view stays Settled, so any other seat's action re-broadcast re-triggered it | S | ✅ fixed 2026-07-20 (fire only on genuine `Dealing→Settled` edge; regression test added) |
 | S6 | **`sweep()` orphaned a room during the create→seat handoff** — a freshly created room is empty until its creator seats, and any other client's disconnect-sweep in that gap dropped it from the registry while the creator seated into a now-unreachable room (under load, stranded 63/64) | S | ✅ fixed 2026-07-20 (`seated_once` flag + `SEAT_GRACE`; spare young un-seated rooms; 2 regression tests) |
+| S8 | **Invite-code brute force is unthrottled** — a private room's 6-char code (32^6 ≈ 1.07B) is its only privacy control, but `JoinRoom` guesses hit an O(1) lookup with no rate limit, no backoff, no failed-attempt logging, over any number of sockets | M | ✅ fixed 2026-07-24 (per-connection strike budget: 10 unknown-code joins closes the connection with a stated reason; every failed guess is logged) |
+| S9 | **A panic mid-command permanently wedges the room** — if `handle_command` unwinds (e.g. the H2 engine panics) the post-loop cleanup in `main.rs:107-116` never runs, leaving a ghost `conns` entry whose seat blocks `deal()` forever via `WaitingOnPlayers`; only a process restart recovers, and nothing is logged | M | ✅ fixed 2026-07-24 (`catch_unwind` around dispatch: a panic logs an error, tells the client, and falls through to the normal seat cleanup instead of skipping it) |
+| S10 | Per-connection outbound `mpsc::unbounded_channel` has no bound or backpressure — a stalled client accumulates queued `State` broadcasts without limit (every accepted command from any seat pushes another) | S | ✅ fixed 2026-07-24 (bounded at `OUT_QUEUE=256`, `try_send` drops overflow — every `State` is a full snapshot so a later one supersedes; a dead client is reaped by the idle timeout) |
+| S11 | No cap on raw WebSocket connections (total or per-IP) — `MAX_ROOMS`/`MAX_SEATS` bound rooms, but an attacker can hold unlimited idle sockets, each with a reader + writer task | M | ✅ mostly fixed 2026-07-24 (global `MAX_CONNS=1024` RAII-counted cap, refused upgrades logged; per-IP accounting still open — needs `ConnectInfo` plumbing) |
+| S12 | **Fly autoscale-to-zero silently destroys live games** — `min_machines_running=0` + zero persistence means a routine cost-saving stop wipes every room mid-hand; compounded by no graceful shutdown (`axum::serve` has no shutdown hook), so even deploys hard-reset sockets with no `Closed{reason}` | M | ⚙ half fixed 2026-07-24: SIGTERM/ctrl-c now broadcasts "the casino is closing" to every table and drains before exit. The keep-warm decision (`min_machines_running=1` vs accepting resets) is still open — it's a cost call |
 
 ## Authenticity (gameplay matches a real pit)
 
@@ -67,30 +72,40 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | F7 | Reconnect token: rejoin resumes the same seat + bankroll instead of a fresh buy-in (today a disconnect forfeits winnings; a busted player rejoins for a free full rebuy) | L | `table.rs:194`, protocol addition |
 | F8 | Separate side-bet minimum from `table_min` — today a $5 side bet needs $25 at a $25-min table; real tables enforce the min on main bets only | M | both `place_bet`s + table config |
 | F9 | Optional warning when a player stakes both Player and Banker on one coup (allowed, but pure commission bleed) | S | `BetRail.tsx` |
+| F10 | Client-side reconnect with backoff — today any `onclose` lands on a dead-end "connection dropped" screen with only a Back button; even without F7's seat resumption, auto-retrying the socket (and distinguishing a blip from an outage) salvages the common case | M | `Multiplayer.tsx:113-117` — pairs with F7 and H12 |
 
 ## Hardening
 
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
-| H1 | Explicit commission rounding policy in `settle.rs:33` — integer floor is exact today only because all denoms are ×100¢; a sub-dollar denom would silently under-charge | S | add a rounding rule + test with odd amounts |
-| H2 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | `round.rs:38-41`; currently provably unreachable (CUT_CARD=14 ≥ max 6-card coup) but panic paths age badly |
+| H1 | Explicit commission rounding policy in `settle.rs:33` — integer floor is exact today only because all denoms are ×100¢; a sub-dollar denom would silently under-charge | S | ✅ fixed 2026-07-24 (policy documented on `settle`: commission floors, fractional cent goes to the player; odd-cent regression test) |
+| H2 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | ✅ addressed 2026-07-24: the invariant is now compile-time (`const` assert `CUT_CARD >= 6` in `shoe.rs`) so lowering the cut card can't re-arm the panics, and S9 contains the blast radius if one ever fires. The panic sites themselves stay — they're the correct crash-on-impossible behavior |
 | H3 | Self-host display fonts (Silkscreen, VT323) — first paint currently blocks on Google Fonts | S | `theme.css:1` |
 | H4 | `og:image` screenshot for link previews | S | `index.html` |
 | M1 | First-time multiplayer squeeze hint (no "Reveal all" in MP by design; new players may not know to tap cards) | S | one-time tooltip |
 | H5 | Cross-tab bankroll sync via `storage` events / BroadcastChannel — two tabs at one tier clobber each other's persisted roll (last-writer-wins). Also add an upper cap so a hand-edited localStorage value isn't trusted | S | `useGameStore.ts:24`, `bankrollStorage.ts` |
-| H6 | `pointercancel` / `lostpointercapture` cleanup in `SqueezeCard` — an interrupted touch leaves the fold stuck mid-squeeze | S | `SqueezeCard.tsx` |
-| H7 | Restrict manual reveal of unbet (house) hands — `check_rights` returns Ok when holder is None, so a raw client can flip the dealer's cards ahead of the paced loop (no money impact, lock-serialized) | S | `table.rs:400` |
-| H8 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | `round.rs:38-41` (provably unreachable today) |
+| H6 | `pointercancel` / `lostpointercapture` cleanup in `SqueezeCard` — an interrupted touch leaves the fold stuck mid-squeeze | S | ✅ fixed 2026-07-24 (`onPointerCancel` settles the fold — GL settle release or CSS clear — and swallows the trailing click; regression test) |
+| H7 | Restrict manual reveal of unbet (house) hands — `check_rights` returns Ok when holder is None, so a raw client can flip the dealer's cards ahead of the paced loop (no money impact, lock-serialized) | S | ✅ fixed 2026-07-24 (shared tables — `max_seats > 1` — reserve house hands for the paced dealer; solo tables keep reveal-all; tested both ways) |
+| H8 | ~~Replace unreachable "card source exhausted" panics~~ | — | duplicate of H2 (merged 2026-07-24) — see also S9 for why the panic's blast radius is a wedged room, not just a dropped connection |
 | H9 | `narrateError` crashed on a `null` error (`"Message" in null` throws) | S | ✅ fixed 2026-07-20 (null/undefined guard) |
-| H10 | Guard the adapter money boundary: `Number.isInteger` before `BigInt(amountCents)` so a stray fractional value degrades gracefully instead of throwing | S | `adapter.ts:50,107` |
-| H11 | A real wasm panic surfaces as the generic "Can't do that, friend." dealer line (RuntimeError has `message`, not `Message`) — detect and log it distinctly instead of masking as a benign refusal | S | `adapter.ts:36-43` |
+| H10 | Guard the adapter money boundary: `Number.isInteger` before `BigInt(amountCents)` so a stray fractional value degrades gracefully instead of throwing | S | ✅ fixed 2026-07-24 (`safeCents`: fractional rounds with a warning, non-finite becomes 0 and the dealer refuses; tested against the real wasm) |
+| H11 | A real wasm panic surfaces as the generic "Can't do that, friend." dealer line (RuntimeError has `message`, not `Message`) — detect and log it distinctly instead of masking as a benign refusal | S | ✅ fixed 2026-07-24 (any thrown `Error` logs `console.error` and returns a distinct "table hit a snag" line in both adapter paths) |
 | H12 | WS cold-start UX: `min_machines_running=0` means the first idle connect cold-starts Fly while the user waits on "Finding the casino…" until the browser's long WS timeout; add a connect timeout + "waking the table service…" message + retry | M | `Multiplayer.tsx:66` |
 | H13 | Derive prod WS URL from `location.host` when no `VITE_WS_URL` instead of hardcoding the canonical fly host — a self-host/preview deploy currently points multiplayer at the canonical app | S | `protocol.ts:54` |
-| H14 | Server sets no security headers on the SPA (`ServeDir`): add CSP, `X-Content-Type-Options`, etc. | S | `server/src/main.rs` |
-| H15 | Storage has no schema version tag — `loadBankroll` / `loadAudioSettings` parse a raw value, so a future shape change silently resets the saved roll/audio prefs with no migration | S | `bankrollStorage.ts:19`, `audio/settings.ts:24` |
+| H14 | Server sets no security headers on the SPA (`ServeDir`): add CSP, `X-Content-Type-Options`, etc. | S | ✅ fixed 2026-07-24 (CSP tuned for wasm/fonts/ws, nosniff, referrer-policy, frame deny — verified live) |
+| H15 | Storage has no schema version tag — `loadBankroll` / `loadAudioSettings` parse a raw value, so a future shape change silently resets the saved roll/audio prefs with no migration | S | ✅ fixed 2026-07-24 (v1 envelopes on both; legacy bare values still read so no saved roll is lost; unknown future versions fall back safely; tests) |
 | H16 | `goalReached` isn't persisted: reloading after crossing the goal (roll already ≥ goal) never re-shows TABLE BEATEN because `before < goal` is now false — the victory moment is lost across a refresh | S | `gameStore.ts:176` (design call: persist-once vs re-celebrate) |
 | H17 | Confirm/mute MP ambience sounds for *other* players' bet/peek actions — `soundsFor` fires `chipPlace`/`squeeze` on aggregate-view deltas; may be intended table ambience or may be noise | S | `remoteStore.ts:60` |
 | H18 | Latent autoplay risk: `AudioContext` is created in a mount effect, fine today (table only mounts post-click) but would start suspended/silent if the app ever auto-loads into a table | S | `audio/sfx.ts:47` |
+| H19 | **WASM load failure = blank page** — the engine is a top-level-await ESM import with no try/catch, loading state, or fallback; an unsupported browser, CSP block, or failed `.wasm` fetch surfaces as an unhandled rejection with no user-facing message | S | ✅ fixed 2026-07-24 (app loads via dynamic import; failure logs and renders a plain "the casino didn't open" notice with a refresh hint) |
+| H20 | Malformed server messages are silently swallowed (empty catch on `onmessage` JSON parse) — a wire-format mismatch after a deploy fails invisibly; there's also no client-side stale-connection detection, so a half-open socket freezes the UI on the last known state | S | ⚙ half fixed 2026-07-24: parse failures now `console.warn` with the payload, and a protocol-version mismatch warns on join (H22). Stale-connection detection still rides on S4 ping/pong |
+| H21 | Dockerfile hardening: runs as root (no `USER`), no `HEALTHCHECK`, floating base tags, `wasm-pack` via unpinned `curl \| sh`; fly.toml has no HTTP health check and the server exposes no `/health` route | S | ⚙ mostly fixed 2026-07-24: runtime runs as non-root `casino`, `/health` route (status + room/conn gauges), fly.toml HTTP check wired. Base-tag/wasm-pack pinning folded into D4 |
+| H22 | No protocol version field in `ClientMsg`/`ServerMsg` — client/server skew after a deploy degrades to a generic "Unrecognized message" instead of a negotiated "please refresh" | S | ✅ fixed 2026-07-24 (`PROTOCOL_VERSION` rides on `Joined`; the client warns on mismatch with a refresh hint) |
+| H23 | Server observability is two `info!` lines — errors sent to clients, disconnects, room create/sweep, and idle evictions are all unlogged; no room/connection gauges, so a wedged room (S9) is invisible until a player complains | M | ⚙ mostly fixed 2026-07-24: room create/sweep, seat release, idle evictions, refused connections, bad-code joins, and handler panics all trace; `/health` carries room/conn gauges. A metrics exporter stays future work |
+| H24 | `CardGLEngine.dispose()` relies solely on `WEBGL_lose_context` — add explicit `deleteTexture/Buffer/Program/VertexArray` so cleanup survives a future refactor that keeps the context alive across gestures | S | ✅ fixed 2026-07-24 (all owned GL objects deleted explicitly before `loseContext()`) |
+| H25 | No config validation at construction — `table_min > table_max` or negative bankroll/limits silently makes every bet fail instead of erroring at `Session::new`/`Table::new`; `Bet.amount` non-negativity is a doc-comment invariant with no `debug_assert` at the settle boundary | S | ✅ fixed 2026-07-24 (`debug_assert` config invariants in both constructors + non-negative stake asserts at `settle`/`settle_side`) |
+| H26 | `denoms[0]` is assumed to be the smallest denomination in both stores, but nothing enforces that `tables.ts` lists `denoms` ascending (unlike `toChips`, which sorts) | S | ✅ fixed 2026-07-24 (`Math.min(...denoms)` in both stores — ordering no longer matters) |
+| H27 | Shuffle RNG is `StdRng`, whose algorithm is not guaranteed stable across `rand` version bumps — any future save/replay/audit feature assuming "same seed ⇒ same shoe" breaks silently on upgrade; statistical validity is unaffected | S | ✅ fixed 2026-07-24 (pinned `rand_chacha::ChaCha12Rng` — bit-identical to rand 0.8's StdRng, so every seeded test/stream is unchanged; unblocks D8's rand upgrade) |
 
 ## Test-coverage gaps (ranked by risk)
 
@@ -101,8 +116,58 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | T3 | `DerivedRoadView` mark rendering — a `"Red"` cell renders filled `●`/red and `"Blue"` hollow `○`/blue in the right cell (data→pixel faithfulness) | S | `roads.test.tsx` only covers BigRoad follow-latest |
 | T1b | ~~Side-bet paytables had no statistical assertion~~ | S | ✅ done 2026-07-20 (`statistics.rs` now asserts realized edge for all 10 side bets vs published) |
 | T4 | Goal crossing on a side-bet-only win (`gameStore.ts:176`) — covered only via a main-bet payout | S | |
+| T5 | Multiplayer raw `onclose` path ("Connection to the casino dropped") — only the explicit server `{type:"closed"}` message is tested | S | `Multiplayer.tsx:113-117`, `Multiplayer.test.tsx` |
+| T6 | `GameTable` victory wiring — no test drives `goalReached=true` through the component to confirm `VictoryModal` renders (modal and store are only tested in isolation); `App`-level home→table→multiplayer routing also untested | S | `App.tsx:316-326`, `App.test.tsx` |
+| T7 | Components with no dedicated test: `RoadsModal` (Escape/backdrop/road composition), `BonusInfoModal` (Escape/backdrop/lookup), `BonusNudge`, plus `cardArt.ts` (`suitColor`, `PIP_LAYOUT` per rank) | S | only indirect coverage today |
+| T8 | Adapter malformed-error path — `error as CommandError`/`as TableError` casts are never exercised with a genuine wasm panic/unknown shape (the H11 masking bug has no failing test) | S | `adapter.ts:41,102` |
+| T9 | `Session` post-settle snapshot behavior is asserted nowhere — the divergence from `Table` (E1) is invisible to the suite | S | `session.rs:367-380` |
 
 (Note: bust exactly at `table_min` IS covered — `gameStore.test.ts:221`, roll==min → not busted.)
+
+## Engine architecture / duplication
+
+Structural findings from the 2026-07-24 sweep. None are bugs today — each is a
+place where one rule lives in two hand-synced copies, so a future change has
+two-plus places to update with nothing to catch drift.
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| E1 | **Consolidate `Session` and `Table`, or document why both exist** — the shipped app only uses `Table` (max_seats=1 via `createTableSession`), leaving `Session` (767 lines + its half of the wasm bindings) product-dead yet carrying copy-pasted bet validation (`session.rs:185` vs `table.rs:208`) and payout dispatch (`session.rs:358` vs `table.rs:618`). They have already diverged: after `settle()`, `Session::snapshot()` drops the finished round while `Table::view_for` keeps it as `Settled` — the exact asymmetry `gameStore.ts:188`'s `newHand()` patches client-side | L | retire `Session`/`WasmSession`, or extract shared validation/settlement helpers both delegate to |
+| E2 | **Scoreboard recomputed from full history on every wasm call** — `derive_scoreboard` (O(n) over all rounds, all 5 roads) runs on every `place_bet`/`peek`/`reveal`/`settle`, ~8-10× per coup, i.e. O(n²) aggregate over a session, with the whole snapshot copied across the FFI each time | M | `session.rs:253,378`, `table.rs:584,607` — cache per settled round, invalidate on history change |
+| E3 | Banker third-card tableau implemented twice — `banker_draws` (boolean, `rules.rs:12-24`) and `banker_reason` (prose, `rules.rs:31-49`) are independent; a rule variant (A4) could update one and leave the explanation wrong while both test suites pass | S | derive both from one const tableau table |
+| E4 | The 6-element deal/reveal ritual order exists in **four** hand-synced copies: `table.rs:334` and `table.rs:429` (Rust), `App.tsx:118-125` (`revealAll`) and `cards.ts:62-69` (`lastFlipBetween`) (TS) | S | one shared const per language + a golden test tying TS to the engine |
+| E5 | Card-value logic duplicated TS-side — `RANK_VALUE`/`runningTotal` (`cards.ts:18-49`) mirror `card.rs:42`/`hand.rs:9` for mid-squeeze running totals; `bonusNudge.ts:26-47` likewise mirrors side-bet *hit conditions* from `sidebets.rs`. Legit UX reasons, but no shared fixture asserts the copies still match | S | golden-fixture test: engine-generated (cards → value/total, outcome → nudge candidates) verified against the TS implementations |
+| E6 | House-edge data is three hardcoded strings for main bets only — ignores `ruleset` (EZ Baccarat would change Banker's edge, blocking A3) and covers none of the 10 side bets | S | `houseEdge.ts:10-20` — table keyed by ruleset + side-bet entries (Explain panel only, per N6 decision) |
+| E7 | GLSL vertex shader is a manual port of `curlMath.deform` marked "MUST stay in lockstep" with no automated check — only the manual `glprobe` page compares them | M | `shaders.ts:20-41` — CPU-reference comparison test (headless-gl or a parity harness sampling both at fixed grips) |
+| E8 | CSS-fallback spring duplicates `springs.ts` constants and formula by hand (`TAU`/`OMEGA` copied); also `springBack` calls `setFold` per rAF frame, re-rendering the component ~every frame for the settle tail, which the GL path deliberately avoids | S | `SqueezeCard.tsx:79-104` vs `springs.ts:23-26` — export a shared `flutterScale`, and drive the CSS fallback via a ref/style mutation |
+
+## UI consolidation / polish
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| C1 | Delete dead `exchange.css` (87 orphaned lines — no `ExchangeModal` exists) and extract the `.btn` base rule duplicated across 7 css files (incl. a double definition inside `controls.css`) into `theme.css` | S | `components/exchange.css`, `bonusinfo.css:31`, `bust.css:52`, `controls.css:9-22`, `cutdeck.css:76`, `scoreboard.css:190`, `victory.css:50` |
+| C2 | Shared design tokens for z-index (literals 3/4/50/60/80/85/90/95/95 today — bust and victory collide at 95, safe only while mutually exclusive) and breakpoints (520/700/840/900/1040/1240/1340px scattered across ~8 files) | S | `theme.css` custom properties |
+| C3 | Extract a `useEscapeToClose` hook — the same 6-line window-keydown effect is copy-pasted in 3 modals; fold into the Y4 modal a11y pass | S | `BonusInfoModal.tsx:27`, `CutDeckModal.tsx:20`, `RoadsModal.tsx:12` |
+| C4 | Render-perf pass when warranted: zero `memo`/`useMemo`/`useCallback` anywhere means any of `GameTable`'s ~20 store slices re-renders the whole tree; `BetRail.stakedOn` does O(spots×bets) `JSON.stringify` per render | M | `App.tsx:84-109`, `BetRail.tsx:56-59` — profile first; fine at today's DOM size |
+| C5 | Codify that `probe.html`/`glprobe.html` are dev-only (currently excluded from prod build only by Vite's default single-entry behavior — a future multi-page config would silently ship them) | S | comment in `vite.config.ts` or move under a dev-only convention |
+
+## Tooling / DevEx / CI
+
+Previously untracked area — no lint config, no PR gate, and several hygiene
+leftovers. Confirmed 2026-07-24: `cargo clippy --all-targets --all-features`
+is already zero-warning, so adopting the gates is cheap.
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| D1 | **No linting/formatting anywhere** — no ESLint, Prettier, rustfmt, or clippy config or CI step in the entire repo; `web/README.md` is literally the unmodified Vite boilerplate describing how one *would* add ESLint. TypeScript strictness is the only static gate | M | add eslint (typed) + prettier for `web`, `cargo fmt --check` + `clippy -D warnings` in CI |
+| D2 | **CI only runs after merge** — both workflows trigger on push to `main`; no `pull_request` trigger, so tests/typecheck never gate a PR | S | `.github/workflows/deploy.yml:3`, `server-deploy.yml:6` — split a `ci.yml` (test/lint/typecheck on PRs) from deploy |
+| D3 | **Server deploys with zero verification** — `server-deploy.yml` runs no tests before `flyctl deploy`; `smoke/` exists but is never executed anywhere (CI, Docker, docs), and it only exercises the wasm engine — no smoke test ever connects a WebSocket to a real server and drives create/join/bet/deal/settle | M | wire `npm run smoke` into CI + add a WS smoke script (spawn `baccarat-server`, run one scripted coup) as a server-deploy gate |
+| D4 | Toolchain pinning: CI floats on `stable` Rust (no `rust-toolchain.toml`), `wasm-pack` installs via unpinned `curl \| sh` in CI and Docker, no `engines`/`.nvmrc` for Node | S | pin all three; also fixes reproducibility half of H21 |
+| D5 | Repo hygiene: orphaned `engine/Cargo.lock` (inert inside the workspace since commit 1), duplicate `smoke/package-lock.json` (root workspace lock already covers it), committed ad-hoc `web/.verify3.mjs` (depends on undeclared `playwright-core` + machine-specific paths) | S | delete all three |
+| D6 | Docs drift: `README.md:61,64` claims 137/190+ tests (actual 146/320+); `web/README.md` is template boilerplate; `docs/superpowers/` design docs are unlinked from any README; no CONTRIBUTING.md | S | fix counts (or drop the numbers), rewrite `web/README.md` with the real wasm-first workflow, index the docs |
+| D7 | No one-command bootstrap — a newcomer must run `build:wasm` → `npm install` → dev server in order across two toolchains, with a confusing `npm install` failure if done backwards; multiplayer dev additionally needs a manual `cargo run -p baccarat-server` | S | root `setup`/`dev` scripts (chain wasm build; `concurrently` for server + vite) |
+| D8 | Dependency currency: React 18 / Vite 5 / Vitest 2 / zustand 4 (each ≥1 major behind, Vite 5 + Vitest 2 past support window), axum 0.7, rand 0.8 (see H27 before touching), `Cargo.lock` never updated in 50 commits; no Dependabot/Renovate | M | staged upgrades behind the D1/D2 CI gate |
+| D9 | tsconfig missing modern strictness: `noUncheckedIndexedAccess` (cheap insurance at the money boundary), `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax` | S | `web/tsconfig.json` |
 
 ## Audit log
 
@@ -190,3 +255,48 @@ The app is billed as a learning tool; these close the gaps between "plays correc
   now continuously improves the Explain feature; its running log is
   `docs/EXPLAIN.md`. Also a standing direction: de-Balatro the theme to a
   generic pixel look (parked as the next dedicated task).
+- **2026-07-24 (five-track comprehensive sweep — engine+wasm, server+deploy,
+  web core, presentation layer, tooling/CI):** Whole-repo exploration by five
+  parallel readers, findings reconciled against this backlog. No rules bugs —
+  reconfirmed the engine is clippy-clean, panic-free outside the two tracked
+  sites, and its statistical tests are deterministic (seed-driven, no flake
+  risk within a fixed `rand` version — see new H27 caveat). The sweep's theme:
+  the *game* is in great shape; the gaps are operational (server abuse
+  resistance, observability, deploy verification) and structural (rules
+  duplicated across `Session`/`Table` and across the Rust/TS boundary, zero
+  lint/CI gating on PRs). Logged: S8-S12 (invite brute force, panic-wedged
+  rooms, unbounded outbound queues, no connection caps, autoscale data loss +
+  no graceful shutdown), H19-H27, E1-E8 (new engine-architecture section:
+  Session/Table consolidation, O(n²) scoreboard recompute, four copies of the
+  ritual order, TS/Rust golden fixtures, shader lockstep), C1-C5 (UI
+  consolidation: dead exchange.css, 7× `.btn`, z-index/breakpoint tokens),
+  D1-D9 (new tooling section: no lint anywhere, CI only post-merge, server
+  deploys untested, smoke never runs, toolchain unpinned, stale docs, dep
+  currency), F10, T5-T9. Merged the H2/H8 duplicate. **Build-next ranking:**
+  (1) D1+D2 — lint + PR-gated CI first, it cheapens everything after;
+  (2) H19 — wasm-load blank page is the worst first-run failure mode;
+  (3) S8+S10 — the two cheap server-abuse holes; (4) S9 with H2 — panic-safe
+  cleanup + graceful reshuffle together close the wedged-room scenario;
+  (5) D3+H21+H23 — smoke-gated server deploys, health endpoint, real logging;
+  (6) E1 — decide Session vs Table before any new rule work doubles;
+  (7) F10+H12 — multiplayer resilience as one arc; then D5/D6/C1-C3/E3-E5 as
+  small-batch cleanups alongside feature work.
+- **2026-07-24 (hardening sweep — applied the backlog's fix-only tier, no
+  visual changes):** Shipped 22 items in one pass, every one verified by the
+  full suites (engine 148, server 8, web 324 — all green; clippy clean; live
+  smoke of `/health`, headers, and SIGTERM notice). Server: S7 lock-scope fix,
+  S8 invite-code strike budget, S9 panic-safe seat cleanup, S10 bounded
+  outbound queues, S11 global connection cap, S12 graceful-shutdown half
+  (keep-warm cost call still open), H14 security headers, H21 non-root
+  runtime + `/health` + fly check, H22 protocol version, H23 event logging +
+  gauges. Engine: H1 commission-rounding policy documented + tested, H2
+  compile-time cut-card assert, H7 house hands reserved for the paced dealer
+  on shared tables (solo unchanged), H25 config/stake asserts, H27 RNG pinned
+  to ChaCha12 (bit-identical streams). Web: H6 pointercancel settles the
+  fold, H10 `safeCents` money-boundary guard, H11 wasm panics logged not
+  masked, H15 versioned storage with legacy migration, H19 wasm-load failure
+  notice instead of a blank page, H20 wire-mismatch logging, H24 explicit GL
+  resource cleanup, H26 order-independent smallest-chip pick. Left open by
+  design: H5/H16/H17 (need product decisions), H13 (would break the
+  Pages→fly WS default), S3/S4 (M-effort behavior changes), and everything in
+  the E/C/D/T sections.

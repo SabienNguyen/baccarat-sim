@@ -416,6 +416,7 @@ pub enum SideBet {
 /// Settle any side bet against a finished round. `stake` is in cents; the return
 /// is the net bankroll change in cents (same convention as `settle::settle`).
 pub fn settle_side(bet: SideBet, stake: i64, round: &RoundResult) -> i64 {
+    debug_assert!(stake >= 0, "settle_side called with a negative stake");
     match bet {
         SideBet::PlayerPair => pair_pays(&round.player, stake),
         SideBet::BankerPair => pair_pays(&round.banker, stake),

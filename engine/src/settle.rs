@@ -21,7 +21,13 @@ pub struct Bet {
 /// Net change to the bettor's bankroll, in cents, for one bet against an outcome.
 /// Positive = profit (stake already returned conceptually), negative = stake lost,
 /// zero = push.
+///
+/// Rounding policy: the 5% banker commission is computed in integer cents and
+/// **rounded down** (floor division), i.e. any fractional cent goes to the
+/// player, never the house. Exact for stakes that are multiples of 20¢;
+/// documented here so a sub-dollar denomination can't change it silently.
 pub fn settle(bet: Bet, outcome: Outcome) -> i64 {
+    debug_assert!(bet.amount >= 0, "settle called with a negative stake");
     match (bet.spot, outcome) {
         // Player bet.
         (BetSpot::Player, Outcome::PlayerWin) => bet.amount,
@@ -128,6 +134,15 @@ mod tests {
         // $25 stake -> 5% = $1.25 -> net +$23.75.
         let b = bet(BetSpot::Banker, 2_500);
         assert_eq!(settle(b, Outcome::BankerWin), 2_375);
+    }
+
+    #[test]
+    fn commission_floor_favors_the_player_on_fractional_cents() {
+        // $11.11 stake -> 5% = 55.55c, floored to 55c: the fractional cent is
+        // the player's, never the house's. Guards the documented policy for
+        // any future sub-dollar denomination.
+        let b = bet(BetSpot::Banker, 1_111);
+        assert_eq!(settle(b, Outcome::BankerWin), 1_111 - 55);
     }
 
     #[test]

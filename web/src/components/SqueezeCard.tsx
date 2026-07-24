@@ -222,6 +222,33 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     }
   }
 
+  function handlePointerCancel(e: ReactPointerEvent) {
+    // An interrupted gesture — incoming call, browser gesture takeover,
+    // capture lost — must not leave the fold stuck mid-squeeze. Settle the
+    // card back down; nothing is peeked or revealed by an interruption.
+    if (start.current === null) return;
+    const grab = start.current;
+    start.current = null;
+    suppressClick.current = draggedThisGesture.current || peekedThisGesture.current;
+    if (glMode() && glActive && grab.rect.width > 0) {
+      if (draggedThisGesture.current) {
+        port.current.drag = null;
+        port.current.release = {
+          kind: "settle",
+          gx: grab.x - grab.rect.left,
+          gy: grab.y - grab.rect.top,
+          fx: e.clientX - grab.rect.left,
+          fy: e.clientY - grab.rect.top,
+        };
+      } else {
+        setGlActive(false);
+        setGlCover(false);
+      }
+      return;
+    }
+    setFold(null);
+  }
+
   function advanceOneStep() {
     if (faceUp) return;
     if (isPeeked(card)) {
@@ -279,6 +306,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >

@@ -42,6 +42,9 @@ export class CardGLEngine {
   private uni = {} as Record<UniformName, WebGLUniformLocation | null>;
   private texTop: WebGLTexture;
   private texBot: WebGLTexture;
+  private vao: WebGLVertexArrayObject | null;
+  private vbo: WebGLBuffer | null;
+  private ibo: WebGLBuffer | null;
   private cardW: number;
   private cardH: number;
   private canvas: HTMLCanvasElement;
@@ -106,15 +109,15 @@ export class CardGLEngine {
     }
     this.indexCount = idx.length;
 
-    const vao = gl.createVertexArray();
-    gl.bindVertexArray(vao);
-    const vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    this.vao = gl.createVertexArray();
+    gl.bindVertexArray(this.vao);
+    this.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    const ibo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    this.ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
 
     this.texTop = this.makeTexture();
@@ -248,6 +251,16 @@ export class CardGLEngine {
     // the owner twice and the ghost event would kill the live engine).
     this.canvas.removeEventListener("webglcontextlost", this.lostHandler);
     this.onContextLost = undefined;
-    this.gl.getExtension("WEBGL_lose_context")?.loseContext();
+    // Free our own objects rather than leaning on context loss to do it —
+    // context loss reclaims everything today, but this keeps cleanup correct
+    // if a future refactor holds one context across gestures.
+    const gl = this.gl;
+    gl.deleteTexture(this.texTop);
+    gl.deleteTexture(this.texBot);
+    gl.deleteBuffer(this.vbo);
+    gl.deleteBuffer(this.ibo);
+    gl.deleteVertexArray(this.vao);
+    gl.deleteProgram(this.program);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
 }
