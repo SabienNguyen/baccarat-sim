@@ -92,15 +92,23 @@ export async function shareRun(s: RunShare): Promise<void> {
 
   const nav = typeof navigator !== "undefined" ? navigator : undefined;
 
-  if (blob && nav?.canShare && nav.share) {
-    const file = new File([blob], "baccarat-run.png", { type: "image/png" });
-    if (nav.canShare({ files: [file] })) {
-      try {
+  // A cancel (AbortError) is a deliberate "no" — stop, don't escalate to a
+  // second share sheet or a silent clipboard write behind the user's back.
+  const cancelled = (e: unknown) => e instanceof DOMException && e.name === "AbortError";
+
+  // File + canShare are inside the try: on a platform where share/canShare
+  // exist but File construction or canShare throws, this must still resolve
+  // (the docstring's "never throws" contract), falling through to text share.
+  if (blob && nav?.share) {
+    try {
+      const file = new File([blob], "baccarat-run.png", { type: "image/png" });
+      if (nav.canShare?.({ files: [file] })) {
         await nav.share({ files: [file], text, title: "Baccarat Simulator" });
         return;
-      } catch {
-        /* user cancelled or share failed — try the next fallback */
       }
+    } catch (e) {
+      if (cancelled(e)) return;
+      /* fall through to text share */
     }
   }
 
@@ -108,7 +116,8 @@ export async function shareRun(s: RunShare): Promise<void> {
     try {
       await nav.share({ text, url: siteUrl(s.tier), title: "Baccarat Simulator" });
       return;
-    } catch {
+    } catch (e) {
+      if (cancelled(e)) return;
       /* fall through */
     }
   }
@@ -122,10 +131,14 @@ export async function shareRun(s: RunShare): Promise<void> {
   if (blob && typeof URL !== "undefined" && URL.createObjectURL) {
     try {
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      const objUrl = URL.createObjectURL(blob);
+      a.href = objUrl;
       a.download = "baccarat-run.png";
       a.click();
-      URL.revokeObjectURL(a.href);
+      // Revoke on the next tick: a few browsers read the blob URL
+      // asynchronously relative to click(), so revoking synchronously can
+      // race the download.
+      setTimeout(() => URL.revokeObjectURL(objUrl), 0);
     } catch {
       /* nothing more we can do */
     }

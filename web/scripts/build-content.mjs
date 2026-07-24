@@ -55,7 +55,13 @@ const CSS = `
 
 function page({ slug, title, description, bodyHtml, jsonLd }) {
   const canonical = `${SITE}${slug}/`;
-  const ld = jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>` : "";
+  // Escape the JSON so a future value containing "</script>" or a line/para
+  // separator can't break out of the script element (all content is authored
+  // today, but this keeps the generator safe if that ever changes).
+  const ldJson = jsonLd
+    ? JSON.stringify(jsonLd).replace(/[\u003c\u2028\u2029]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"))
+    : "";
+  const ld = ldJson ? `<script type="application/ld+json">${ldJson}</script>` : "";
   const html = `<!doctype html>
 <html lang="en">
 <head>

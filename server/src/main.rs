@@ -394,6 +394,13 @@ async fn sit(
     match guard.table.join(&name, buy_in) {
         Ok(pid) => {
             guard.seat(pid, tx.clone());
+            // Commit the connection-local seat NOW, before the fallible work
+            // below (`view_for`'s expect, and `broadcast` which calls
+            // `view_for` for every seat). If any of that panics, the caught
+            // unwind's disconnect cleanup keys off `seat.is_some()` and will
+            // `leave(pid)` + remove the conn — without this early commit it
+            // would see `None` and leave a ghost seat wedging the room (S9).
+            *seat = Some(Seat { room: room.clone(), pid });
             let view = guard.table.view_for(pid).expect("just joined");
             let _ = tx.try_send(ServerMsg::Joined {
                 room: guard.id.clone(),
@@ -406,7 +413,6 @@ async fn sit(
             let (id, tier) = (guard.id.clone(), guard.tier);
             drop(guard);
             tracing::info!("seat taken at {id} ({tier:?})");
-            *seat = Some(Seat { room, pid });
             true
         }
         Err(e) => {
@@ -432,15 +438,21 @@ fn clean_name(raw: &str) -> String {
 }
 
 /// Unicode "format" (Cf) characters — zero-width joiners, bidi controls, the
-/// BOM. std has no category API, so match the ranges that matter here.
+/// BOM, and the Tag block. std has no category API, so match the ranges that
+/// matter: anything that renders as nothing and so could carry a covert
+/// (steganographic) payload or spoof a name through the seat list.
 fn is_format_char(c: char) -> bool {
     matches!(c,
-        '\u{200B}'..='\u{200F}'   // zero-width space/joiners, LRM/RLM
+        '\u{00AD}'                // soft hyphen
+        | '\u{061C}'              // arabic letter mark
+        | '\u{180E}'              // mongolian vowel separator
+        | '\u{200B}'..='\u{200F}' // zero-width space/joiners, LRM/RLM
         | '\u{202A}'..='\u{202E}' // bidi embeddings/overrides
         | '\u{2060}'..='\u{2064}' // word joiner, invisible operators
         | '\u{2066}'..='\u{206F}' // bidi isolates + deprecated format
         | '\u{FEFF}'              // zero-width no-break space / BOM
         | '\u{FFF9}'..='\u{FFFB}' // interlinear annotation
+        | '\u{E0000}'..='\u{E007F}' // Tags block — invisible "ASCII smuggling" payloads
     )
 }
 
@@ -461,5 +473,16 @@ mod tests {
         assert_eq!(clean_name(&"x".repeat(30)), "x".repeat(24));
         // ordinary names pass through
         assert_eq!(clean_name("  Sabien  "), "Sabien");
+    }
+
+    #[test]
+    fn clean_name_strips_invisible_tag_and_other_format_chars() {
+        // Tags block — invisible "ASCII smuggling" payload — is removed
+        let smuggled = format!("Sam\u{E0041}\u{E0042}\u{E007F}");
+        assert_eq!(clean_name(&smuggled), "Sam");
+        // soft hyphen, arabic letter mark, mongolian vowel separator
+        assert_eq!(clean_name("a\u{00AD}b\u{061C}c\u{180E}"), "abc");
+        // a name that is ONLY an invisible payload collapses to guest
+        assert_eq!(clean_name("\u{E0061}\u{E0062}\u{E0063}"), "guest");
     }
 }

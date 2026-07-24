@@ -47,5 +47,7 @@ if (import.meta.env.DEV) {
         location.reload();
       };
     },
-  );
+  ).catch(() => {
+    /* dev-only helper — a failed import here must not surface as a rejection */
+  });
 }

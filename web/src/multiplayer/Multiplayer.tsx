@@ -50,6 +50,7 @@ type Stage =
 
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const storeRef = useRef<RemoteStore | null>(null);
   const [stage, setStage] = useState<Stage>({ at: "connecting" });
@@ -61,8 +62,10 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   // A ?room=CODE deep link auto-joins on connect (and prefills the box so a
   // failed join leaves the code ready to retry). Skipped under an injected
   // socket (tests drive the flow themselves).
+  // Cap at the server's 6-char code length: a crafted ?room=<huge> link
+  // shouldn't pre-fill the box with junk or ship an oversized join.
   const autoRoom = useRef<string | null>(
-    connect ? null : (urlParam("room")?.trim().toUpperCase() || null),
+    connect ? null : (urlParam("room")?.trim().toUpperCase().slice(0, 6) || null),
   );
   const [code, setCode] = useState(autoRoom.current ?? "");
   const [tier, setTier] = useState<TableTier>("mid");
@@ -154,6 +157,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Clear the "copied" flash timer on unmount so it can't fire against a
+  // torn-down component.
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
+
   const rememberName = () => {
     const n = name.trim() || "guest";
     saveName(n);
@@ -206,7 +215,8 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
                 : stage.room;
             if (await copyText(link)) {
               setCopied(true);
-              setTimeout(() => setCopied(false), 1600);
+              if (copyTimer.current) clearTimeout(copyTimer.current);
+              copyTimer.current = setTimeout(() => setCopied(false), 1600);
             }
           }}
         >
