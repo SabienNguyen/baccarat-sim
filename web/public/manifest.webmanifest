@@ -1,0 +1,16 @@
+{
+  "name": "Baccarat Simulator",
+  "short_name": "Baccarat",
+  "description": "Learn baccarat by playing it: squeeze the cards, sweat the roads, and chase the table goal. Single-player works offline; multiplayer needs a connection.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b3d2e",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

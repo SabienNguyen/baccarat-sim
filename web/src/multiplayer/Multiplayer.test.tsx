@@ -143,7 +143,8 @@ test("the room code copies to the clipboard", async () => {
     },
   });
   await userEvent.click(screen.getByRole("button", { name: /COPYME/ }));
-  expect(writeText).toHaveBeenCalledWith("COPYME");
+  // the invite is now a full deep link (?room=CODE), not the bare code
+  expect(writeText).toHaveBeenCalledWith(expect.stringContaining("?room=COPYME"));
   expect(await screen.findByText("✓ copied")).toBeInTheDocument();
 });
 

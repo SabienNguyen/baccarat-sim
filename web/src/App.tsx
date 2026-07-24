@@ -7,6 +7,7 @@ import { HomeScreen } from "./components/HomeScreen";
 import { Multiplayer } from "./multiplayer/Multiplayer";
 import { SeatsStrip } from "./multiplayer/SeatsStrip";
 import type { TableTier } from "./tables";
+import { urlParam } from "./urlParams";
 import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { canSqueeze } from "./squeezeRights";
@@ -43,8 +44,16 @@ interface AppProps {
 /** Shell: home screen first; a chosen table mounts the game. An injected
  *  store (tests) goes straight to the table. */
 export function App({ store }: AppProps = {}) {
-  const [tier, setTier] = useState<TableTier | null>(store ? "mid" : null);
-  const [multi, setMulti] = useState(false);
+  // Deep links: ?room=CODE lands straight in multiplayer (Multiplayer reads the
+  // code and auto-joins); ?tier=low|mid|high opens that solo table directly —
+  // this is the landing half of the "share your run / beat the table" links.
+  const [tier, setTier] = useState<TableTier | null>(() => {
+    if (store) return "mid";
+    if (urlParam("room")) return null;
+    const t = urlParam("tier");
+    return t === "low" || t === "mid" || t === "high" ? t : null;
+  });
+  const [multi, setMulti] = useState(() => !store && !!urlParam("room"));
   const [resetSeq, setResetSeq] = useState(0);
   if (multi) {
     return <Multiplayer onExit={() => setMulti(false)} />;
@@ -57,6 +66,7 @@ export function App({ store }: AppProps = {}) {
     <GameTable
       key={`${tier}-${resetSeq}`}
       store={active}
+      tier={tier}
       onLeave={() => setTier(null)}
       onReset={() => {
         resetStore(tier);
@@ -71,9 +81,11 @@ interface GameTableProps {
   onLeave: () => void;
   /** Reset the buy-in (single player only). */
   onReset?: () => void;
+  /** Single-player table tier, for the victory share link's deep link back. */
+  tier?: TableTier;
 }
 
-export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
+export function GameTable({ store: active, onLeave, onReset, tier }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
@@ -317,6 +329,7 @@ export function GameTable({ store: active, onLeave, onReset }: GameTableProps) {
         <VictoryModal
           bankroll={snapshot.bankroll}
           goal={goal}
+          tier={tier}
           onKeepPlaying={dismissGoal}
           onLobby={() => {
             dismissGoal();

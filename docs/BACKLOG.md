@@ -77,7 +77,7 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | F2 | Expose remaining Tiger family bets (Big/Small Tiger 50:1/22:1, Tiger Tie 35:1, Tiger Pair) — implemented + tested in engine, absent from `SIDE_SPOTS` | S | `sidebets.rs`, `BetRail.tsx` |
 | F3 | Session statistics panel: P/B/T counts, pair frequency, longest streak | S | derive from `history`/scoreboard |
 | F4 | Multiplayer chat or emotes at the table | M | server protocol addition |
-| F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | `Multiplayer.tsx` |
+| F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | ✅ done 2026-07-24 (G5) |
 | F6 | Multiplayer bust handling: detect `bankroll < table_min`, show a rebuy/leave prompt, auto-sit-out so a broke player can't block deals (`busted` hardcoded false in remoteStore; MP `GameTable` has no `onReset`) | M | `remoteStore.ts:52`, `Multiplayer.tsx:168`, `App.tsx:307` — partially mitigated by S4/AFK (an idle broke player is now evicted after 5 min) |
 | F7 | Reconnect token: rejoin resumes the same seat + bankroll instead of a fresh buy-in (today a disconnect forfeits winnings; a busted player rejoins for a free full rebuy) | L | `table.rs:194`, protocol addition |
 | F8 | Separate side-bet minimum from `table_min` — today a $5 side bet needs $25 at a $25-min table; real tables enforce the min on main bets only | M | both `place_bet`s + table config |
@@ -90,8 +90,8 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 |---|------|--------|-------|
 | H1 | Explicit commission rounding policy in `settle.rs:33` — integer floor is exact today only because all denoms are ×100¢; a sub-dollar denom would silently under-charge | S | ✅ fixed 2026-07-24 (policy documented on `settle`: commission floors, fractional cent goes to the player; odd-cent regression test) |
 | H2 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | ✅ addressed 2026-07-24: the invariant is now compile-time (`const` assert `CUT_CARD >= 6` in `shoe.rs`) so lowering the cut card can't re-arm the panics, and S9 contains the blast radius if one ever fires. The panic sites themselves stay — they're the correct crash-on-impossible behavior |
-| H3 | Self-host display fonts (Silkscreen, VT323) — first paint currently blocks on Google Fonts | S | `theme.css:1` |
-| H4 | `og:image` screenshot for link previews | S | `index.html` |
+| H3 | Self-host display fonts (Silkscreen, VT323) — first paint currently blocks on Google Fonts | S | ✅ done 2026-07-24 (G3) |
+| H4 | `og:image` screenshot for link previews | S | ✅ done 2026-07-24 (G2) |
 | M1 | First-time multiplayer squeeze hint (no "Reveal all" in MP by design; new players may not know to tap cards) | S | one-time tooltip |
 | H5 | Cross-tab bankroll sync via `storage` events / BroadcastChannel — two tabs at one tier clobber each other's persisted roll (last-writer-wins). Also add an upper cap so a hand-edited localStorage value isn't trusted | S | `useGameStore.ts:24`, `bankrollStorage.ts` |
 | H6 | `pointercancel` / `lostpointercapture` cleanup in `SqueezeCard` — an interrupted touch leaves the fold stuck mid-squeeze | S | ✅ fixed 2026-07-24 (`onPointerCancel` settles the fold — GL settle release or CSS clear — and swallows the trailing click; regression test) |
@@ -188,16 +188,16 @@ is G7 (the SPA can never surface "learn baccarat" content to a non-JS crawler).
 
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
-| G1 | Crawlability hygiene: `robots.txt`, `sitemap.xml`, canonical/`og:url`/`og:site_name`/Twitter Card/`robots` meta, JSON-LD `WebApplication` (co-typed, not bare `VideoGame`) | S | `web/public/*`, `web/index.html` — Twitter Card fixes the imageless link unfurl on every share |
-| G2 | Static `og:image` 1200×630 + `twitter:image` | S | closes H4 — `web/public/og-image.png`, `index.html` |
-| G3 | Self-host Silkscreen/VT323 fonts | S | closes H3 — `theme.css`; the one clear LCP bug |
-| G4 | Privacy-friendly analytics (GoatCounter) + events: first-hand, returning-visitor, victory/bust (tier-tagged), room-link vs lobby join | S | `index.html`, `gameStore.ts`, `VictoryModal.tsx`, `BustModal.tsx` — baseline so G1-G12 are measurable |
-| G5 | `?room=CODE` deep link + copy full URL not bare code | S | closes F5 — `Multiplayer.tsx`; 3-step invite → 1 click, highest-leverage referral loop |
-| G6 | `?tier=` deep link (seed `App.tsx` from `location.search`) | S | landing half of G8's share link |
+| G1 | Crawlability hygiene: `robots.txt`, `sitemap.xml`, canonical/`og:url`/`og:site_name`/Twitter Card/`robots` meta, JSON-LD `WebApplication` (co-typed, not bare `VideoGame`) | S | ✅ done 2026-07-24 (`web/public/robots.txt`+`sitemap.xml`, full meta/JSON-LD in `index.html`) |
+| G2 | Static `og:image` 1200×630 + `twitter:image` | S | ✅ done 2026-07-24 — closes H4 (`web/public/og-image.png`, pixel brand card) |
+| G3 | Self-host Silkscreen/VT323 fonts | S | ✅ done 2026-07-24 — closes H3 (`src/fonts/*.woff2` + `@font-face`, Vite-fingerprinted, base-safe) |
+| G4 | Privacy-friendly analytics (GoatCounter) + events: first-hand, returning-visitor, victory/bust, room-link vs lobby join | S | ⚙ wired 2026-07-24 (`analytics.ts` `track()`/`trackVisit()` — no-op until a backend is added; visit/victory/bust/share instrumented; enabling = one script tag + CSP allow, documented). first-hand + join-path events still to instrument |
+| G5 | `?room=CODE` deep link + copy full URL not bare code | S | ✅ done 2026-07-24 — closes F5 (`Multiplayer.tsx` auto-joins on connect; invite button copies the link) |
+| G6 | `?tier=` deep link (seed `App.tsx` from `location.search`) | S | ✅ done 2026-07-24 (`App.tsx` seeds tier/multi from the URL; `urlParams.ts`) |
 | G7 | **Static content pages** (`how-to-play/`, `glossary/`, `baccarat-roads/`) built from a native `engine` bin dumping `glossary()` + tableau to JSON, templated to real HTML with per-page meta + FAQ JSON-LD, linked from `HomeScreen` footer + sitemap | M–L | **biggest lever** — the only crawlable prose for the target keywords; reuses `glossary.rs` single source (no drift) |
-| G8 | Client-side "share your run" canvas card on Victory/Bust + `navigator.share`/clipboard fallback, share text embeds `?tier=` link | M | new `web/src/shareCard.ts` + 2 modals; the real viral loop, no server/cold-start dependency |
+| G8 | Client-side "share your run" canvas card on Victory/Bust + `navigator.share`/clipboard fallback, share text embeds `?tier=` link | M | ✅ done 2026-07-24 (`shareCard.ts` + Victory "Share run"; canvas image → Web Share → clipboard → download chain; tests) |
 | G9 | Service worker precaching hashed JS/CSS/wasm (cache-first; leave `/ws`); single-player is already offline-capable | M | `main.tsx`, new SW, `vite.config.ts` — return-visit retention |
-| G10 | Web app manifest + 192/512/maskable icons from `favicon.svg` | S | `web/public/manifest.webmanifest`, `index.html` — install prompt; prereq for G9 |
+| G10 | Web app manifest + 192/512/maskable icons from `favicon.svg` | S | ✅ done 2026-07-24 (`manifest.webmanifest` + 3 PNG icons; install prompt enabled) |
 | G11 | (stretch) build-time static-render `HomeScreen` into `#root` as a progressive-enhancement shell | M | layered on G7, not instead |
 | G12 | (stretch) dynamic per-result OG image via a Fly `GET /share.png` route + server-rendered result HTML | L | needs request-time compute (Pages can't); couples to S12/H12 cold-start — do last, only if G8 proves demand |
 

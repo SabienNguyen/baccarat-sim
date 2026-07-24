@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { formatCents } from "../format";
+import { track } from "../analytics";
 import "./bust.css";
 
 interface BustModalProps {
@@ -12,6 +14,7 @@ interface BustModalProps {
 
 /** The run is lost: the roll can no longer post the table minimum. */
 export function BustModal({ bankroll, tableMin, onRebuy, onLeave }: BustModalProps) {
+  useEffect(() => track("bust"), []);
   return (
     <div className="bust-backdrop">
       <div role="dialog" aria-label="Busted" className="bust-modal panel">

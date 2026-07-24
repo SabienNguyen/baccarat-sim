@@ -1,4 +1,20 @@
-@import url("https://fonts.googleapis.com/css2?family=Silkscreen:wght@700&family=VT323&display=swap");
+/* Self-hosted so first paint doesn't block on a round trip to Google Fonts
+   (and so the pixel look survives an ad/tracker blocker). Latin subset only —
+   the UI is ASCII. */
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/silkscreen-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/vt323.woff2") format("woff2");
+}
 
 :root {
   /* The table IS the dark theme: declaring it stops forced-dark

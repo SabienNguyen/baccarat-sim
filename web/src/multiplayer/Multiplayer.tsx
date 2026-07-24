@@ -8,6 +8,7 @@ import { TABLES, type TableTier } from "../tables";
 import { formatCents } from "../format";
 import type { ClientMsg, RoomInfo, ServerMsg } from "./protocol";
 import { socketUrl } from "./protocol";
+import { urlParam } from "../urlParams";
 import { createRemoteStore, type RemoteStore } from "./remoteStore";
 import "./multiplayer.css";
 
@@ -57,7 +58,13 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const PAGE_SIZE = 8;
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState(loadName);
-  const [code, setCode] = useState("");
+  // A ?room=CODE deep link auto-joins on connect (and prefills the box so a
+  // failed join leaves the code ready to retry). Skipped under an injected
+  // socket (tests drive the flow themselves).
+  const autoRoom = useRef<string | null>(
+    connect ? null : (urlParam("room")?.trim().toUpperCase() || null),
+  );
+  const [code, setCode] = useState(autoRoom.current ?? "");
   const [tier, setTier] = useState<TableTier>("mid");
   const [isPrivate, setIsPrivate] = useState(false);
 
@@ -75,6 +82,13 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     socket.onopen = () => {
       setStage({ at: "lobby" });
       socket.send(JSON.stringify({ type: "list_rooms" }));
+      // Deep-link auto-join: on success we land at the table; on a bad code the
+      // error handler leaves us in the (already-listed) lobby with the notice.
+      if (autoRoom.current) {
+        const n = name.trim() || "guest";
+        saveName(n);
+        socket.send(JSON.stringify({ type: "join_room", room: autoRoom.current, name: n }));
+      }
     };
     socket.onmessage = (e) => {
       let msg: ServerMsg;
@@ -182,9 +196,15 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         <button
           type="button"
           className="mp-roomtag"
-          title="Copy the invite code"
+          title="Copy the invite link"
           onClick={async () => {
-            if (await copyText(stage.room)) {
+            // A full URL, not the bare code: one click drops a friend straight
+            // into this table (Multiplayer auto-joins on ?room=).
+            const link =
+              typeof location !== "undefined"
+                ? `${location.origin}${location.pathname}?room=${stage.room}`
+                : stage.room;
+            if (await copyText(link)) {
               setCopied(true);
               setTimeout(() => setCopied(false), 1600);
             }

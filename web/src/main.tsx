@@ -1,7 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { trackVisit } from "./analytics";
 import "./theme.css";
+
+trackVisit(); // no-op until analytics is enabled (see docs/GROWTH.md G4)
 
 const root = createRoot(document.getElementById("root")!);
 
