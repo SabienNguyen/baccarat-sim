@@ -11,6 +11,13 @@ export interface AudioSettings {
 export const DEFAULT_AUDIO: AudioSettings = { volume: 0.5, muted: false, music: true };
 
 /**
+ * Bumped when the stored shape changes; a loader seeing a newer tag falls
+ * back to defaults instead of misreading it. Absent tag = pre-versioning
+ * save, still read field-by-field.
+ */
+const SCHEMA_VERSION = 1;
+
+/**
  * Persist the player's sound preferences across reloads. Guarded like
  * bankrollStorage: a disabled Storage degrades to defaults, never throws.
  */
@@ -21,7 +28,8 @@ export function loadAudioSettings(
   try {
     const raw = storage.getItem(KEY);
     if (raw === null) return DEFAULT_AUDIO;
-    const parsed = JSON.parse(raw) as Partial<AudioSettings>;
+    const parsed = JSON.parse(raw) as Partial<AudioSettings> & { v?: number };
+    if (parsed.v !== undefined && parsed.v !== SCHEMA_VERSION) return DEFAULT_AUDIO;
     const volume =
       typeof parsed.volume === "number" && Number.isFinite(parsed.volume)
         ? Math.min(1, Math.max(0, parsed.volume))
@@ -38,7 +46,7 @@ export function saveAudioSettings(
 ): void {
   if (!storage) return;
   try {
-    storage.setItem(KEY, JSON.stringify(settings));
+    storage.setItem(KEY, JSON.stringify({ v: SCHEMA_VERSION, ...settings }));
   } catch {
     /* best-effort */
   }

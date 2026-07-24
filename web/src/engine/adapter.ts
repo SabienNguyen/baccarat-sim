@@ -33,11 +33,45 @@ export interface GameSession {
   dealerFlipOne?(): CommandResult;
 }
 
+/**
+ * A genuine wasm panic (or any other real JS Error) is not a dealer
+ * refusal — surface it in the console instead of masking it as one, then
+ * refuse gracefully so the table stays playable.
+ */
+function unexpectedThrow(error: unknown): SessionError | null {
+  if (error instanceof Error) {
+    console.error("wasm engine threw unexpectedly:", error);
+    return { Message: "The table hit a snag — give that another try." };
+  }
+  return null;
+}
+
+/**
+ * Money crosses the wasm boundary as bigint; `BigInt(x)` throws on any
+ * fractional value, so a stray non-integer cent amount must degrade to a
+ * refusal upstream, not an exception here.
+ */
+function safeCents(amountCents: number): bigint {
+  if (!Number.isFinite(amountCents)) {
+    console.error(`non-finite cent amount ${amountCents} — treating as 0`);
+    return 0n;
+  }
+  if (!Number.isInteger(amountCents)) {
+    console.warn(`non-integer cent amount ${amountCents} — rounding`);
+    return BigInt(Math.round(amountCents));
+  }
+  return BigInt(amountCents);
+}
+
 function run(fn: () => RoundSnapshot): CommandResult {
   try {
     return { ok: true, snapshot: fn() };
   } catch (error) {
     // WasmSession throws the serialized CommandError object on rejection.
+    const unexpected = unexpectedThrow(error);
+    if (unexpected) {
+      return { ok: false, error: unexpected };
+    }
     return { ok: false, error: error as CommandError };
   }
 }
@@ -47,7 +81,7 @@ export function createSession(config: SessionConfig): GameSession {
   return {
     snapshot: () => inner.snapshot(),
     placeBet: (kind, amountCents) =>
-      run(() => inner.place_bet(kind, BigInt(amountCents))),
+      run(() => inner.place_bet(kind, safeCents(amountCents))),
     clearBets: () => run(() => inner.clear_bets()),
     deal: () => run(() => inner.deal_round()),
     peek: (hand, index) => run(() => inner.peek(hand, index)),
@@ -99,12 +133,16 @@ export function createTableSession(config: SessionConfig): GameSession {
     try {
       return { ok: true, snapshot: fn() };
     } catch (error) {
+      const unexpected = unexpectedThrow(error);
+      if (unexpected) {
+        return { ok: false, error: unexpected };
+      }
       return { ok: false, error: tableErrorToSpeech(error as TableError) };
     }
   };
   return {
     snapshot: () => inner.view(),
-    placeBet: (kind, amountCents) => run(() => inner.place_bet(kind, BigInt(amountCents))),
+    placeBet: (kind, amountCents) => run(() => inner.place_bet(kind, safeCents(amountCents))),
     clearBets: () => run(() => inner.clear_bets()),
     deal: () => run(() => inner.deal()),
     peek: (hand, index) => run(() => inner.peek(hand, index)),

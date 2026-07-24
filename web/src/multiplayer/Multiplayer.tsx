@@ -81,12 +81,18 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       try {
         msg = JSON.parse(String(e.data));
       } catch {
+        // A message we can't parse means a client/server wire mismatch —
+        // don't fail invisibly, that's the only trace a stale build leaves.
+        console.warn("unparseable server message:", e.data);
         return;
       }
       if (msg.type === "rooms") {
         setRooms(msg.rooms);
         setPage(0);
       } else if (msg.type === "joined") {
+        if (msg.proto !== undefined && msg.proto !== 1) {
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v1 — refresh for the latest client`);
+        }
         const store = createRemoteStore({
           tier: msg.tier,
           view: msg.view,

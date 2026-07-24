@@ -23,13 +23,19 @@ pub const MAX_ROOMS: usize = 200;
 /// creator who drops before seating can't strand an empty room for long.
 const SEAT_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// Outbound queue depth per connection. Bounded so a client that stops
+/// reading can't grow its queue without limit; overflow drops the message
+/// (every `State` push is a full snapshot, so a later one supersedes it) and
+/// a genuinely dead client is reaped by the idle timeout.
+pub const OUT_QUEUE: usize = 256;
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
     pub private: bool,
     pub table: Table,
     /// Outbound channel per seated player.
-    pub conns: HashMap<PlayerId, mpsc::UnboundedSender<ServerMsg>>,
+    pub conns: HashMap<PlayerId, mpsc::Sender<ServerMsg>>,
     /// A dealer-flip pacer task is already running for this room.
     pub pacing: bool,
     /// When the room was created — gates the sweep during the create→seat gap.
@@ -43,7 +49,15 @@ impl Room {
     /// The dealer speaks to the whole table.
     pub fn announce(&self, message: String) {
         for tx in self.conns.values() {
-            let _ = tx.send(ServerMsg::Announce { message: message.clone() });
+            let _ = tx.try_send(ServerMsg::Announce { message: message.clone() });
+        }
+    }
+
+    /// Tell every seat the room is closing (e.g. the process is shutting
+    /// down), so clients see a reason instead of a bare socket reset.
+    pub fn close_all(&self, reason: &str) {
+        for tx in self.conns.values() {
+            let _ = tx.try_send(ServerMsg::Closed { reason: reason.to_string() });
         }
     }
 
@@ -68,7 +82,7 @@ impl Room {
     /// Seat a connection. Marks the room as having been occupied, so a later
     /// sweep may reap it once it empties — but never before its first seat
     /// (which would strand a room a client created but hasn't sat down at yet).
-    pub fn seat(&mut self, pid: PlayerId, tx: mpsc::UnboundedSender<ServerMsg>) {
+    pub fn seat(&mut self, pid: PlayerId, tx: mpsc::Sender<ServerMsg>) {
         self.conns.insert(pid, tx);
         self.seated_once = true;
     }
@@ -91,7 +105,7 @@ impl Room {
             .collect();
         for (pid, view) in views {
             if let Some(tx) = self.conns.get(&pid) {
-                let _ = tx.send(ServerMsg::State { view });
+                let _ = tx.try_send(ServerMsg::State { view });
             }
         }
     }
@@ -129,7 +143,8 @@ impl Registry {
             }
         };
         let room = Arc::new(Mutex::new(Room::new(id.clone(), tier, private)));
-        rooms.insert(id, room.clone());
+        rooms.insert(id.clone(), room.clone());
+        tracing::info!(room = %id, ?tier, private, total = rooms.len(), "room created");
         Some(room)
     }
 
@@ -137,11 +152,25 @@ impl Registry {
         self.rooms.lock().await.get(&id.to_uppercase()).cloned()
     }
 
+    /// How many rooms are on the floor right now (for /health).
+    pub async fn room_count(&self) -> usize {
+        self.rooms.lock().await.len()
+    }
+
+    /// Every room, public or private — for shutdown notices.
+    pub async fn all_rooms(&self) -> Vec<Arc<Mutex<Room>>> {
+        self.rooms.lock().await.values().cloned().collect()
+    }
+
     /// Public rooms only — private tables are join-by-code.
     pub async fn list_public(&self) -> Vec<RoomInfo> {
-        let rooms = self.rooms.lock().await;
+        // Snapshot the Arcs and release the map lock BEFORE touching any
+        // room lock: holding the registry across per-room awaits would let
+        // one busy room stall every create/join/lobby-refresh floor-wide.
+        let rooms: Vec<Arc<Mutex<Room>>> =
+            self.rooms.lock().await.values().cloned().collect();
         let mut infos = Vec::new();
-        for room in rooms.values() {
+        for room in rooms {
             let room = room.lock().await;
             if !room.private {
                 infos.push(room.info());
@@ -156,17 +185,44 @@ impl Registry {
     /// spared until its creator seats (or it ages past SEAT_GRACE), so a
     /// concurrent sweep can't strand a room during the create→seat handoff.
     pub async fn sweep(&self) {
-        let mut rooms = self.rooms.lock().await;
-        let mut dead = Vec::new();
-        for (id, room) in rooms.iter() {
+        // Same discipline as list_public: inspect rooms without holding the
+        // registry lock. Candidates are then re-verified under the map lock
+        // (with try_lock — a contended room is in use, so not dead) so a join
+        // that raced the inspection can't lose its room.
+        let snapshot: Vec<(String, Arc<Mutex<Room>>)> = self
+            .rooms
+            .lock()
+            .await
+            .iter()
+            .map(|(id, room)| (id.clone(), room.clone()))
+            .collect();
+        let mut candidates = Vec::new();
+        for (id, room) in snapshot {
             let room = room.lock().await;
             let reapable = room.seated_once || room.created.elapsed() > SEAT_GRACE;
             if room.conns.is_empty() && reapable {
-                dead.push(id.clone());
+                candidates.push(id);
             }
         }
-        for id in dead {
-            rooms.remove(&id);
+        if candidates.is_empty() {
+            return;
+        }
+        let mut rooms = self.rooms.lock().await;
+        for id in candidates {
+            let still_dead = match rooms.get(&id) {
+                Some(room) => match room.try_lock() {
+                    Ok(room) => {
+                        room.conns.is_empty()
+                            && (room.seated_once || room.created.elapsed() > SEAT_GRACE)
+                    }
+                    Err(_) => false, // contended = in use = alive
+                },
+                None => false,
+            };
+            if still_dead {
+                rooms.remove(&id);
+                tracing::info!(room = %id, total = rooms.len(), "room swept");
+            }
         }
     }
 }
@@ -284,7 +340,7 @@ mod tests {
         // someone sits, plays, then leaves — now the room is truly dead
         {
             let mut g = room.lock().await;
-            let (tx, _rx) = mpsc::unbounded_channel();
+            let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
             g.seat(pid, tx);
             g.conns.remove(&pid);
@@ -308,7 +364,7 @@ mod tests {
         // the creator now seats — into the same room the registry still holds
         {
             let mut g = room.lock().await;
-            let (tx, _rx) = mpsc::unbounded_channel();
+            let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
             g.seat(pid, tx);
         }

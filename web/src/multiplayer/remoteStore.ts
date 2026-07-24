@@ -51,7 +51,7 @@ export function createRemoteStore(opts: {
     // the server has no re-buy concept; remote play never busts locally
     busted: false,
     denoms,
-    selectedChip: denoms[0],
+    selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
 
     toggleExplain: () => set({ explainOn: !get().explainOn }),
 

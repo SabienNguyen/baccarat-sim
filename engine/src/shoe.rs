@@ -1,6 +1,11 @@
 use crate::card::{Card, Rank, Suit};
 use rand::seq::SliceRandom;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::SeedableRng;
+// Pinned by name rather than `rand::rngs::StdRng`: StdRng's algorithm may
+// change across `rand` releases, which would silently break every
+// "same seed ⇒ same shoe" guarantee. ChaCha12 is what rand 0.8's StdRng
+// resolves to today, so the streams are bit-identical.
+use rand_chacha::ChaCha12Rng;
 
 pub struct Shoe {
     cards: Vec<Card>,
@@ -17,6 +22,12 @@ const DECKS: usize = 8;
 /// reaches it the next coup comes from a fresh shoe, as in a real pit.
 pub const CUT_CARD: usize = 14;
 
+// A coup draws at most 6 cards, so as long as the cut card sits at least
+// 6 from the back, the reshuffle-before-deal guard makes the "exhausted
+// mid-round" panics in round.rs/draw() unreachable. Enforce that invariant
+// at compile time so lowering CUT_CARD can't quietly re-arm them.
+const _: () = assert!(CUT_CARD >= 6, "CUT_CARD must cover a full 6-card coup");
+
 impl Shoe {
     /// Build and shuffle an 8-deck shoe from a fixed seed, then perform the
     /// casino burn ritual: the first card is turned and that many more cards
@@ -30,7 +41,7 @@ impl Shoe {
                 }
             }
         }
-        let mut rng = StdRng::seed_from_u64(seed);
+        let mut rng = ChaCha12Rng::seed_from_u64(seed);
         cards.shuffle(&mut rng);
         let mut shoe = Shoe { cards };
         shoe.burn();

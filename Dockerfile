@@ -21,10 +21,13 @@ RUN npm ci && npm --workspace web run build
 
 # ---- tiny runtime: one process serves the SPA and /ws ----
 FROM debian:bookworm-slim
+RUN useradd --system --no-create-home casino
 WORKDIR /app
 COPY --from=rust-build /src/target/release/baccarat-server ./baccarat-server
 COPY --from=web-build /src/web/dist ./dist
 ENV SPA_DIR=/app/dist
 ENV PORT=8080
 EXPOSE 8080
+# The server binds a high port and reads only its own files — no root needed.
+USER casino
 CMD ["./baccarat-server"]

@@ -165,6 +165,11 @@ pub struct Session {
 impl Session {
     /// Start a fresh session in the betting phase.
     pub fn new(config: SessionConfig) -> Self {
+        // A malformed config doesn't error later — it silently rejects every
+        // bet (min>max fails one bound or the other). Catch it at the source.
+        debug_assert!(config.table_min >= 0, "negative table_min");
+        debug_assert!(config.table_min <= config.table_max, "table_min above table_max");
+        debug_assert!(config.starting_bankroll >= 0, "negative starting bankroll");
         let shoe = Shoe::new_seeded(config.seed);
         Session {
             shoe,

@@ -6,6 +6,10 @@ use baccarat_engine::session::BetKind;
 use baccarat_engine::table::{PlayerId, TableView};
 use serde::{Deserialize, Serialize};
 
+/// Bumped on any breaking wire change. Sent with `Joined` so a stale client
+/// can tell "please refresh" apart from a generic bad message.
+pub const PROTOCOL_VERSION: u32 = 1;
+
 /// Stake tiers, mirrored from the web client's tables.ts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -57,7 +61,7 @@ pub enum ServerMsg {
     Rooms { rooms: Vec<RoomInfo> },
     /// The dealer's voice between flips ("Turning the Banker's cards…").
     Announce { message: String },
-    Joined { room: String, player: PlayerId, tier: Tier, view: TableView },
+    Joined { room: String, player: PlayerId, tier: Tier, view: TableView, proto: u32 },
     State { view: TableView },
     Left,
     Error { message: String },
