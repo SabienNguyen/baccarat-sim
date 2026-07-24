@@ -36,6 +36,12 @@ const MAX_CONNS: usize = 1024;
 /// be brute-forced at wire speed.
 const MAX_JOIN_FAILURES: u32 = 10;
 
+/// Largest WebSocket message we accept, enforced at the transport so an
+/// oversized frame is rejected before it's buffered. The protocol's real
+/// messages are well under this; a small headroom over the app-level check
+/// keeps JSON overhead from tripping legitimate traffic.
+const MAX_WS_MESSAGE: usize = 8 * 1024;
+
 static CONNS: AtomicUsize = AtomicUsize::new(0);
 
 /// RAII slot in the connection budget — released on drop, panic included.
@@ -150,9 +156,14 @@ async fn health(State(registry): State<Registry>) -> Json<serde_json::Value> {
 
 async fn ws_handler(ws: WebSocketUpgrade, State(registry): State<Registry>) -> Response {
     match ConnSlot::try_acquire() {
+        // Cap the frame/message size at the transport, not just after
+        // reassembly: tungstenite's defaults buffer up to 64 MiB before our
+        // 4 KiB text-length check ever runs, so a client could stream huge
+        // messages that are allocated and UTF-8-validated only to be dropped.
         Some(slot) => ws
-            .on_upgrade(move |socket| handle_socket(socket, registry, slot))
-            .into_response(),
+            .max_message_size(MAX_WS_MESSAGE)
+            .max_frame_size(MAX_WS_MESSAGE)
+            .on_upgrade(move |socket| handle_socket(socket, registry, slot)),
         None => {
             tracing::warn!("connection refused: at MAX_CONNS ({MAX_CONNS})");
             (StatusCode::SERVICE_UNAVAILABLE, "The casino is at capacity.").into_response()
@@ -279,7 +290,9 @@ async fn handle_command(
                 let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
             } else {
                 match registry.create(tier, private).await {
-                    Some(room) => sit(room, &name, tx, seat).await,
+                    Some(room) => {
+                        sit(room, &name, tx, seat).await;
+                    }
                     None => {
                         let _ = tx.try_send(ServerMsg::Error {
                             message: "The floor is full — join an open table instead.".into(),
@@ -290,8 +303,14 @@ async fn handle_command(
         }
         ClientMsg::JoinRoom { room, name } => match registry.get(&room).await {
             Some(room) => {
-                *failed_joins = 0;
-                sit(room, &name, tx, seat).await;
+                // Reset the strike budget only on a real seating — not on any
+                // lookup hit. Otherwise an attacker interleaves one known code
+                // (their own room, or any from ListRooms) every few guesses to
+                // zero the counter and brute-force invite codes forever on one
+                // socket. A refused sit ("already seated") must not reset it.
+                if sit(room, &name, tx, seat).await {
+                    *failed_joins = 0;
+                }
             }
             None => {
                 // The room code doubles as a private table's invite code, so
@@ -358,15 +377,16 @@ async fn handle_command(
     true
 }
 
+/// Returns true only if this connection actually took a seat.
 async fn sit(
     room: Arc<Mutex<Room>>,
     name: &str,
     tx: &mpsc::Sender<ServerMsg>,
     seat: &mut Option<Seat>,
-) {
+) -> bool {
     if seat.is_some() {
         let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
-        return;
+        return false;
     }
     let mut guard = room.lock().await;
     let (.., buy_in) = guard.tier.stakes();
@@ -387,9 +407,11 @@ async fn sit(
             drop(guard);
             tracing::info!("seat taken at {id} ({tier:?})");
             *seat = Some(Seat { room, pid });
+            true
         }
         Err(e) => {
             let _ = tx.try_send(ServerMsg::Error { message: error_message(&e) });
+            false
         }
     }
 }
