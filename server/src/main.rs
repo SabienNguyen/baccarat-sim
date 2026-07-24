@@ -390,8 +390,8 @@ async fn sit(
     }
     let mut guard = room.lock().await;
     let (.., buy_in) = guard.tier.stakes();
-    let name = if name.trim().is_empty() { "guest" } else { name.trim() };
-    match guard.table.join(&name.chars().take(24).collect::<String>(), buy_in) {
+    let name = clean_name(name);
+    match guard.table.join(&name, buy_in) {
         Ok(pid) => {
             guard.seat(pid, tx.clone());
             let view = guard.table.view_for(pid).expect("just joined");
@@ -413,5 +413,53 @@ async fn sit(
             let _ = tx.try_send(ServerMsg::Error { message: error_message(&e) });
             false
         }
+    }
+}
+
+/// Normalize a display name before it's shown to every other seat. Strips
+/// Unicode control and format characters — which includes bidi overrides
+/// (U+202E etc.) and zero-width joiners a peer could use to render their
+/// name reversed, blank, or spoofing another seat — then trims and caps to
+/// 24 chars, falling back to "guest".
+fn clean_name(raw: &str) -> String {
+    let filtered: String = raw
+        .chars()
+        .filter(|c| !c.is_control() && !is_format_char(*c))
+        .collect();
+    // Trim BEFORE the length cap so leading whitespace can't eat the budget.
+    let capped: String = filtered.trim().chars().take(24).collect();
+    if capped.is_empty() { "guest".to_string() } else { capped }
+}
+
+/// Unicode "format" (Cf) characters — zero-width joiners, bidi controls, the
+/// BOM. std has no category API, so match the ranges that matter here.
+fn is_format_char(c: char) -> bool {
+    matches!(c,
+        '\u{200B}'..='\u{200F}'   // zero-width space/joiners, LRM/RLM
+        | '\u{202A}'..='\u{202E}' // bidi embeddings/overrides
+        | '\u{2060}'..='\u{2064}' // word joiner, invisible operators
+        | '\u{2066}'..='\u{206F}' // bidi isolates + deprecated format
+        | '\u{FEFF}'              // zero-width no-break space / BOM
+        | '\u{FFF9}'..='\u{FFFB}' // interlinear annotation
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_name;
+
+    #[test]
+    fn clean_name_strips_control_and_format_chars_and_caps_length() {
+        // bidi override + zero-width joiner are removed
+        assert_eq!(clean_name("ab\u{202E}cd\u{200D}"), "abcd");
+        // control chars (newlines, tabs) removed
+        assert_eq!(clean_name("a\nb\tc"), "abc");
+        // empty / whitespace-only falls back to guest
+        assert_eq!(clean_name("   "), "guest");
+        assert_eq!(clean_name("\u{200B}\u{FEFF}"), "guest");
+        // capped to 24 chars, then trimmed
+        assert_eq!(clean_name(&"x".repeat(30)), "x".repeat(24));
+        // ordinary names pass through
+        assert_eq!(clean_name("  Sabien  "), "Sabien");
     }
 }

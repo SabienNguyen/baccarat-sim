@@ -334,6 +334,11 @@
   font-family: var(--font-display);
   font-size: 12px;
   color: var(--gold);
+  /* A long unbroken name can't stretch the seat box past this. */
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .seat-money {
   font-family: var(--font-text);

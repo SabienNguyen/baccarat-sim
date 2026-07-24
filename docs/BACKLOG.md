@@ -26,6 +26,10 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S16 | **`view_for` fully buffered oversized WebSocket frames before the 4 KiB check** — the app-level `text.len() > 4096` guard runs only *after* tungstenite reassembles/UTF-8-validates the whole message, and its defaults allow 64 MiB; a client could stream near-64 MiB frames (allocated then discarded) across `MAX_CONNS` sockets for a memory/CPU amplification DoS | S | ✅ fixed 2026-07-24 (`max_message_size`/`max_frame_size = 8 KiB` set on the upgrade, rejecting oversized frames at the transport before buffering; app-level 4 KiB check kept as defense in depth) |
 | S17 | **`sweep()` can orphan a live room that a `JoinRoom` is racing** — `get()` clones the room Arc and releases the map lock before `sit()` locks the room, so a disconnect-triggered sweep on a momentarily-empty (`seated_once`) room can reap it between the joiner's `get` and `lock`; the joiner then seats into a room no longer in the registry, invisible to everyone else and burning strikes for a valid code. Pre-existing (the two-phase sweep didn't introduce it — `get`→`lock` was never atomic), timing-dependent, no money/data impact | M | open — needs an in-flight-join marker (atomic on `Room` bumped by `get`, checked by sweep) or fold the final empty-check + removal into one critical section that also excludes pending joins |
 | H28 | A dropped one-shot control message (`Joined`, `Closed`, `Left`) can wedge a client — unlike `State`/`Rooms` these aren't supersede-able snapshots, but they ride the same bounded `try_send` that drops on a full queue. A client that fills its own queue then `CreateRoom`s is seated server-side but never learns it, holding a seat until the 5-min idle evict | S | open — reserve queue headroom (or a separate control channel) for one-shot messages, or have the client re-request state on a heartbeat |
+| S18 | **A malformed/version-skewed server push could white-screen the whole app** — the client did no runtime validation of `ServerMsg`/`TableView` (TypeScript casts only) and had no React ErrorBoundary, so one unguarded field access in the render tree (`snapshot.bets.reduce`, `seats.map`, …) unmounts the root to a blank page. Not reachable from a hostile peer (the server's serde types guarantee shape) but reachable via a protocol skew after a deploy — which the client only `console.warn`ed on and then rendered anyway | S | ✅ fixed 2026-07-24 (ErrorBoundary around the app → recoverable "table hit a snag" notice; `proto` mismatch is now a hard stop with a refresh prompt instead of building a store from an unknown shape; tests) |
+| S19 | **Peer display names weren't sanitized for Unicode control/format chars** — the server trimmed + capped to 24 chars but passed bidi overrides (U+202E), zero-width joiners, and the BOM straight through to every other seat's DOM, letting a peer render their own name reversed, blank, or spoofing another seat. Not XSS (React escapes text), a display-integrity/spoofing gap | S | ✅ fixed 2026-07-24 (`clean_name` strips control + format-category chars at the single `sit` choke point, then trims/caps; client adds `max-width`/ellipsis on the seat name; server unit test) |
+| S20 | Settle popup/sound can be skipped under outbound-queue backpressure — the client detects settlement off a strict `Dealing→Settled` phase edge, so if the intervening `Dealing` broadcast is the one dropped by `try_send` (S10), a solo-room player may miss the win/loss popup until their next action elicits a fresh push | S | open — key settle detection off a monotonic round id / "payouts newly non-null for a round we haven't shown," not a strict phase transition (touches server protocol + `remoteStore`) |
+| C6 | Client hardening hygiene: null `onmessage`/`onopen` alongside `onclose` on `Multiplayer` unmount so a message in flight during `close()` can't fire a stale closure (harmless no-op in React 18 today, tidied for defense-in-depth) | S | ✅ fixed 2026-07-24 |
 
 ## Authenticity (gameplay matches a real pit)
 
@@ -333,3 +337,24 @@ is already zero-warning, so adopting the gates is cheap.
   atomic-counter overflow, and the `catch_unwind` mutex mechanics. Server
   builds clean, 8 tests green, live-smoked `/health` + shutdown. (No WS
   integration harness exists to unit-test S8/S16 end-to-end — that's D3.)
+- **2026-07-24 (continuous bug-hunt loop, iteration 2 — client injection
+  surface + rules correctness):** Two parallel audits. (a) **Injection
+  surface: clean XSS bill of health** — no `dangerouslySetInnerHTML`, no
+  unsafe attribute/URL sinks anywhere untrusted names/codes/announce text
+  flow; React escaping covers it. Fixed the robustness gaps it did find: a
+  malformed/version-skewed push could white-screen the app (S18 — added an
+  ErrorBoundary + made `proto` skew a hard stop), peer names weren't stripped
+  of bidi/zero-width/control chars (S19 — `clean_name` server-side + seat-name
+  ellipsis), and the unmount handler hygiene (C6). Logged S20 (settle popup
+  can be skipped under S10 backpressure — needs a round-id, not a phase edge).
+  (b) **Rules correctness: clean bill of health** — a full cross-check of the
+  engine against authoritative punto banco (Wizard of Odds, NGCB) found NO
+  deviations: card values, natural suppression, the Player rule, the complete
+  8×10 Banker tableau incl. all four exception totals (3/4/5/6), main payouts +
+  5% commission, EZ Baccarat, all seven side-bet paytables (Pair, Dragon Bonus
+  ladder, full Tiger family), the three derived-road algorithms (hand-traced
+  against the worked example), 8-deck composition + burn ritual, and the
+  statistical tests (frequencies match published figures; ±0.005 @ 200k ≈ 4.5σ,
+  tight enough to catch a real tableau bug). Single source of truth confirmed —
+  no divergent payout/draw logic between `Session` and `Table`. Web 326 /
+  server 9 green.

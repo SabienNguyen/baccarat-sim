@@ -91,7 +91,14 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         setPage(0);
       } else if (msg.type === "joined") {
         if (msg.proto !== undefined && msg.proto !== 1) {
-          console.warn(`server speaks protocol v${msg.proto}, this build expects v1 — refresh for the latest client`);
+          // A protocol skew means the server may send view shapes this build
+          // can't render — stop here with a clear message rather than build a
+          // store from it and risk an unguarded field access white-screening
+          // the app mid-game.
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v1`);
+          storeRef.current = null;
+          setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
+          return;
         }
         const store = createRemoteStore({
           tier: msg.tier,
@@ -122,7 +129,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       );
     };
     return () => {
+      // Detach every handler, not just onclose: an in-flight message
+      // arriving between close() and the socket actually closing would
+      // otherwise fire a stale closure that touches unmounted state.
       socket.onclose = null;
+      socket.onmessage = null;
+      socket.onopen = null;
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
