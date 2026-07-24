@@ -467,4 +467,43 @@ mod big_road_tie_tests {
         assert!(s.big_road.columns[0][0].banker_pair);
         assert!(!s.big_road.columns[0][0].player_pair);
     }
+
+    // Microbenchmark for the view-layer scoreboard memo (E2): a full recompute
+    // (the old per-view cost) vs. a clone of an already-derived snapshot (the
+    // cache-hit cost). Run: cargo test -p baccarat-engine --release
+    //   scoreboard_recompute_vs_clone -- --ignored --nocapture
+    #[test]
+    #[ignore = "microbenchmark"]
+    fn scoreboard_recompute_vs_clone() {
+        use std::time::Instant;
+        let history: Vec<RoundRecord> = (0..800)
+            .map(|i| {
+                win(match i % 3 {
+                    0 => Outcome::BankerWin,
+                    1 => Outcome::PlayerWin,
+                    _ => Outcome::Tie,
+                })
+            })
+            .collect();
+        let iters = 5000;
+        let mut sink = 0usize;
+        let t0 = Instant::now();
+        for _ in 0..iters {
+            sink += derive_scoreboard(&history).bead_plate.cells.len();
+        }
+        let recompute = t0.elapsed();
+        let snap = derive_scoreboard(&history);
+        let t1 = Instant::now();
+        for _ in 0..iters {
+            sink += snap.clone().bead_plate.cells.len();
+        }
+        let clone = t1.elapsed();
+        eprintln!(
+            "recompute {:?} vs clone {:?}  ({:.1}x faster on a cache hit)  [{}]",
+            recompute,
+            clone,
+            recompute.as_secs_f64() / clone.as_secs_f64().max(1e-9),
+            sink
+        );
+    }
 }

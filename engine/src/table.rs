@@ -130,6 +130,12 @@ pub struct Table {
     last_outcome: Option<crate::round::Outcome>,
     /// The settled round's cards, kept on the felt until the next deal.
     last_round: Option<RoundResult>,
+    /// Memoized scoreboard, keyed on history length. `history` is append-only
+    /// (only pushed at settle, never cleared), so equal length ⇒ identical
+    /// content ⇒ identical roads — this skips recomputing all five roads on
+    /// every view (a view is built after every command, ~8-10× per coup, but
+    /// the scoreboard only changes once per settled round).
+    sb_cache: std::cell::RefCell<Option<(usize, ScoreboardSnapshot)>>,
 }
 
 impl Table {
@@ -150,7 +156,22 @@ impl Table {
             history: Vec::new(),
             last_outcome: None,
             last_round: None,
+            sb_cache: std::cell::RefCell::new(None),
         }
+    }
+
+    /// The scoreboard, recomputed only when `history` has grown since the last
+    /// call (see `sb_cache`). Behavior-identical to `derive_scoreboard`.
+    fn scoreboard(&self) -> ScoreboardSnapshot {
+        let len = self.history.len();
+        if let Some((cached_len, snap)) = self.sb_cache.borrow().as_ref() {
+            if *cached_len == len {
+                return snap.clone();
+            }
+        }
+        let snap = derive_scoreboard(&self.history);
+        *self.sb_cache.borrow_mut() = Some((len, snap.clone()));
+        snap
     }
 
     pub fn seats(&self) -> usize {
@@ -600,7 +621,7 @@ impl Table {
                 outcome: if player.payouts.is_some() { self.last_outcome } else { None },
                 payouts: player.payouts.clone(),
                 events: Vec::new(),
-                scoreboard: derive_scoreboard(&self.history),
+                scoreboard: self.scoreboard(),
                 // Keep the 'why this round' trace on the settled felt — the same
                 // window (and key) the face-up cards use — so the explanation is
                 // there while the learner studies the finished coup.
@@ -641,7 +662,7 @@ impl Table {
                     outcome: None,
                     payouts: None,
                     events: derive_events(round, reveal),
-                    scoreboard: derive_scoreboard(&self.history),
+                    scoreboard: self.scoreboard(),
                     explain: round.trace.clone(),
                     seats,
                     player_squeezer,
@@ -1134,5 +1155,26 @@ mod tests {
         }
         // surviving 200 coups proves the cut-card reshuffle path works
         assert!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len() == 200);
+    }
+
+    #[test]
+    fn scoreboard_cache_stays_fresh_and_consistent() {
+        // The memoized scoreboard must grow by one bead each settled coup (not
+        // go stale) and return an identical board on a repeat view (cache hit).
+        let mut t = table();
+        let a = t.join("a", 10_000_000).unwrap();
+        for expected in 1..=6 {
+            t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+            let first = t.view_for(a).unwrap().scoreboard;
+            let second = t.view_for(a).unwrap().scoreboard; // cache-hit path
+            assert_eq!(first, second, "repeat view returned a different board");
+            assert_eq!(
+                first.bead_plate.cells.len(),
+                expected,
+                "cache went stale — bead count didn't track the coup count"
+            );
+        }
     }
 }
