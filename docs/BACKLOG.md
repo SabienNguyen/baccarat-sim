@@ -19,6 +19,9 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S9 | **A panic mid-command permanently wedges the room** — if `handle_command` unwinds (e.g. the H2 engine panics) the post-loop cleanup in `main.rs:107-116` never runs, leaving a ghost `conns` entry whose seat blocks `deal()` forever via `WaitingOnPlayers`; only a process restart recovers, and nothing is logged | M | ✅ fixed 2026-07-24 (`catch_unwind` around dispatch: a panic logs an error, tells the client, and falls through to the normal seat cleanup instead of skipping it) |
 | S10 | Per-connection outbound `mpsc::unbounded_channel` has no bound or backpressure — a stalled client accumulates queued `State` broadcasts without limit (every accepted command from any seat pushes another) | S | ✅ fixed 2026-07-24 (bounded at `OUT_QUEUE=256`, `try_send` drops overflow — every `State` is a full snapshot so a later one supersedes; a dead client is reaped by the idle timeout) |
 | S11 | No cap on raw WebSocket connections (total or per-IP) — `MAX_ROOMS`/`MAX_SEATS` bound rooms, but an attacker can hold unlimited idle sockets, each with a reader + writer task | M | ✅ mostly fixed 2026-07-24 (global `MAX_CONNS=1024` RAII-counted cap, refused upgrades logged; per-IP accounting still open — needs `ConnectInfo` plumbing) |
+| S13 | **Peeked cards broadcast their full identity to every seat** — `check_rights` gated who may *peek*, but `view_for` sent the same `Peeked { sliver: Pip { suit, rank } }` to all viewers, so any client at the table read the exact card the squeezer was privately bending up. Defeats the squeeze's information asymmetry at the data level for networked seats | S | ✅ fixed 2026-07-24 (per-viewer redaction in `view_for`: another player's peek renders as `FaceDown` until revealed; solo tables unaffected; regression test) |
+| S14 | Squeeze tie-break inverted — `max_by_key` returns the *last* max, so tied stakes gave the squeeze to the later-seated player, contradicting the documented "ties: first seated" | S | ✅ fixed 2026-07-24 (strict-`>` fold in seat order; regression test) |
+| S15 | Stale `outcome` in Betting views — cleared only at `deal()`, while `payouts`/cards/explain reset per-player on re-bet, so a re-betting player's "fresh coup" view still carried the previous round's outcome | S | ✅ fixed 2026-07-24 (gated on the viewer's own `payouts`, same as the other settled-display fields; regression test) |
 | S12 | **Fly autoscale-to-zero silently destroys live games** — `min_machines_running=0` + zero persistence means a routine cost-saving stop wipes every room mid-hand; compounded by no graceful shutdown (`axum::serve` has no shutdown hook), so even deploys hard-reset sockets with no `Closed{reason}` | M | ⚙ half fixed 2026-07-24: SIGTERM/ctrl-c now broadcasts "the casino is closing" to every table and drains before exit. The keep-warm decision (`min_machines_running=1` vs accepting resets) is still open — it's a cost call |
 
 ## Authenticity (gameplay matches a real pit)
@@ -300,3 +303,14 @@ is already zero-warning, so adopting the gates is cheap.
   design: H5/H16/H17 (need product decisions), H13 (would break the
   Pages→fly WS default), S3/S4 (M-effort behavior changes), and everything in
   the E/C/D/T sections.
+- **2026-07-24 (continuous bug-hunt loop, iteration 1 — table lifecycle):**
+  Three confirmed engine bugs found and fixed same day, each reproduced with a
+  failing test first: the peeked-card identity broadcast (S13, the significant
+  one — every networked seat could read the squeezer's private sliver), the
+  inverted squeeze tie-break (S14), and the stale Betting-view outcome (S15).
+  Also traced and cleared as CORRECT: mid-deal leave settlement and money
+  conservation, squeezer-leaves card-flippability (no stuck coup possible),
+  heterogeneous settle/sit-out accounting, new_shoe phase guards, reshuffle
+  boundary consistency, and negative-bankroll sequences. Added a
+  `debug_assert!(buy_in >= 0)` to `Table::join` for posture consistency.
+  Engine 151 / web 324 all green.
