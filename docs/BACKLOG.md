@@ -179,6 +179,32 @@ is already zero-warning, so adopting the gates is cheap.
 | D8 | Dependency currency: React 18 / Vite 5 / Vitest 2 / zustand 4 (each ≥1 major behind, Vite 5 + Vitest 2 past support window), axum 0.7, rand 0.8 (see H27 before touching), `Cargo.lock` never updated in 50 commits; no Dependabot/Renovate | M | staged upgrades behind the D1/D2 CI gate |
 | D9 | tsconfig missing modern strictness: `noUncheckedIndexedAccess` (cheap insurance at the money boundary), `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax` | S | `web/tsconfig.json` |
 
+## Growth / traffic (code changes)
+
+Engineering levers to get players to the site. Full rationale + the distribution
+channel strategy (portals, Reddit, SEO wedge, Rust/WASM tech story, gambling
+policy per channel) live in `docs/GROWTH.md`. Ordered by ROI; the biggest lever
+is G7 (the SPA can never surface "learn baccarat" content to a non-JS crawler).
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| G1 | Crawlability hygiene: `robots.txt`, `sitemap.xml`, canonical/`og:url`/`og:site_name`/Twitter Card/`robots` meta, JSON-LD `WebApplication` (co-typed, not bare `VideoGame`) | S | `web/public/*`, `web/index.html` — Twitter Card fixes the imageless link unfurl on every share |
+| G2 | Static `og:image` 1200×630 + `twitter:image` | S | closes H4 — `web/public/og-image.png`, `index.html` |
+| G3 | Self-host Silkscreen/VT323 fonts | S | closes H3 — `theme.css`; the one clear LCP bug |
+| G4 | Privacy-friendly analytics (GoatCounter) + events: first-hand, returning-visitor, victory/bust (tier-tagged), room-link vs lobby join | S | `index.html`, `gameStore.ts`, `VictoryModal.tsx`, `BustModal.tsx` — baseline so G1-G12 are measurable |
+| G5 | `?room=CODE` deep link + copy full URL not bare code | S | closes F5 — `Multiplayer.tsx`; 3-step invite → 1 click, highest-leverage referral loop |
+| G6 | `?tier=` deep link (seed `App.tsx` from `location.search`) | S | landing half of G8's share link |
+| G7 | **Static content pages** (`how-to-play/`, `glossary/`, `baccarat-roads/`) built from a native `engine` bin dumping `glossary()` + tableau to JSON, templated to real HTML with per-page meta + FAQ JSON-LD, linked from `HomeScreen` footer + sitemap | M–L | **biggest lever** — the only crawlable prose for the target keywords; reuses `glossary.rs` single source (no drift) |
+| G8 | Client-side "share your run" canvas card on Victory/Bust + `navigator.share`/clipboard fallback, share text embeds `?tier=` link | M | new `web/src/shareCard.ts` + 2 modals; the real viral loop, no server/cold-start dependency |
+| G9 | Service worker precaching hashed JS/CSS/wasm (cache-first; leave `/ws`); single-player is already offline-capable | M | `main.tsx`, new SW, `vite.config.ts` — return-visit retention |
+| G10 | Web app manifest + 192/512/maskable icons from `favicon.svg` | S | `web/public/manifest.webmanifest`, `index.html` — install prompt; prereq for G9 |
+| G11 | (stretch) build-time static-render `HomeScreen` into `#root` as a progressive-enhancement shell | M | layered on G7, not instead |
+| G12 | (stretch) dynamic per-result OG image via a Fly `GET /share.png` route + server-rendered result HTML | L | needs request-time compute (Pages can't); couples to S12/H12 cold-start — do last, only if G8 proves demand |
+
+Suggested first PRs: **PR A** = G1+G2+G3+G4+G5+G6+G10 (~1 day, all S — links look
+real, traffic measurable, 1-click invite shipped); **PR B** = G7 (the durable
+organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
+
 ## Audit log
 
 - **2026-07-20 (Opus 4.8, full engine + web sweep):** No rules bugs found.
