@@ -1,17 +1,7 @@
-import type { BetKind, BetPayout } from "./engine/types";
+import type { BetPayout } from "./engine/types";
+import { sideKey } from "./betKind";
 import { formatCents } from "./format";
 
-/**
- * The side-bet key a payout carries: "PlayerPair", … or, for the two-sided
- * Dragon Bonus, "DragonBonusPlayer" / "DragonBonusBanker" — both sides are on
- * the felt, so the note has to name which one paid.
- */
-function sideKey(kind: BetKind): string | null {
-  if (typeof kind === "object" && "Side" in kind) {
-    return typeof kind.Side === "string" ? kind.Side : `DragonBonus${kind.Side.DragonBonus}`;
-  }
-  return null;
-}
 
 /**
  * A tie leaves Player and Banker bets pushing — stake returned, nothing won or

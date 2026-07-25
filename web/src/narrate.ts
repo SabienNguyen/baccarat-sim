@@ -6,8 +6,8 @@ import type {
   HandView,
   Rank,
   BetPayout,
-  BetKind,
 } from "./engine/types";
+import { sideKey } from "./betKind";
 import { formatCents } from "./format";
 import type { Flip } from "./cards";
 
@@ -152,14 +152,6 @@ const SIDE_CALLS: Record<string, { label: string; odds: string; term: string }> 
   TigerPair: { label: "Tiger Pair", odds: "paid", term: "tiger-pair" },
 };
 
-function sideKey(kind: BetKind): string | null {
-  if (typeof kind === "object" && "Side" in kind) {
-    // Both Dragon Bonus sides are on the felt, so the key carries which one —
-    // otherwise the dealer calls "Dragon Bonus" without saying whose.
-    return typeof kind.Side === "string" ? kind.Side : `DragonBonus${kind.Side.DragonBonus}`;
-  }
-  return null;
-}
 
 /** The dealer points at every bonus that hit. */
 function bonusCalls(payouts: BetPayout[] | null): NarrationSegment[] {
