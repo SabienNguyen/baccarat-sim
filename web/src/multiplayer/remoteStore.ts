@@ -90,6 +90,11 @@ export function createRemoteStore(opts: {
       }),
 
     newShoe: () => send({ type: "new_shoe" }),
+
+    // A seat's bankroll is the server's to change, and multiplayer bust/rebuy
+    // handling isn't built yet (backlog F6/F7) — `busted` is hardcoded false
+    // here, so this is never reached. No-op rather than faking money locally.
+    rebuy: () => {},
   }));
 
   const handle = (msg: ServerMsg) => {

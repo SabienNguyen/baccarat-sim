@@ -274,7 +274,9 @@ impl Session {
             payouts,
             events: derive_events(round, reveal),
             scoreboard: self.scoreboard(),
-            explain: round.trace.clone(),
+            // Gated like `outcome` above: the trace names the cards outright, so
+            // it can't be sent while any card is still face down.
+            explain: if fully_revealed { round.trace.clone() } else { Vec::new() },
         }
     }
 
@@ -421,6 +423,12 @@ pub(crate) fn hand_view(hand: &Hand, status: &[CardStatus]) -> HandView {
         .collect();
     let all_up = !hand.cards.is_empty() && status.iter().all(|s| matches!(s, CardStatus::FaceUp));
     HandView { cards, total: if all_up { Some(hand.total()) } else { None } }
+}
+
+/// Every card in both hands is face up — nothing left to spoil.
+pub(crate) fn fully_revealed(reveal: &RevealState) -> bool {
+    let up = |s: &[CardStatus]| !s.is_empty() && s.iter().all(|c| matches!(c, CardStatus::FaceUp));
+    up(&reveal.player) && up(&reveal.banker)
 }
 
 pub(crate) fn derive_events(round: &RoundResult, reveal: &RevealState) -> Vec<Event> {

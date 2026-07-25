@@ -15,7 +15,6 @@ import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail, type BetView } from "./components/BetRail";
 import { BonusNudge } from "./components/BonusNudge";
-import { chipFace } from "./components/Chip";
 import { bonusWouldWin } from "./bonusNudge";
 import { Controls } from "./components/Controls";
 import { Scoreboard } from "./components/Scoreboard";
@@ -228,14 +227,6 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
     };
   }, [seats, snapshot.phase, busted, goalReached, newHand]);
 
-  /** Tap the nudge: open the next hand and drop the armed chip on that bonus. */
-  function betNudge() {
-    if (nudge === null) return;
-    setBetView("bonus");
-    newHand();
-    stake(nudge.kind);
-  }
-
   return (
     <div className="app">
       <Hud
@@ -290,12 +281,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
           onSitOut={seats !== null ? sitOut : undefined}
         />
         {showNudge && nudge !== null && (
-          <BonusNudge
-            hit={nudge}
-            betLabel={`bet ${chipFace(selectedChip)} next hand`}
-            onBet={betNudge}
-            onDismiss={() => setDismissedNudgeSeq(settleSeq)}
-          />
+          <BonusNudge hit={nudge} onDismiss={() => setDismissedNudgeSeq(settleSeq)} />
         )}
         <BetRail
           snapshot={snapshot}

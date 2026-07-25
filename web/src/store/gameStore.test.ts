@@ -243,6 +243,30 @@ test("a settle that leaves the roll under the table minimum busts the run", () =
   expect(store.getState().busted).toBe(true);
 });
 
+test("re-buying clears the bust and sweeps the felt without a new shoe", () => {
+  const broke = snapshotWith({ phase: "Settled", bankroll: 300, payouts: [] });
+  const toppedUp = snapshotWith({ phase: "Settled", bankroll: 50_300, payouts: [] });
+  const rebuy = vi.fn(() => ({ ok: true as const, snapshot: toppedUp }));
+  const newShoe = vi.fn(() => ({ ok: true as const, snapshot: broke }));
+  const store = createGameStore({
+    ...fakeSession({ ok: true, snapshot: broke }),
+    newShoe,
+    rebuy,
+  });
+  store.getState().settle();
+  expect(store.getState().busted).toBe(true);
+
+  store.getState().rebuy(50_000);
+  expect(rebuy).toHaveBeenCalledWith(50_000);
+  expect(store.getState().busted).toBe(false);
+  expect(store.getState().snapshot.bankroll).toBe(50_300);
+  // back to a clean betting felt...
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  expect(store.getState().snapshot.payouts).toBeNull();
+  // ...and emphatically NOT by reshuffling: handing over cash keeps the shoe.
+  expect(newShoe).not.toHaveBeenCalled();
+});
+
 test("a settle that keeps the roll at or above the minimum does not bust", () => {
   const alive = snapshotWith({ phase: "Settled", bankroll: 500, payouts: [] });
   const store = createGameStore(fakeSession({ ok: true, snapshot: alive }));

@@ -72,6 +72,11 @@ export interface GameState {
   /** Start the next hand from the same shoe after a settled round. */
   newHand: () => void;
   newShoe: () => void;
+  /**
+   * Buy back in for `amountCents` and keep playing the same shoe — the roads
+   * and the shoe's position survive, as they would in a real pit.
+   */
+  rebuy: (amountCents: number) => void;
 }
 
 export function createGameStore(
@@ -206,6 +211,33 @@ export function createGameStore(
         }),
 
       newShoe: () => apply(session.newShoe()),
+
+      rebuy: (amountCents) => {
+        if (!session.rebuy) return; // multiplayer seats re-buy through the server
+        const result = session.rebuy(amountCents);
+        if (result.ok) {
+          // The run is alive again: clear the bust and sweep the dead round's
+          // felt, but leave the shoe and the roads exactly where they were.
+          set({
+            snapshot: {
+              ...result.snapshot,
+              phase: "Betting",
+              payouts: null,
+              outcome: null,
+              events: [],
+              explain: [],
+              player: { cards: [], total: null },
+              banker: { cards: [], total: null },
+            },
+            busted: false,
+            lastError: null,
+            lastDelta: null,
+            lastFlip: null,
+          });
+        } else {
+          apply(result);
+        }
+      },
     };
   });
 }

@@ -184,6 +184,17 @@ impl WasmTable {
         self.view()
     }
 
+    /// Buy more chips and keep playing the SAME shoe (no reshuffle, roads intact).
+    pub fn rebuy(&mut self, amount: i64) -> Result<TableView, JsValue> {
+        self.inner.rebuy(self.me, amount).map_err(table_err)?;
+        self.view()
+    }
+
+    /// Cards left before the cut card forces a shuffle.
+    pub fn shoe_remaining(&self) -> usize {
+        self.inner.shoe_remaining()
+    }
+
     pub fn deal(&mut self) -> Result<TableView, JsValue> {
         self.inner.deal().map_err(table_err)?;
         self.view()

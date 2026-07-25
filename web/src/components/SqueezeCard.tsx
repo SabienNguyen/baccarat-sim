@@ -125,6 +125,15 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
 
   function handlePointerDown(e: ReactPointerEvent) {
     if (faceUp) return;
+    // Drop any stray highlight first. A live text selection anywhere on the
+    // page makes the browser treat the next drag as a selection drag, which
+    // leaves the peel stuck mid-squeeze.
+    try {
+      const sel = typeof window !== "undefined" ? window.getSelection() : null;
+      if (sel && !sel.isCollapsed) sel.removeAllRanges();
+    } catch {
+      /* selection API unavailable — the gesture still works */
+    }
     cancelAnimationFrame(springRaf.current);
     const rect = cardPaddingBox(e.currentTarget);
     start.current = {
@@ -301,12 +310,21 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       role="button"
       // a folding card rises above its neighbors — the wrapper must carry
       // the z-order, since the card's own z-index can't escape it
-      style={{ touchAction: "none", position: "relative", zIndex: fold || glActive ? 3 : undefined }}
+      style={{
+        touchAction: "none",
+        position: "relative",
+        zIndex: fold || glActive ? 3 : undefined,
+        userSelect: "none",
+        WebkitUserSelect: "none",
+      }}
       tabIndex={faceUp ? -1 : 0}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      // A drag that starts on a card must squeeze it, never begin a native
+      // text/element drag — that hijacks the gesture mid-pull.
+      onDragStart={(e) => e.preventDefault()}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
     >

@@ -214,7 +214,7 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
   }
 });
 
-test("single-player: an unbet bonus that hit shows the nudge, and one tap bets it next hand", async () => {
+test("single-player: an unbet bonus that hit is reported, but never offered as a bet", async () => {
   const pairWin: RoundSnapshot = {
     ...dealingSnapshot(),
     phase: "Settled",
@@ -239,9 +239,16 @@ test("single-player: an unbet bonus that hit shows the nudge, and one tap bets i
   const placeBet = vi.fn(() => okResult(pairWin));
   const store = createGameStore(fakeSession(pairWin, { placeBet }));
   render(<App store={store} />);
+  // it teaches that the bonus exists and what it pays...
   expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: /bet .* next hand/ }));
-  expect(placeBet).toHaveBeenCalledWith({ Side: "PlayerPair" }, expect.any(Number));
+  expect(screen.getByText(/pays 11:1/)).toBeInTheDocument();
+  // ...but must NOT invite a chase: a bonus hitting says nothing about the next
+  // coup, and the side bets carry the worst edges on the table.
+  expect(screen.queryByRole("button", { name: /bet .* next hand/ })).toBeNull();
+  // the only control is dismissing the notice, which places no bet
+  await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(placeBet).not.toHaveBeenCalled();
+  expect(screen.queryByText(/PLAYER PAIR JUST HIT/)).toBeNull();
 });
 
 test("single-player: a winning-bonus hand auto-advances after the delay, clearing the banner", () => {
