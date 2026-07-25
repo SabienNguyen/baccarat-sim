@@ -288,12 +288,25 @@
    the stack landed straight on the odds and made them unreadable. Once you have
    money down the amount is what you look at, and the odds are a tap away in the
    ⓘ panel, so the payout stands aside and the name moves to the top. */
-.spot--side.is-staked {
+/* The main arches are roomier, but a tall stack still climbed into the odds
+   pill, so they follow the same rule: once money is down the payout steps aside
+   and the name holds the top. Consistent across the whole felt, and it means the
+   tower always has clear air to grow into. */
+.spot.is-staked {
   justify-content: flex-start;
+}
+.spot.is-staked .spot-payout {
+  display: none;
+}
+.spot--side.is-staked {
   padding-top: 9px;
 }
-.spot--side.is-staked .spot-payout {
-  display: none;
+.spot--player.is-staked,
+.spot--banker.is-staked,
+.spot--tie.is-staked {
+  /* the arches curve inward at the top, so their label needs more clearance
+     than a circle's does */
+  padding-top: 18px;
 }
 
 /* --- responsive felt --- */
