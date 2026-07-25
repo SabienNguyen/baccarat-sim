@@ -51,6 +51,10 @@ body {
   margin: 0;
   font-family: var(--font-text);
   color: #f4ecd8;
+  /* Mobile polish: kill the iOS rubber-band / pull-to-refresh bounce and the
+     grey tap-flash on buttons, so the felt feels like an app, not a webpage. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
   /* layered radial greens + a swirl that slowly drifts */
   background-color: var(--felt-deep);
   background-image:
@@ -97,8 +101,16 @@ body {
   grid-template-columns: 340px minmax(0, 1fr) 340px;
   grid-template-areas: "hud stage board";
   gap: 20px;
+  /* 100dvh (dynamic viewport) so iOS Safari's collapsing URL bar can't hide
+     the bottom of the table under the toolbar; 100vh is the fallback. */
   min-height: 100vh;
-  padding: 16px;
+  min-height: 100dvh;
+  /* respect the notch / home indicator on iOS */
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   /* keep the table, HUD, and roads clustered on big screens */
   max-width: 1560px;
   margin: 0 auto;
