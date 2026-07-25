@@ -48,6 +48,16 @@
   line-height: 1.6;
   text-align: center;
 }
+/* The table-limits string is the longest text in the HUD and doesn't fit its box
+   on the narrowest phones, where it pushed 2px past the viewport. Only wrap it
+   there: constraining it unconditionally costs a line of height at 375–390px,
+   which the phone layout can't spare. */
+@media (max-width: 340px) {
+  .hud-box-value--small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
 /* the money is the star */
 .hud-box--bankroll .hud-box-value {
   color: var(--gold);

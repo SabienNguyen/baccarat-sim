@@ -107,6 +107,44 @@ test("an external view prop drives the felt (the nudge can open BONUS)", () => {
   expect(screen.queryByRole("button", { name: "Bet Player" })).toBeNull();
 });
 
+// jsdom has no layout, so it cannot catch the overflow itself — the felt ran
+// off a phone screen because a horizontal row of chips forced every grid column
+// past its 1fr share. What it *can* pin is the structure the CSS fix depends on:
+// a stack indexed per chip, and an amount that is a sibling of the stack rather
+// than sitting inside it. Both are asserted here; the layout is measured in a
+// real browser (see the F14 entry in docs/BACKLOG.md).
+describe("a staked spot builds a chip tower, not a row", () => {
+  const staked = () =>
+    bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 7_500 }] });
+
+  test("the spot is flagged as staked so CSS can rearrange it", () => {
+    render(<BetRail snapshot={staked()} {...noopProps} />);
+    expect(screen.getByRole("button", { name: "Bet Player" })).toHaveClass("is-staked");
+    expect(screen.getByRole("button", { name: "Bet Banker" })).not.toHaveClass("is-staked");
+  });
+
+  test("each chip carries its height in the stack", () => {
+    const { container } = render(<BetRail snapshot={staked()} {...noopProps} />);
+    const chips = [...container.querySelectorAll(".spot-chips .mini-chip")];
+    expect(chips.length).toBeGreaterThan(1);
+    // 0, 1, 2, … bottom to top — CSS turns this into the vertical offset.
+    chips.forEach((chip, i) => {
+      expect((chip as HTMLElement).style.getPropertyValue("--i")).toBe(String(i));
+    });
+  });
+
+  test("the amount is a sibling of the stack, so neither can widen the spot", () => {
+    const { container } = render(<BetRail snapshot={staked()} {...noopProps} />);
+    const stack = container.querySelector(".spot-chips")!;
+    const stake = container.querySelector(".spot-stake")!;
+    expect(stake).not.toBeNull();
+    expect(stack.contains(stake)).toBe(false);
+    expect(stake.parentElement).toBe(stack.parentElement);
+    // The tower is decoration; the amount text carries the value.
+    expect(stack).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
 test("the info icon opens the bonus-bets explainer", async () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   await userEvent.click(screen.getByRole("button", { name: "What are the bonus bets?" }));
