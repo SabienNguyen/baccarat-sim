@@ -391,7 +391,10 @@
   }
   .card-stage {
     gap: 12px;
-    min-height: 168px;
+    /* Just enough for a card (83px) plus its label and total badge. The old
+       168px reserve was pushing the bet spots and chip rail off a phone
+       screen, which is worse than a few pixels of settle when cards land. */
+    min-height: 128px;
   }
   .card-pip {
     font-size: 10px;

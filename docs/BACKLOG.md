@@ -164,6 +164,20 @@ two-plus places to update with nothing to catch drift.
 | C6 | Client hardening hygiene: null `onmessage`/`onopen` alongside `onclose` on `Multiplayer` unmount so a message in flight during `close()` can't fire a stale closure (harmless no-op in React 18 today, tidied for defense-in-depth) | S | ✅ fixed 2026-07-24 |
 | C7 | UI hygiene (2026-07-24 audit pass): `shareRun` guards `new File`/`canShare` inside its try and treats an `AbortError` cancel as a stop (no second share sheet / silent clipboard write) — honoring its "never throws" contract; deferred `revokeObjectURL`; `?room=` capped to 6 chars before use/send; invite-copy `setTimeout` cleared on unmount; dev `devAlmostWin` import got a `.catch`; `build-content.mjs` escapes `<`/U+2028/U+2029 in JSON-LD (latent-trap guard) | S | ✅ done 2026-07-24 (shareCard abort test) |
 
+## Mobile / small screens
+
+Phone play was never designed for: at a 390x664 iPhone viewport the table was
+**1810px tall (~2.7 screens)**, so the felt, the chips and the Deal button could
+never be seen together. Measured per-section and fixed the biggest offenders.
+
+| # | Item | Effort | Status |
+|---|------|--------|--------|
+| P1 | iOS viewport foundations — `100vh` hid content under Safari's collapsing URL bar; no safe-area handling (notch / home indicator); rubber-band bounce + grey tap-flash | S | ✅ fixed 2026-07-24 (`100dvh` with `vh` fallback, `viewport-fit=cover` + `env(safe-area-inset-*)` padding, `overscroll-behavior` scoped to `pointer: coarse` so desktop keeps native elastic scroll / trackpad swipe-back) |
+| P2 | Phone layout: HUD was pinned to `min-height: 460px` to mirror the desktop road dock (~440px of dead space); the primary action sat stranded between the felt and the chip rail; the card zone reserved 168px of empty felt | M | ✅ fixed 2026-07-24 — HUD reordered first + compacted to a 2-col stat grid (437→~190px), action bar pinned to the bottom (44px thumb targets, safe-area aware), card reserve 168→128px (verified no layout shift when cards land). Total **1810→1515px**; bankroll, dealer line, felt and all three bet spots now sit above the fold |
+| P3 | Chip rack still ~70px below the fold at 390x664 — a pre-armed chip means tapping a spot works without scrolling, but the denominations need a nudge. Needs real compaction (smaller spot arcs / a horizontal chip strip), not more padding trims | M | open — CSS-only trimming hit diminishing returns; next step is a phone-specific bet-rail layout |
+| P4 | Landscape: a baccarat table is naturally wide, and phones in landscape have the aspect ratio the desktop layout wants. No landscape-specific handling today | M | open — consider a `(orientation: landscape) and (max-height: 500px)` layout reusing the 2-column grid |
+| P5 | Verify on real iOS Safari — all of the above was measured in headless Chromium at an iPhone viewport, where `env(safe-area-inset-*)` resolves to 0 and there is no URL-bar collapse, so the dvh/safe-area wins are reasoned rather than observed | S | open — needs a device/simulator pass |
+
 ## Tooling / DevEx / CI
 
 Previously untracked area — no lint config, no PR gate, and several hygiene

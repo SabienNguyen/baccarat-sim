@@ -309,8 +309,11 @@
     gap: 8px;
   }
   .rail-hint {
-    font-size: 15px;
-    flex-basis: 100%;
+    font-size: 14px;
+    /* Share the row with "Clear bets" instead of forcing a line each — two
+       stacked rows here was pushing the chip rack off a phone screen. */
+    flex-basis: auto;
+    min-width: 0;
   }
 }
 
