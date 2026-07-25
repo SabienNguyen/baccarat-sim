@@ -51,9 +51,7 @@ body {
   margin: 0;
   font-family: var(--font-text);
   color: #f4ecd8;
-  /* Mobile polish: kill the iOS rubber-band / pull-to-refresh bounce and the
-     grey tap-flash on buttons, so the felt feels like an app, not a webpage. */
-  overscroll-behavior: none;
+  /* No grey tap-flash on buttons (touch only; a no-op with a mouse). */
   -webkit-tap-highlight-color: transparent;
   /* layered radial greens + a swirl that slowly drifts */
   background-color: var(--felt-deep);
@@ -64,6 +62,16 @@ body {
   background-attachment: fixed;
   background-size: 140% 140%, 160% 160%, 200% 200%;
   animation: felt-swirl 40s ease-in-out infinite alternate;
+}
+
+/* Touch devices only: kill the iOS rubber-band / pull-to-refresh bounce so the
+   felt feels like an app. Deliberately NOT applied with a mouse — on desktop it
+   would also suppress macOS elastic scrolling and trackpad swipe-back, which
+   are native behaviors this game has no business overriding. */
+@media (pointer: coarse) {
+  body {
+    overscroll-behavior: none;
+  }
 }
 
 @keyframes felt-swirl {
@@ -184,7 +192,14 @@ body {
       "hud"
       "board";
     gap: 12px;
-    padding: 10px;
+    /* Keep the safe-area insets here too — a bare `padding: 10px` would
+       override the base rule's env() padding at exactly the width where the
+       notch and home indicator actually exist. */
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
   }
   .app .hud,
   .app .board {
