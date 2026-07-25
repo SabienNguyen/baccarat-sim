@@ -1297,6 +1297,71 @@ mod tests {
         eprintln!("coups per shoe over {n} shoes: mean {mean:.1}, min {min}, max {max}");
     }
 
+    /// Do players actually reach the end of a shoe (~80 coups), or does the run
+    /// end first? Flat-bets Banker at the Low table ($500 roll, $1 min, $5,000
+    /// goal) across a range of stake sizes.
+    /// `cargo test -p baccarat-engine --release runs_vs_shoe_length -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn runs_vs_shoe_length() {
+        const SHOE: u32 = 80; // measured mean, see coups_per_shoe
+        const GOAL: i64 = 500_000;
+        const BUY_IN: i64 = 50_000;
+        const MIN: i64 = 100;
+        eprintln!("stake     median hands   reach 1 shoe   hit goal   bust");
+        for stake in [100i64, 500, 2_500, 10_000, 50_000] {
+            let runs = 600u32;
+            let (mut lens, mut shoe_end, mut goals, mut busts) = (Vec::new(), 0u32, 0u32, 0u32);
+            for seed in 0..runs as u64 {
+                let mut t = Table::new(
+                    TableConfig {
+                        table_min: MIN,
+                        table_max: 50_000,
+                        ruleset: Ruleset::Commission,
+                        max_seats: 1,
+                    },
+                    seed,
+                );
+                let p = t.join("p", BUY_IN).unwrap();
+                let mut hands = 0u32;
+                loop {
+                    let roll = t.view_for(p).unwrap().bankroll;
+                    if roll >= GOAL {
+                        goals += 1;
+                        break;
+                    }
+                    if roll < MIN {
+                        busts += 1;
+                        break;
+                    }
+                    if hands >= 240 {
+                        break; // grinder: cap at ~3 shoes
+                    }
+                    let bet = stake.min(roll).max(MIN);
+                    t.place_bet(p, BetKind::Main(BetSpot::Banker), bet).unwrap();
+                    t.deal().unwrap();
+                    t.settle().unwrap();
+                    hands += 1;
+                }
+                if hands >= SHOE {
+                    shoe_end += 1;
+                }
+                lens.push(hands);
+            }
+            lens.sort_unstable();
+            let median = lens[lens.len() / 2];
+            let pct = |n: u32| 100.0 * n as f64 / runs as f64;
+            eprintln!(
+                "${:<8} {:<14} {:<14.1} {:<10.1} {:.1}",
+                stake / 100,
+                median,
+                pct(shoe_end),
+                pct(goals),
+                pct(busts)
+            );
+        }
+    }
+
     #[test]
     fn scoreboard_cache_stays_fresh_and_consistent() {
         // The memoized scoreboard must grow by one bead each settled coup (not
