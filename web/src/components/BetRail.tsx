@@ -44,7 +44,15 @@ const SIDE_SPOTS: Spot[] = [
   { label: "Banker Pair", display: "B PAIR", payout: "11:1", kind: { Side: "BankerPair" } },
   { label: "Dragon 7", display: "DRAGON 7", payout: "40:1", kind: { Side: "Dragon7" } },
   { label: "Panda 8", display: "PANDA 8", payout: "25:1", kind: { Side: "Panda8" } },
-  { label: "Dragon Bonus", display: "DRAGON", payout: "BONUS", kind: { Side: { DragonBonus: "Player" } } },
+  // NB: a different bet from Dragon 7 above, despite the shared word. This one
+  // is the Player-side Dragon Bonus (win by a margin / natural), so it takes the
+  // "P PAIR"-style prefix and states its ladder instead of saying just "BONUS".
+  {
+    label: "Player Dragon Bonus",
+    display: "P DRAGON",
+    payout: "TO 30:1",
+    kind: { Side: { DragonBonus: "Player" } },
+  },
   { label: "Tiger", display: "TIGER", payout: "12-20:1", kind: { Side: "Tiger" } },
 ];
 
