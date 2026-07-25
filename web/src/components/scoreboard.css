@@ -82,6 +82,8 @@
   gap: 3px;
 }
 .road-grid li {
+  /* anchor for the pair dots and the bonus token */
+  position: relative;
   width: 27px;
   height: 27px;
   display: flex;
@@ -107,6 +109,39 @@
   color: var(--chip-red);
   text-shadow: none;
 }
+/* --- marks a real pit display stamps on a Big Road cell ---
+   Pair dots keep the traditional positions (Player top-left in blue, Banker
+   bottom-right in red); square rather than round so they sit with the game's
+   pixel look. The animal token takes the free bottom-left corner. */
+.pair-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--ink);
+  pointer-events: none;
+}
+.pair-dot--player {
+  top: -3px;
+  left: -3px;
+  background: var(--chip-blue);
+}
+.pair-dot--banker {
+  right: -3px;
+  bottom: -3px;
+  background: var(--chip-red);
+}
+.bonus-token {
+  position: absolute;
+  /* hung off the ring's bottom-left so it never sits over the P/B letter */
+  left: -6px;
+  bottom: -6px;
+  /* crisp pixel edges, never smoothed */
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.35));
+}
+
 /* derived roads keep their red/blue marks */
 .road-grid li[data-mark="Red"] {
   color: var(--chip-red);

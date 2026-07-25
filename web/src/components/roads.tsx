@@ -10,6 +10,7 @@ import type {
   Mark,
 } from "../engine/types";
 import { glossaryEntry } from "../glossaryData";
+import { BonusToken, type BonusKind } from "./roadTokens";
 import "./glossary.css";
 
 /**
@@ -81,6 +82,32 @@ function bigRoadLabel(cell: BigRoadCell): string {
   return cell.ties > 0 ? `${base}/${cell.ties}` : base;
 }
 
+/**
+ * The animal bonus stamped on this cell, if any. At most one can apply — a
+ * Dragon 7 is a banker three-card 7, a Panda 8 a player three-card 8, and a
+ * Tiger a banker 6 — so the order here is just a tiebreak that never fires.
+ */
+function bonusOf(cell: BigRoadCell): BonusKind | null {
+  if (cell.dragon7) return "dragon";
+  if (cell.panda8) return "panda";
+  if (cell.tiger) return "tiger";
+  return null;
+}
+
+/** Pair marks and the bonus token a real pit display stamps on a win cell. */
+function CellMarks({ cell }: { cell: BigRoadCell }) {
+  const bonus = bonusOf(cell);
+  return (
+    <>
+      {/* the traditional pair dots: Player blue at the top-left, Banker red at
+          the bottom-right, exactly where a pit display puts them */}
+      {cell.player_pair && <span className="pair-dot pair-dot--player" title="Player pair" />}
+      {cell.banker_pair && <span className="pair-dot pair-dot--banker" title="Banker pair" />}
+      {bonus && <BonusToken kind={bonus} size={11} />}
+    </>
+  );
+}
+
 export function BeadPlateView({ plate }: { plate: BeadPlate }) {
   return (
     <div aria-label="Bead Plate" className="road bead">
@@ -107,6 +134,7 @@ export function BigRoadView({ road }: { road: BigRoad }) {
             {col.map((cell, ri) => (
               <li key={ri} data-side={cell.side}>
                 {bigRoadLabel(cell)}
+                <CellMarks cell={cell} />
               </li>
             ))}
           </ul>
