@@ -305,12 +305,22 @@
     line-height: 13px;
   }
   .rail-row {
-    flex-wrap: wrap;
+    /* One row, not two: the hint shrinks (min-width: 0) so "Clear bets" sits
+       beside it. Wrapping here cost a whole row of height on the screen that
+       can least afford it. */
+    flex-wrap: nowrap;
     gap: 8px;
+    min-height: 40px;
+  }
+  .seg-half {
+    padding: 8px 16px;
   }
   .rail-hint {
-    font-size: 15px;
-    flex-basis: 100%;
+    font-size: 14px;
+    /* Share the row with "Clear bets" instead of forcing a line each — two
+       stacked rows here was pushing the chip rack off a phone screen. */
+    flex-basis: auto;
+    min-width: 0;
   }
 }
 

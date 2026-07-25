@@ -15,11 +15,22 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | S7 | `sweep`/`list_public` hold the global registry lock across every per-room `await` — one slow/held room lock stalls all creates/joins/lobby-refreshes floor-wide (O(rooms) serial locking each disconnect) | S/M | ✅ fixed 2026-07-24 (snapshot Arcs, release map lock, inspect rooms unlocked; sweep re-verifies candidates under the map lock with `try_lock` so a racing join can't lose its room) |
 | S5 | **Multiplayer settle popup/sound re-fired with a bogus $0 "push"** — `settleSeq` was keyed off `prev.phase !== "Settled"`, but the local `newHand()` sweeps phase to Betting while the server view stays Settled, so any other seat's action re-broadcast re-triggered it | S | ✅ fixed 2026-07-20 (fire only on genuine `Dealing→Settled` edge; regression test added) |
 | S6 | **`sweep()` orphaned a room during the create→seat handoff** — a freshly created room is empty until its creator seats, and any other client's disconnect-sweep in that gap dropped it from the registry while the creator seated into a now-unreachable room (under load, stranded 63/64) | S | ✅ fixed 2026-07-20 (`seated_once` flag + `SEAT_GRACE`; spare young un-seated rooms; 2 regression tests) |
-| S8 | **Invite-code brute force is unthrottled** — a private room's 6-char code (32^6 ≈ 1.07B) is its only privacy control, but `JoinRoom` guesses hit an O(1) lookup with no rate limit, no backoff, no failed-attempt logging, over any number of sockets | M | ✅ fixed 2026-07-24 (per-connection strike budget: 10 unknown-code joins closes the connection with a stated reason; every failed guess is logged) |
-| S9 | **A panic mid-command permanently wedges the room** — if `handle_command` unwinds (e.g. the H2 engine panics) the post-loop cleanup in `main.rs:107-116` never runs, leaving a ghost `conns` entry whose seat blocks `deal()` forever via `WaitingOnPlayers`; only a process restart recovers, and nothing is logged | M | ✅ fixed 2026-07-24 (`catch_unwind` around dispatch: a panic logs an error, tells the client, and falls through to the normal seat cleanup instead of skipping it) |
+| S8 | **Invite-code brute force is unthrottled** — a private room's 6-char code (32^6 ≈ 1.07B) is its only privacy control, but `JoinRoom` guesses hit an O(1) lookup with no rate limit, no backoff, no failed-attempt logging, over any number of sockets | M | ⚙ tightened 2026-07-24: per-connection strike budget (10 unknown-code joins → close). **Audit follow-up 2026-07-24:** the budget reset fired on *any* lookup hit (incl. an already-known code), so interleaving one valid code every few guesses reset it forever on one socket — now resets only on a **real seating** (`sit` returns whether it seated). Residual per-connection reconnect / leave-rejoin bypass still needs the S11 per-IP counter |
+| S9 | **A panic mid-command permanently wedges the room** — if `handle_command` unwinds (e.g. the H2 engine panics) the post-loop cleanup in `main.rs:107-116` never runs, leaving a ghost `conns` entry whose seat blocks `deal()` forever via `WaitingOnPlayers`; only a process restart recovers, and nothing is logged | M | ✅ fixed 2026-07-24 (`catch_unwind` around dispatch: a panic logs an error, tells the client, and falls through to the normal seat cleanup instead of skipping it). **Audit follow-up 2026-07-24:** the sibling `maybe_pace` background task had the SAME wedge (a panic would leave `pacing=true`, soft-locking all future house flips) and no guard — now wrapped in `catch_unwind` that always clears `pacing` and logs |
 | S10 | Per-connection outbound `mpsc::unbounded_channel` has no bound or backpressure — a stalled client accumulates queued `State` broadcasts without limit (every accepted command from any seat pushes another) | S | ✅ fixed 2026-07-24 (bounded at `OUT_QUEUE=256`, `try_send` drops overflow — every `State` is a full snapshot so a later one supersedes; a dead client is reaped by the idle timeout) |
 | S11 | No cap on raw WebSocket connections (total or per-IP) — `MAX_ROOMS`/`MAX_SEATS` bound rooms, but an attacker can hold unlimited idle sockets, each with a reader + writer task | M | ✅ mostly fixed 2026-07-24 (global `MAX_CONNS=1024` RAII-counted cap, refused upgrades logged; per-IP accounting still open — needs `ConnectInfo` plumbing) |
+| S13 | **Peeked cards broadcast their full identity to every seat** — `check_rights` gated who may *peek*, but `view_for` sent the same `Peeked { sliver: Pip { suit, rank } }` to all viewers, so any client at the table read the exact card the squeezer was privately bending up. Defeats the squeeze's information asymmetry at the data level for networked seats | S | ✅ fixed 2026-07-24 (per-viewer redaction in `view_for`: another player's peek renders as `FaceDown` until revealed; solo tables unaffected; regression test) |
+| S14 | Squeeze tie-break inverted — `max_by_key` returns the *last* max, so tied stakes gave the squeeze to the later-seated player, contradicting the documented "ties: first seated" | S | ✅ fixed 2026-07-24 (strict-`>` fold in seat order; regression test) |
+| S15 | Stale `outcome` in Betting views — cleared only at `deal()`, while `payouts`/cards/explain reset per-player on re-bet, so a re-betting player's "fresh coup" view still carried the previous round's outcome | S | ✅ fixed 2026-07-24 (gated on the viewer's own `payouts`, same as the other settled-display fields; regression test) |
 | S12 | **Fly autoscale-to-zero silently destroys live games** — `min_machines_running=0` + zero persistence means a routine cost-saving stop wipes every room mid-hand; compounded by no graceful shutdown (`axum::serve` has no shutdown hook), so even deploys hard-reset sockets with no `Closed{reason}` | M | ⚙ half fixed 2026-07-24: SIGTERM/ctrl-c now broadcasts "the casino is closing" to every table and drains before exit. The keep-warm decision (`min_machines_running=1` vs accepting resets) is still open — it's a cost call |
+| S16 | **`view_for` fully buffered oversized WebSocket frames before the 4 KiB check** — the app-level `text.len() > 4096` guard runs only *after* tungstenite reassembles/UTF-8-validates the whole message, and its defaults allow 64 MiB; a client could stream near-64 MiB frames (allocated then discarded) across `MAX_CONNS` sockets for a memory/CPU amplification DoS | S | ✅ fixed 2026-07-24 (`max_message_size`/`max_frame_size = 8 KiB` set on the upgrade, rejecting oversized frames at the transport before buffering; app-level 4 KiB check kept as defense in depth) |
+| S17 | **`sweep()` can orphan a live room that a `JoinRoom` is racing** — `get()` clones the room Arc and releases the map lock before `sit()` locks the room, so a disconnect-triggered sweep on a momentarily-empty (`seated_once`) room can reap it between the joiner's `get` and `lock`; the joiner then seats into a room no longer in the registry, invisible to everyone else and burning strikes for a valid code. Pre-existing (the two-phase sweep didn't introduce it — `get`→`lock` was never atomic), timing-dependent, no money/data impact | M | open — needs an in-flight-join marker (atomic on `Room` bumped by `get`, checked by sweep) or fold the final empty-check + removal into one critical section that also excludes pending joins |
+| H28 | A dropped one-shot control message (`Joined`, `Closed`, `Left`) can wedge a client — unlike `State`/`Rooms` these aren't supersede-able snapshots, but they ride the same bounded `try_send` that drops on a full queue. A client that fills its own queue then `CreateRoom`s is seated server-side but never learns it, holding a seat until the 5-min idle evict | S | open — reserve queue headroom (or a separate control channel) for one-shot messages, or have the client re-request state on a heartbeat |
+| S18 | **A malformed/version-skewed server push could white-screen the whole app** — the client did no runtime validation of `ServerMsg`/`TableView` (TypeScript casts only) and had no React ErrorBoundary, so one unguarded field access in the render tree (`snapshot.bets.reduce`, `seats.map`, …) unmounts the root to a blank page. Not reachable from a hostile peer (the server's serde types guarantee shape) but reachable via a protocol skew after a deploy — which the client only `console.warn`ed on and then rendered anyway | S | ✅ fixed 2026-07-24 (ErrorBoundary around the app → recoverable "table hit a snag" notice; `proto` mismatch is now a hard stop with a refresh prompt instead of building a store from an unknown shape; tests) |
+| S19 | **Peer display names weren't sanitized for Unicode control/format chars** — the server trimmed + capped to 24 chars but passed bidi overrides (U+202E), zero-width joiners, and the BOM straight through to every other seat's DOM, letting a peer render their own name reversed, blank, or spoofing another seat. Not XSS (React escapes text), a display-integrity/spoofing gap | S | ✅ fixed 2026-07-24 (`clean_name` strips control + format-category chars at the single `sit` choke point, then trims/caps; client adds `max-width`/ellipsis on the seat name; server unit test) |
+| S20 | Settle popup/sound can be skipped under outbound-queue backpressure — the client detects settlement off a strict `Dealing→Settled` phase edge, so if the intervening `Dealing` broadcast is the one dropped by `try_send` (S10), a solo-room player may miss the win/loss popup until their next action elicits a fresh push | S | open — key settle detection off a monotonic round id / "payouts newly non-null for a round we haven't shown," not a strict phase transition (touches server protocol + `remoteStore`) |
+| S21 | **`sit()` commits room-side state before the connection's own seat tracker** — `guard.seat()` inserts the player into `Room.conns`/`Table.players`, but `*seat` is set only after the fallible `view_for().expect()` + `broadcast()`; a panic there is caught by the dispatch `catch_unwind`, yet the disconnect cleanup keys off `seat.is_some()` and skips, leaving a ghost seat that wedges the room (the S9 class via a join-in-progress ordering gap). Not live-triggerable under current invariants but a landmine for any future fallible view/scoreboard step | M | ✅ fixed 2026-07-24 (commit `*seat` right after `guard.seat()`, before the fallible work) |
+| S22 | **`clean_name` missed the Unicode Tags block (Cf)** — S19 stripped bidi/zero-width chars, but `U+E0000–E007F` (invisible "ASCII smuggling" payloads), plus soft hyphen / arabic letter mark / mongolian vowel separator, passed through into every peer's `SeatView.name` — an invisible covert channel through the field hardened for exactly this | S | ✅ fixed 2026-07-24 (extended `is_format_char`; regression test) |
 
 ## Authenticity (gameplay matches a real pit)
 
@@ -67,7 +78,7 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | F2 | Expose remaining Tiger family bets (Big/Small Tiger 50:1/22:1, Tiger Tie 35:1, Tiger Pair) — implemented + tested in engine, absent from `SIDE_SPOTS` | S | `sidebets.rs`, `BetRail.tsx` |
 | F3 | Session statistics panel: P/B/T counts, pair frequency, longest streak | S | derive from `history`/scoreboard |
 | F4 | Multiplayer chat or emotes at the table | M | server protocol addition |
-| F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | `Multiplayer.tsx` |
+| F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | ✅ done 2026-07-24 (G5) |
 | F6 | Multiplayer bust handling: detect `bankroll < table_min`, show a rebuy/leave prompt, auto-sit-out so a broke player can't block deals (`busted` hardcoded false in remoteStore; MP `GameTable` has no `onReset`) | M | `remoteStore.ts:52`, `Multiplayer.tsx:168`, `App.tsx:307` — partially mitigated by S4/AFK (an idle broke player is now evicted after 5 min) |
 | F7 | Reconnect token: rejoin resumes the same seat + bankroll instead of a fresh buy-in (today a disconnect forfeits winnings; a busted player rejoins for a free full rebuy) | L | `table.rs:194`, protocol addition |
 | F8 | Separate side-bet minimum from `table_min` — today a $5 side bet needs $25 at a $25-min table; real tables enforce the min on main bets only | M | both `place_bet`s + table config |
@@ -80,8 +91,8 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 |---|------|--------|-------|
 | H1 | Explicit commission rounding policy in `settle.rs:33` — integer floor is exact today only because all denoms are ×100¢; a sub-dollar denom would silently under-charge | S | ✅ fixed 2026-07-24 (policy documented on `settle`: commission floors, fractional cent goes to the player; odd-cent regression test) |
 | H2 | Replace unreachable "card source exhausted" panics with graceful reshuffle fallback | S | ✅ addressed 2026-07-24: the invariant is now compile-time (`const` assert `CUT_CARD >= 6` in `shoe.rs`) so lowering the cut card can't re-arm the panics, and S9 contains the blast radius if one ever fires. The panic sites themselves stay — they're the correct crash-on-impossible behavior |
-| H3 | Self-host display fonts (Silkscreen, VT323) — first paint currently blocks on Google Fonts | S | `theme.css:1` |
-| H4 | `og:image` screenshot for link previews | S | `index.html` |
+| H3 | Self-host display fonts (Silkscreen, VT323) — first paint currently blocks on Google Fonts | S | ✅ done 2026-07-24 (G3) |
+| H4 | `og:image` screenshot for link previews | S | ✅ done 2026-07-24 (G2) |
 | M1 | First-time multiplayer squeeze hint (no "Reveal all" in MP by design; new players may not know to tap cards) | S | one-time tooltip |
 | H5 | Cross-tab bankroll sync via `storage` events / BroadcastChannel — two tabs at one tier clobber each other's persisted roll (last-writer-wins). Also add an upper cap so a hand-edited localStorage value isn't trusted | S | `useGameStore.ts:24`, `bankrollStorage.ts` |
 | H6 | `pointercancel` / `lostpointercapture` cleanup in `SqueezeCard` — an interrupted touch leaves the fold stuck mid-squeeze | S | ✅ fixed 2026-07-24 (`onPointerCancel` settles the fold — GL settle release or CSS clear — and swallows the trailing click; regression test) |
@@ -133,7 +144,7 @@ two-plus places to update with nothing to catch drift.
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
 | E1 | **Consolidate `Session` and `Table`, or document why both exist** — the shipped app only uses `Table` (max_seats=1 via `createTableSession`), leaving `Session` (767 lines + its half of the wasm bindings) product-dead yet carrying copy-pasted bet validation (`session.rs:185` vs `table.rs:208`) and payout dispatch (`session.rs:358` vs `table.rs:618`). They have already diverged: after `settle()`, `Session::snapshot()` drops the finished round while `Table::view_for` keeps it as `Settled` — the exact asymmetry `gameStore.ts:188`'s `newHand()` patches client-side | L | retire `Session`/`WasmSession`, or extract shared validation/settlement helpers both delegate to |
-| E2 | **Scoreboard recomputed from full history on every wasm call** — `derive_scoreboard` (O(n) over all rounds, all 5 roads) runs on every `place_bet`/`peek`/`reveal`/`settle`, ~8-10× per coup, i.e. O(n²) aggregate over a session, with the whole snapshot copied across the FFI each time | M | `session.rs:253,378`, `table.rs:584,607` — cache per settled round, invalidate on history change |
+| E2 | **Scoreboard recomputed from full history on every wasm call** — `derive_scoreboard` (O(n) over all rounds, all 5 roads) runs on every `place_bet`/`peek`/`reveal`/`settle`, ~8-10× per coup, i.e. O(n²) aggregate over a session, with the whole snapshot copied across the FFI each time. **Server angle:** on the multiplayer server this also runs per seated player per `broadcast()` — i.e. on every accepted command from any seat — and `Table.history` is never capped | M | ⚙ recompute half fixed 2026-07-24 (perf loop): memoized in `Table`/`Session` keyed on `history.len()` (append-only, so equal length ⇒ identical roads); within a coup only the first view recomputes, the rest are cache-hit clones (~1.4× cheaper at 800 rounds, gap widens with history — `#[ignore]` bench `scoreboard_recompute_vs_clone`; freshness test added; statistics suite bit-identical). Residual: the snapshot is still cloned + copied across the FFI each call (unavoidable without an API/`ScoreboardSnapshot`-versioning change, which would break the wire types), and `history` is still uncapped — both left open |
 | E3 | Banker third-card tableau implemented twice — `banker_draws` (boolean, `rules.rs:12-24`) and `banker_reason` (prose, `rules.rs:31-49`) are independent; a rule variant (A4) could update one and leave the explanation wrong while both test suites pass | S | derive both from one const tableau table |
 | E4 | The 6-element deal/reveal ritual order exists in **four** hand-synced copies: `table.rs:334` and `table.rs:429` (Rust), `App.tsx:118-125` (`revealAll`) and `cards.ts:62-69` (`lastFlipBetween`) (TS) | S | one shared const per language + a golden test tying TS to the engine |
 | E5 | Card-value logic duplicated TS-side — `RANK_VALUE`/`runningTotal` (`cards.ts:18-49`) mirror `card.rs:42`/`hand.rs:9` for mid-squeeze running totals; `bonusNudge.ts:26-47` likewise mirrors side-bet *hit conditions* from `sidebets.rs`. Legit UX reasons, but no shared fixture asserts the copies still match | S | golden-fixture test: engine-generated (cards → value/total, outcome → nudge candidates) verified against the TS implementations |
@@ -150,6 +161,22 @@ two-plus places to update with nothing to catch drift.
 | C3 | Extract a `useEscapeToClose` hook — the same 6-line window-keydown effect is copy-pasted in 3 modals; fold into the Y4 modal a11y pass | S | `BonusInfoModal.tsx:27`, `CutDeckModal.tsx:20`, `RoadsModal.tsx:12` |
 | C4 | Render-perf pass when warranted: zero `memo`/`useMemo`/`useCallback` anywhere means any of `GameTable`'s ~20 store slices re-renders the whole tree; `BetRail.stakedOn` does O(spots×bets) `JSON.stringify` per render | M | `App.tsx:84-109`, `BetRail.tsx:56-59` — profile first; fine at today's DOM size |
 | C5 | Codify that `probe.html`/`glprobe.html` are dev-only (currently excluded from prod build only by Vite's default single-entry behavior — a future multi-page config would silently ship them) | S | comment in `vite.config.ts` or move under a dev-only convention |
+| C6 | Client hardening hygiene: null `onmessage`/`onopen` alongside `onclose` on `Multiplayer` unmount so a message in flight during `close()` can't fire a stale closure (harmless no-op in React 18 today, tidied for defense-in-depth) | S | ✅ fixed 2026-07-24 |
+| C7 | UI hygiene (2026-07-24 audit pass): `shareRun` guards `new File`/`canShare` inside its try and treats an `AbortError` cancel as a stop (no second share sheet / silent clipboard write) — honoring its "never throws" contract; deferred `revokeObjectURL`; `?room=` capped to 6 chars before use/send; invite-copy `setTimeout` cleared on unmount; dev `devAlmostWin` import got a `.catch`; `build-content.mjs` escapes `<`/U+2028/U+2029 in JSON-LD (latent-trap guard) | S | ✅ done 2026-07-24 (shareCard abort test) |
+
+## Mobile / small screens
+
+Phone play was never designed for: at a 390x664 iPhone viewport the table was
+**1810px tall (~2.7 screens)**, so the felt, the chips and the Deal button could
+never be seen together. Measured per-section and fixed the biggest offenders.
+
+| # | Item | Effort | Status |
+|---|------|--------|--------|
+| P1 | iOS viewport foundations — `100vh` hid content under Safari's collapsing URL bar; no safe-area handling (notch / home indicator); rubber-band bounce + grey tap-flash | S | ✅ fixed 2026-07-24 (`100dvh` with `vh` fallback, `viewport-fit=cover` + `env(safe-area-inset-*)` padding, `overscroll-behavior` scoped to `pointer: coarse` so desktop keeps native elastic scroll / trackpad swipe-back) |
+| P2 | Phone layout: HUD was pinned to `min-height: 460px` to mirror the desktop road dock (~440px of dead space); the primary action sat stranded between the felt and the chip rail; the card zone reserved 168px of empty felt | M | ✅ fixed 2026-07-24 — HUD reordered first + compacted to a 2-col stat grid (437→~190px), action bar pinned to the bottom (44px thumb targets, safe-area aware), card reserve 168→128px (verified no layout shift when cards land). Total **1810→1515px**; bankroll, dealer line, felt and all three bet spots now sit above the fold |
+| P3 | Chip rack still ~70px below the fold at 390x664 — a pre-armed chip means tapping a spot works without scrolling, but the denominations need a nudge. Needs real compaction (smaller spot arcs / a horizontal chip strip), not more padding trims | M | open — CSS-only trimming hit diminishing returns; next step is a phone-specific bet-rail layout |
+| P4 | Landscape: a baccarat table is naturally wide, and phones in landscape have the aspect ratio the desktop layout wants. No landscape-specific handling today | M | open — consider a `(orientation: landscape) and (max-height: 500px)` layout reusing the 2-column grid |
+| P5 | Verify on real iOS Safari — all of the above was measured in headless Chromium at an iPhone viewport, where `env(safe-area-inset-*)` resolves to 0 and there is no URL-bar collapse, so the dvh/safe-area wins are reasoned rather than observed | S | open — needs a device/simulator pass |
 
 ## Tooling / DevEx / CI
 
@@ -168,6 +195,32 @@ is already zero-warning, so adopting the gates is cheap.
 | D7 | No one-command bootstrap — a newcomer must run `build:wasm` → `npm install` → dev server in order across two toolchains, with a confusing `npm install` failure if done backwards; multiplayer dev additionally needs a manual `cargo run -p baccarat-server` | S | root `setup`/`dev` scripts (chain wasm build; `concurrently` for server + vite) |
 | D8 | Dependency currency: React 18 / Vite 5 / Vitest 2 / zustand 4 (each ≥1 major behind, Vite 5 + Vitest 2 past support window), axum 0.7, rand 0.8 (see H27 before touching), `Cargo.lock` never updated in 50 commits; no Dependabot/Renovate | M | staged upgrades behind the D1/D2 CI gate |
 | D9 | tsconfig missing modern strictness: `noUncheckedIndexedAccess` (cheap insurance at the money boundary), `exactOptionalPropertyTypes`, `noImplicitOverride`, `verbatimModuleSyntax` | S | `web/tsconfig.json` |
+
+## Growth / traffic (code changes)
+
+Engineering levers to get players to the site. Full rationale + the distribution
+channel strategy (portals, Reddit, SEO wedge, Rust/WASM tech story, gambling
+policy per channel) live in `docs/GROWTH.md`. Ordered by ROI; the biggest lever
+is G7 (the SPA can never surface "learn baccarat" content to a non-JS crawler).
+
+| # | Item | Effort | Notes |
+|---|------|--------|-------|
+| G1 | Crawlability hygiene: `robots.txt`, `sitemap.xml`, canonical/`og:url`/`og:site_name`/Twitter Card/`robots` meta, JSON-LD `WebApplication` (co-typed, not bare `VideoGame`) | S | ✅ done 2026-07-24 (`web/public/robots.txt`+`sitemap.xml`, full meta/JSON-LD in `index.html`) |
+| G2 | Static `og:image` 1200×630 + `twitter:image` | S | ✅ done 2026-07-24 — closes H4 (`web/public/og-image.png`, pixel brand card) |
+| G3 | Self-host Silkscreen/VT323 fonts | S | ✅ done 2026-07-24 — closes H3 (`src/fonts/*.woff2` + `@font-face`, Vite-fingerprinted, base-safe) |
+| G4 | Privacy-friendly analytics (GoatCounter) + events: first-hand, returning-visitor, victory/bust, room-link vs lobby join | S | ⚙ wired 2026-07-24 (`analytics.ts` `track()`/`trackVisit()` — no-op until a backend is added; visit/victory/bust/share instrumented; enabling = one script tag + CSP allow, documented). first-hand + join-path events still to instrument |
+| G5 | `?room=CODE` deep link + copy full URL not bare code | S | ✅ done 2026-07-24 — closes F5 (`Multiplayer.tsx` auto-joins on connect; invite button copies the link) |
+| G6 | `?tier=` deep link (seed `App.tsx` from `location.search`) | S | ✅ done 2026-07-24 (`App.tsx` seeds tier/multi from the URL; `urlParams.ts`) |
+| G7 | **Static content pages** (`how-to-play/`, `glossary/`, `baccarat-roads/`) — real crawlable HTML with per-page title/meta/canonical/OG + Article/FAQ JSON-LD, linked from the `HomeScreen` "learn" nav + sitemap | M–L | ✅ done 2026-07-24 (`web/scripts/build-content.mjs`, self-contained Node so it runs in the cargo-less Docker web stage too; wired into `web build`; banker tableau mirrors `rules.rs` — audit-verified fixed rules; pages gitignored, generated each build) |
+| G8 | Client-side "share your run" canvas card on Victory/Bust + `navigator.share`/clipboard fallback, share text embeds `?tier=` link | M | ✅ done 2026-07-24 (`shareCard.ts` + Victory "Share run"; canvas image → Web Share → clipboard → download chain; tests) |
+| G9 | Service worker precaching hashed JS/CSS/wasm (cache-first; leave `/ws`); single-player is already offline-capable | M | `main.tsx`, new SW, `vite.config.ts` — return-visit retention |
+| G10 | Web app manifest + 192/512/maskable icons from `favicon.svg` | S | ✅ done 2026-07-24 (`manifest.webmanifest` + 3 PNG icons; install prompt enabled) |
+| G11 | (stretch) build-time static-render `HomeScreen` into `#root` as a progressive-enhancement shell | M | layered on G7, not instead |
+| G12 | (stretch) dynamic per-result OG image via a Fly `GET /share.png` route + server-rendered result HTML | L | needs request-time compute (Pages can't); couples to S12/H12 cold-start — do last, only if G8 proves demand |
+
+Suggested first PRs: **PR A** = G1+G2+G3+G4+G5+G6+G10 (~1 day, all S — links look
+real, traffic measurable, 1-click invite shipped); **PR B** = G7 (the durable
+organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
 
 ## Audit log
 
@@ -300,3 +353,51 @@ is already zero-warning, so adopting the gates is cheap.
   design: H5/H16/H17 (need product decisions), H13 (would break the
   Pages→fly WS default), S3/S4 (M-effort behavior changes), and everything in
   the E/C/D/T sections.
+- **2026-07-24 (continuous bug-hunt loop, iteration 1 — table lifecycle):**
+  Three confirmed engine bugs found and fixed same day, each reproduced with a
+  failing test first: the peeked-card identity broadcast (S13, the significant
+  one — every networked seat could read the squeezer's private sliver), the
+  inverted squeeze tie-break (S14), and the stale Betting-view outcome (S15).
+  Also traced and cleared as CORRECT: mid-deal leave settlement and money
+  conservation, squeezer-leaves card-flippability (no stuck coup possible),
+  heterogeneous settle/sit-out accounting, new_shoe phase guards, reshuffle
+  boundary consistency, and negative-bankroll sequences. Added a
+  `debug_assert!(buy_in >= 0)` to `Table::join` for posture consistency.
+  Engine 151 / web 324 all green.
+- **2026-07-24 (continuous bug-hunt loop, iteration 1 — server hardening
+  audit of the just-landed hardening code):** Adversarial re-audit of the
+  S7-S12 changes found two real holes IN the hardening plus four more. Fixed
+  same day: the invite-code strike budget reset on any lookup hit, not just a
+  real seating, so it was bypassable on a single socket (S8 follow-up); the
+  4 KiB message cap ran only after tungstenite buffered up to 64 MiB, so it
+  wasn't a real limit — now capped at the transport (S16); and the
+  `maybe_pace` background task had the exact panic-wedge S9 was written to
+  close but no guard (S9 follow-up). Logged for follow-up: a `sweep`/`join`
+  race that can orphan a live room (S17, pre-existing), dropped one-shot
+  control messages wedging a client (H28), unbounded per-broadcast scoreboard
+  recompute + uncapped history as a server-side amplifier (E2 server angle),
+  and the unbounded shutdown drain. Confirmed clean: `ConnSlot` balance,
+  atomic-counter overflow, and the `catch_unwind` mutex mechanics. Server
+  builds clean, 8 tests green, live-smoked `/health` + shutdown. (No WS
+  integration harness exists to unit-test S8/S16 end-to-end — that's D3.)
+- **2026-07-24 (continuous bug-hunt loop, iteration 2 — client injection
+  surface + rules correctness):** Two parallel audits. (a) **Injection
+  surface: clean XSS bill of health** — no `dangerouslySetInnerHTML`, no
+  unsafe attribute/URL sinks anywhere untrusted names/codes/announce text
+  flow; React escaping covers it. Fixed the robustness gaps it did find: a
+  malformed/version-skewed push could white-screen the app (S18 — added an
+  ErrorBoundary + made `proto` skew a hard stop), peer names weren't stripped
+  of bidi/zero-width/control chars (S19 — `clean_name` server-side + seat-name
+  ellipsis), and the unmount handler hygiene (C6). Logged S20 (settle popup
+  can be skipped under S10 backpressure — needs a round-id, not a phase edge).
+  (b) **Rules correctness: clean bill of health** — a full cross-check of the
+  engine against authoritative punto banco (Wizard of Odds, NGCB) found NO
+  deviations: card values, natural suppression, the Player rule, the complete
+  8×10 Banker tableau incl. all four exception totals (3/4/5/6), main payouts +
+  5% commission, EZ Baccarat, all seven side-bet paytables (Pair, Dragon Bonus
+  ladder, full Tiger family), the three derived-road algorithms (hand-traced
+  against the worked example), 8-deck composition + burn ritual, and the
+  statistical tests (frequencies match published figures; ±0.005 @ 200k ≈ 4.5σ,
+  tight enough to catch a real tableau bug). Single source of truth confirmed —
+  no divergent payout/draw logic between `Session` and `Table`. Web 326 /
+  server 9 green.

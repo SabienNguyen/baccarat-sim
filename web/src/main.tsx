@@ -1,6 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { trackVisit } from "./analytics";
 import "./theme.css";
+
+trackVisit(); // no-op until analytics is enabled (see docs/GROWTH.md G4)
 
 const root = createRoot(document.getElementById("root")!);
 
@@ -11,7 +15,9 @@ import("./App")
   .then(({ App }) => {
     root.render(
       <StrictMode>
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </StrictMode>,
     );
   })
@@ -41,5 +47,7 @@ if (import.meta.env.DEV) {
         location.reload();
       };
     },
-  );
+  ).catch(() => {
+    /* dev-only helper — a failed import here must not surface as a rejection */
+  });
 }

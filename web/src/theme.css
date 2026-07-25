@@ -1,4 +1,20 @@
-@import url("https://fonts.googleapis.com/css2?family=Silkscreen:wght@700&family=VT323&display=swap");
+/* Self-hosted so first paint doesn't block on a round trip to Google Fonts
+   (and so the pixel look survives an ad/tracker blocker). Latin subset only —
+   the UI is ASCII. */
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/silkscreen-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/vt323.woff2") format("woff2");
+}
 
 :root {
   /* The table IS the dark theme: declaring it stops forced-dark
@@ -35,6 +51,8 @@ body {
   margin: 0;
   font-family: var(--font-text);
   color: #f4ecd8;
+  /* No grey tap-flash on buttons (touch only; a no-op with a mouse). */
+  -webkit-tap-highlight-color: transparent;
   /* layered radial greens + a swirl that slowly drifts */
   background-color: var(--felt-deep);
   background-image:
@@ -44,6 +62,16 @@ body {
   background-attachment: fixed;
   background-size: 140% 140%, 160% 160%, 200% 200%;
   animation: felt-swirl 40s ease-in-out infinite alternate;
+}
+
+/* Touch devices only: kill the iOS rubber-band / pull-to-refresh bounce so the
+   felt feels like an app. Deliberately NOT applied with a mouse — on desktop it
+   would also suppress macOS elastic scrolling and trackpad swipe-back, which
+   are native behaviors this game has no business overriding. */
+@media (pointer: coarse) {
+  body {
+    overscroll-behavior: none;
+  }
 }
 
 @keyframes felt-swirl {
@@ -81,8 +109,16 @@ body {
   grid-template-columns: 340px minmax(0, 1fr) 340px;
   grid-template-areas: "hud stage board";
   gap: 20px;
+  /* 100dvh (dynamic viewport) so iOS Safari's collapsing URL bar can't hide
+     the bottom of the table under the toolbar; 100vh is the fallback. */
   min-height: 100vh;
-  padding: 16px;
+  min-height: 100dvh;
+  /* respect the notch / home indicator on iOS */
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
   /* keep the table, HUD, and roads clustered on big screens */
   max-width: 1560px;
   margin: 0 auto;
@@ -147,16 +183,28 @@ body {
   }
 }
 
-/* --- phones: one column, table first --- */
+/* --- phones: money on top, felt in the middle, actions pinned to the bottom.
+       A phone can't show the whole pit at once, so the layout commits to the
+       core loop — see your roll, place chips, act — and lets the roads and the
+       Explain panel scroll below as reference. --- */
 @media (max-width: 700px) {
   .app {
     grid-template-columns: 1fr;
+    /* HUD first: the bankroll is the one number you must never scroll for. */
     grid-template-areas:
-      "stage"
       "hud"
+      "stage"
       "board";
-    gap: 12px;
-    padding: 10px;
+    gap: 10px;
+    /* Keep the safe-area insets here too — a bare `padding: 10px` would
+       override the base rule's env() padding at exactly the width where the
+       notch and home indicator actually exist. Extra bottom room clears the
+       fixed action bar (its height + the home indicator). */
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      calc(64px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
   }
   .app .hud,
   .app .board {
@@ -164,6 +212,77 @@ body {
     justify-content: flex-start;
   }
   .app > .stage {
-    gap: 12px;
+    gap: 10px;
+  }
+
+  /* Compact HUD: the desktop HUD is a tall column padded to mirror the road
+     dock (min-height 460px) — on a phone that's ~440px of dead space. Drop the
+     floor, drop the redundant title, and sit the stat boxes side by side. */
+  .app > .hud {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    align-items: stretch;
+  }
+  .app > .hud .hud-title {
+    display: none;
+  }
+  /* bankroll spans the full width — it's the headline number */
+  .app > .hud .hud-box--bankroll,
+  .app > .hud .hud-box--goal,
+  .app > .hud .hud-payouts,
+  .app > .hud .hud-actions {
+    grid-column: 1 / -1;
+  }
+  .app > .hud .hud-box {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 9px;
+  }
+  /* Trim the stat type down to phone scale — same numbers, less chrome. */
+  .app > .hud .hud-box-value {
+    font-size: 14px;
+  }
+  .app > .hud .hud-box-value--small {
+    font-size: 11px;
+  }
+  .app > .hud .hud-goal-bar {
+    height: 8px;
+  }
+  /* Sound and the leave/reset buttons are settings, not per-hand info: sit them
+     on one shared row instead of two full-width ones. */
+  .app > .hud .volume {
+    grid-column: 1;
+    margin: 0;
+  }
+  .app > .hud .hud-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+  }
+
+  /* Action bar: pinned so Deal / Reveal / Settle is always one tap away
+     instead of stranded between the felt and the chip rail. */
+  .app > .stage > .controls {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    width: auto;
+    gap: 8px;
+    padding: 8px max(10px, env(safe-area-inset-left))
+      calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-right));
+    background: rgba(11, 61, 46, 0.94);
+    border-top: 2px solid var(--ink);
+    box-shadow: 0 -3px 0 rgba(0, 0, 0, 0.35);
+  }
+  /* comfortable thumb targets on the pinned bar */
+  .app > .stage > .controls .btn {
+    min-height: 44px;
+    flex: 1 1 auto;
   }
 }

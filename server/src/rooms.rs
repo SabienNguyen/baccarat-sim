@@ -5,8 +5,10 @@
 use crate::protocol::{RoomInfo, ServerMsg, Tier};
 use baccarat_engine::settle::Ruleset;
 use baccarat_engine::table::{PlayerId, Table, TableConfig, TableError};
+use futures_util::FutureExt;
 use rand::Rng;
 use std::collections::HashMap;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -238,31 +240,45 @@ pub fn maybe_pace(room: Arc<Mutex<Room>>) {
             }
             guard.pacing = true;
         }
-        let mut announced: Option<baccarat_engine::scoreboard::Side> = None;
-        loop {
-            // announce each hand once before its first flip
-            {
-                let guard = room.lock().await;
-                match guard.table.dealer_next_side() {
-                    Some(side) if announced != Some(side) => {
-                        announced = Some(side);
-                        guard.announce(format!("Turning the {side:?} hand…"));
-                    }
-                    Some(_) => {}
-                    None => {}
-                }
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(DEALER_FLIP_MS)).await;
-            let mut guard = room.lock().await;
-            if guard.table.dealer_flip_one() {
-                guard.broadcast();
-            }
-            if !guard.table.dealer_flip_pending() {
-                guard.pacing = false;
-                return;
-            }
+        // Run the flip loop under catch_unwind and ALWAYS clear `pacing`
+        // afterward. A panic in this background task would otherwise leave
+        // `pacing = true` forever, and every later `maybe_pace` short-circuits
+        // on that flag — silently soft-locking house-hand reveals for the rest
+        // of the room's life (the same wedge the handle_command guard closes).
+        let result = AssertUnwindSafe(pace_loop(&room)).catch_unwind().await;
+        let mut guard = room.lock().await;
+        guard.pacing = false;
+        if result.is_err() {
+            tracing::error!(room = %guard.id, "dealer pacer panicked — pacing reset");
         }
     });
+}
+
+/// The flip loop itself: announce each hand once, then turn one card per beat
+/// until the house has nothing left to reveal.
+async fn pace_loop(room: &Arc<Mutex<Room>>) {
+    let mut announced: Option<baccarat_engine::scoreboard::Side> = None;
+    loop {
+        // announce each hand once before its first flip
+        {
+            let guard = room.lock().await;
+            match guard.table.dealer_next_side() {
+                Some(side) if announced != Some(side) => {
+                    announced = Some(side);
+                    guard.announce(format!("Turning the {side:?} hand…"));
+                }
+                _ => {}
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(DEALER_FLIP_MS)).await;
+        let mut guard = room.lock().await;
+        if guard.table.dealer_flip_one() {
+            guard.broadcast();
+        }
+        if !guard.table.dealer_flip_pending() {
+            return;
+        }
+    }
 }
 
 /// Human dealer speech for refusals, mirrored from the web's narrateError.

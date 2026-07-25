@@ -36,6 +36,12 @@ const MAX_CONNS: usize = 1024;
 /// be brute-forced at wire speed.
 const MAX_JOIN_FAILURES: u32 = 10;
 
+/// Largest WebSocket message we accept, enforced at the transport so an
+/// oversized frame is rejected before it's buffered. The protocol's real
+/// messages are well under this; a small headroom over the app-level check
+/// keeps JSON overhead from tripping legitimate traffic.
+const MAX_WS_MESSAGE: usize = 8 * 1024;
+
 static CONNS: AtomicUsize = AtomicUsize::new(0);
 
 /// RAII slot in the connection budget — released on drop, panic included.
@@ -150,9 +156,14 @@ async fn health(State(registry): State<Registry>) -> Json<serde_json::Value> {
 
 async fn ws_handler(ws: WebSocketUpgrade, State(registry): State<Registry>) -> Response {
     match ConnSlot::try_acquire() {
+        // Cap the frame/message size at the transport, not just after
+        // reassembly: tungstenite's defaults buffer up to 64 MiB before our
+        // 4 KiB text-length check ever runs, so a client could stream huge
+        // messages that are allocated and UTF-8-validated only to be dropped.
         Some(slot) => ws
-            .on_upgrade(move |socket| handle_socket(socket, registry, slot))
-            .into_response(),
+            .max_message_size(MAX_WS_MESSAGE)
+            .max_frame_size(MAX_WS_MESSAGE)
+            .on_upgrade(move |socket| handle_socket(socket, registry, slot)),
         None => {
             tracing::warn!("connection refused: at MAX_CONNS ({MAX_CONNS})");
             (StatusCode::SERVICE_UNAVAILABLE, "The casino is at capacity.").into_response()
@@ -279,7 +290,9 @@ async fn handle_command(
                 let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
             } else {
                 match registry.create(tier, private).await {
-                    Some(room) => sit(room, &name, tx, seat).await,
+                    Some(room) => {
+                        sit(room, &name, tx, seat).await;
+                    }
                     None => {
                         let _ = tx.try_send(ServerMsg::Error {
                             message: "The floor is full — join an open table instead.".into(),
@@ -290,8 +303,14 @@ async fn handle_command(
         }
         ClientMsg::JoinRoom { room, name } => match registry.get(&room).await {
             Some(room) => {
-                *failed_joins = 0;
-                sit(room, &name, tx, seat).await;
+                // Reset the strike budget only on a real seating — not on any
+                // lookup hit. Otherwise an attacker interleaves one known code
+                // (their own room, or any from ListRooms) every few guesses to
+                // zero the counter and brute-force invite codes forever on one
+                // socket. A refused sit ("already seated") must not reset it.
+                if sit(room, &name, tx, seat).await {
+                    *failed_joins = 0;
+                }
             }
             None => {
                 // The room code doubles as a private table's invite code, so
@@ -358,22 +377,30 @@ async fn handle_command(
     true
 }
 
+/// Returns true only if this connection actually took a seat.
 async fn sit(
     room: Arc<Mutex<Room>>,
     name: &str,
     tx: &mpsc::Sender<ServerMsg>,
     seat: &mut Option<Seat>,
-) {
+) -> bool {
     if seat.is_some() {
         let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
-        return;
+        return false;
     }
     let mut guard = room.lock().await;
     let (.., buy_in) = guard.tier.stakes();
-    let name = if name.trim().is_empty() { "guest" } else { name.trim() };
-    match guard.table.join(&name.chars().take(24).collect::<String>(), buy_in) {
+    let name = clean_name(name);
+    match guard.table.join(&name, buy_in) {
         Ok(pid) => {
             guard.seat(pid, tx.clone());
+            // Commit the connection-local seat NOW, before the fallible work
+            // below (`view_for`'s expect, and `broadcast` which calls
+            // `view_for` for every seat). If any of that panics, the caught
+            // unwind's disconnect cleanup keys off `seat.is_some()` and will
+            // `leave(pid)` + remove the conn — without this early commit it
+            // would see `None` and leave a ghost seat wedging the room (S9).
+            *seat = Some(Seat { room: room.clone(), pid });
             let view = guard.table.view_for(pid).expect("just joined");
             let _ = tx.try_send(ServerMsg::Joined {
                 room: guard.id.clone(),
@@ -386,10 +413,76 @@ async fn sit(
             let (id, tier) = (guard.id.clone(), guard.tier);
             drop(guard);
             tracing::info!("seat taken at {id} ({tier:?})");
-            *seat = Some(Seat { room, pid });
+            true
         }
         Err(e) => {
             let _ = tx.try_send(ServerMsg::Error { message: error_message(&e) });
+            false
         }
+    }
+}
+
+/// Normalize a display name before it's shown to every other seat. Strips
+/// Unicode control and format characters — which includes bidi overrides
+/// (U+202E etc.) and zero-width joiners a peer could use to render their
+/// name reversed, blank, or spoofing another seat — then trims and caps to
+/// 24 chars, falling back to "guest".
+fn clean_name(raw: &str) -> String {
+    let filtered: String = raw
+        .chars()
+        .filter(|c| !c.is_control() && !is_format_char(*c))
+        .collect();
+    // Trim BEFORE the length cap so leading whitespace can't eat the budget.
+    let capped: String = filtered.trim().chars().take(24).collect();
+    if capped.is_empty() { "guest".to_string() } else { capped }
+}
+
+/// Unicode "format" (Cf) characters — zero-width joiners, bidi controls, the
+/// BOM, and the Tag block. std has no category API, so match the ranges that
+/// matter: anything that renders as nothing and so could carry a covert
+/// (steganographic) payload or spoof a name through the seat list.
+fn is_format_char(c: char) -> bool {
+    matches!(c,
+        '\u{00AD}'                // soft hyphen
+        | '\u{061C}'              // arabic letter mark
+        | '\u{180E}'              // mongolian vowel separator
+        | '\u{200B}'..='\u{200F}' // zero-width space/joiners, LRM/RLM
+        | '\u{202A}'..='\u{202E}' // bidi embeddings/overrides
+        | '\u{2060}'..='\u{2064}' // word joiner, invisible operators
+        | '\u{2066}'..='\u{206F}' // bidi isolates + deprecated format
+        | '\u{FEFF}'              // zero-width no-break space / BOM
+        | '\u{FFF9}'..='\u{FFFB}' // interlinear annotation
+        | '\u{E0000}'..='\u{E007F}' // Tags block — invisible "ASCII smuggling" payloads
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_name;
+
+    #[test]
+    fn clean_name_strips_control_and_format_chars_and_caps_length() {
+        // bidi override + zero-width joiner are removed
+        assert_eq!(clean_name("ab\u{202E}cd\u{200D}"), "abcd");
+        // control chars (newlines, tabs) removed
+        assert_eq!(clean_name("a\nb\tc"), "abc");
+        // empty / whitespace-only falls back to guest
+        assert_eq!(clean_name("   "), "guest");
+        assert_eq!(clean_name("\u{200B}\u{FEFF}"), "guest");
+        // capped to 24 chars, then trimmed
+        assert_eq!(clean_name(&"x".repeat(30)), "x".repeat(24));
+        // ordinary names pass through
+        assert_eq!(clean_name("  Sabien  "), "Sabien");
+    }
+
+    #[test]
+    fn clean_name_strips_invisible_tag_and_other_format_chars() {
+        // Tags block — invisible "ASCII smuggling" payload — is removed
+        let smuggled = format!("Sam\u{E0041}\u{E0042}\u{E007F}");
+        assert_eq!(clean_name(&smuggled), "Sam");
+        // soft hyphen, arabic letter mark, mongolian vowel separator
+        assert_eq!(clean_name("a\u{00AD}b\u{061C}c\u{180E}"), "abc");
+        // a name that is ONLY an invisible payload collapses to guest
+        assert_eq!(clean_name("\u{E0061}\u{E0062}\u{E0063}"), "guest");
     }
 }

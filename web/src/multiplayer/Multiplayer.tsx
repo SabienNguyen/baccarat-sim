@@ -8,6 +8,7 @@ import { TABLES, type TableTier } from "../tables";
 import { formatCents } from "../format";
 import type { ClientMsg, RoomInfo, ServerMsg } from "./protocol";
 import { socketUrl } from "./protocol";
+import { urlParam } from "../urlParams";
 import { createRemoteStore, type RemoteStore } from "./remoteStore";
 import "./multiplayer.css";
 
@@ -49,6 +50,7 @@ type Stage =
 
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const storeRef = useRef<RemoteStore | null>(null);
   const [stage, setStage] = useState<Stage>({ at: "connecting" });
@@ -57,7 +59,15 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const PAGE_SIZE = 8;
   const [notice, setNotice] = useState<string | null>(null);
   const [name, setName] = useState(loadName);
-  const [code, setCode] = useState("");
+  // A ?room=CODE deep link auto-joins on connect (and prefills the box so a
+  // failed join leaves the code ready to retry). Skipped under an injected
+  // socket (tests drive the flow themselves).
+  // Cap at the server's 6-char code length: a crafted ?room=<huge> link
+  // shouldn't pre-fill the box with junk or ship an oversized join.
+  const autoRoom = useRef<string | null>(
+    connect ? null : (urlParam("room")?.trim().toUpperCase().slice(0, 6) || null),
+  );
+  const [code, setCode] = useState(autoRoom.current ?? "");
   const [tier, setTier] = useState<TableTier>("mid");
   const [isPrivate, setIsPrivate] = useState(false);
 
@@ -75,6 +85,13 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     socket.onopen = () => {
       setStage({ at: "lobby" });
       socket.send(JSON.stringify({ type: "list_rooms" }));
+      // Deep-link auto-join: on success we land at the table; on a bad code the
+      // error handler leaves us in the (already-listed) lobby with the notice.
+      if (autoRoom.current) {
+        const n = name.trim() || "guest";
+        saveName(n);
+        socket.send(JSON.stringify({ type: "join_room", room: autoRoom.current, name: n }));
+      }
     };
     socket.onmessage = (e) => {
       let msg: ServerMsg;
@@ -91,7 +108,14 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         setPage(0);
       } else if (msg.type === "joined") {
         if (msg.proto !== undefined && msg.proto !== 1) {
-          console.warn(`server speaks protocol v${msg.proto}, this build expects v1 — refresh for the latest client`);
+          // A protocol skew means the server may send view shapes this build
+          // can't render — stop here with a clear message rather than build a
+          // store from it and risk an unguarded field access white-screening
+          // the app mid-game.
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v1`);
+          storeRef.current = null;
+          setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
+          return;
         }
         const store = createRemoteStore({
           tier: msg.tier,
@@ -122,10 +146,21 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       );
     };
     return () => {
+      // Detach every handler, not just onclose: an in-flight message
+      // arriving between close() and the socket actually closing would
+      // otherwise fire a stale closure that touches unmounted state.
       socket.onclose = null;
+      socket.onmessage = null;
+      socket.onopen = null;
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear the "copied" flash timer on unmount so it can't fire against a
+  // torn-down component.
+  useEffect(() => () => {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
   }, []);
 
   const rememberName = () => {
@@ -170,11 +205,18 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         <button
           type="button"
           className="mp-roomtag"
-          title="Copy the invite code"
+          title="Copy the invite link"
           onClick={async () => {
-            if (await copyText(stage.room)) {
+            // A full URL, not the bare code: one click drops a friend straight
+            // into this table (Multiplayer auto-joins on ?room=).
+            const link =
+              typeof location !== "undefined"
+                ? `${location.origin}${location.pathname}?room=${stage.room}`
+                : stage.room;
+            if (await copyText(link)) {
               setCopied(true);
-              setTimeout(() => setCopied(false), 1600);
+              if (copyTimer.current) clearTimeout(copyTimer.current);
+              copyTimer.current = setTimeout(() => setCopied(false), 1600);
             }
           }}
         >

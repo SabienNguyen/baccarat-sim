@@ -1,5 +1,6 @@
 .home {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -190,4 +191,24 @@
     width: 100%;
     max-width: 320px;
   }
+}
+
+/* Crawlable/human entry points to the static learn-baccarat pages. */
+.home-learn {
+  margin-top: 2rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--accent-2);
+}
+.home-learn a {
+  color: var(--gold);
+  text-decoration: none;
+}
+.home-learn a:hover,
+.home-learn a:focus-visible {
+  text-decoration: underline;
 }

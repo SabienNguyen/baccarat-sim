@@ -130,6 +130,12 @@ pub struct Table {
     last_outcome: Option<crate::round::Outcome>,
     /// The settled round's cards, kept on the felt until the next deal.
     last_round: Option<RoundResult>,
+    /// Memoized scoreboard, keyed on history length. `history` is append-only
+    /// (only pushed at settle, never cleared), so equal length ⇒ identical
+    /// content ⇒ identical roads — this skips recomputing all five roads on
+    /// every view (a view is built after every command, ~8-10× per coup, but
+    /// the scoreboard only changes once per settled round).
+    sb_cache: std::cell::RefCell<Option<(usize, ScoreboardSnapshot)>>,
 }
 
 impl Table {
@@ -150,7 +156,22 @@ impl Table {
             history: Vec::new(),
             last_outcome: None,
             last_round: None,
+            sb_cache: std::cell::RefCell::new(None),
         }
+    }
+
+    /// The scoreboard, recomputed only when `history` has grown since the last
+    /// call (see `sb_cache`). Behavior-identical to `derive_scoreboard`.
+    fn scoreboard(&self) -> ScoreboardSnapshot {
+        let len = self.history.len();
+        if let Some((cached_len, snap)) = self.sb_cache.borrow().as_ref() {
+            if *cached_len == len {
+                return snap.clone();
+            }
+        }
+        let snap = derive_scoreboard(&self.history);
+        *self.sb_cache.borrow_mut() = Some((len, snap.clone()));
+        snap
     }
 
     pub fn seats(&self) -> usize {
@@ -159,6 +180,7 @@ impl Table {
 
     /// Sit down with a buy-in. Allowed mid-round; betting waits for the next coup.
     pub fn join(&mut self, name: &str, buy_in: i64) -> Result<PlayerId, TableError> {
+        debug_assert!(buy_in >= 0, "negative buy-in");
         if self.players.len() >= self.config.max_seats {
             return Err(TableError::TableFull);
         }
@@ -314,20 +336,22 @@ impl Table {
 
     /// The biggest main-bet wager on a side earns the squeeze (ties: first seated).
     fn biggest_bettor(&self, spot: crate::settle::BetSpot) -> Option<PlayerId> {
-        self.players
-            .iter()
-            .map(|p| {
-                let staked: i64 = p
-                    .bets
-                    .iter()
-                    .filter(|b| matches!(b.kind, BetKind::Main(s) if s == spot))
-                    .map(|b| b.amount)
-                    .sum();
-                (p.id, staked)
-            })
-            .filter(|(_, staked)| *staked > 0)
-            .max_by_key(|(_, staked)| *staked)
-            .map(|(id, _)| id)
+        // A strict `>` fold in seat order keeps the FIRST player to reach the
+        // top stake — `max_by_key` would return the last, inverting the
+        // documented tie-break.
+        let mut best: Option<(PlayerId, i64)> = None;
+        for p in &self.players {
+            let staked: i64 = p
+                .bets
+                .iter()
+                .filter(|b| matches!(b.kind, BetKind::Main(s) if s == spot))
+                .map(|b| b.amount)
+                .sum();
+            if staked > 0 && best.is_none_or(|(_, top)| staked > top) {
+                best = Some((p.id, staked));
+            }
+        }
+        best.map(|(id, _)| id)
     }
 
     /// The next card in ritual order that belongs to the house (a side
@@ -591,10 +615,13 @@ impl Table {
                 bankroll: player.bankroll,
                 table_min: self.config.table_min,
                 table_max: self.config.table_max,
-                outcome: self.last_outcome,
+                // Gate on the viewer's own settled display, like payouts and
+                // explain — once they re-bet, the previous coup's outcome is
+                // no longer theirs to see.
+                outcome: if player.payouts.is_some() { self.last_outcome } else { None },
                 payouts: player.payouts.clone(),
                 events: Vec::new(),
-                scoreboard: derive_scoreboard(&self.history),
+                scoreboard: self.scoreboard(),
                 // Keep the 'why this round' trace on the settled felt — the same
                 // window (and key) the face-up cards use — so the explanation is
                 // there while the learner studies the finished coup.
@@ -606,23 +633,42 @@ impl Table {
                 player_squeezer,
                 banker_squeezer,
             },
-            Phase::Dealing { round, reveal, .. } => TableView {
-                phase: PhaseTag::Dealing,
-                player: hand_view(&round.player, &reveal.player),
-                banker: hand_view(&round.banker, &reveal.banker),
-                bets: player.bets.clone(),
-                bankroll: player.bankroll,
-                table_min: self.config.table_min,
-                table_max: self.config.table_max,
-                outcome: None,
-                payouts: None,
-                events: derive_events(round, reveal),
-                scoreboard: derive_scoreboard(&self.history),
-                explain: round.trace.clone(),
-                seats,
-                player_squeezer,
-                banker_squeezer,
-            },
+            Phase::Dealing { round, reveal, .. } => {
+                // A peeked sliver is the squeezer's private glimpse. Everyone
+                // else sees that card still face down until it is revealed —
+                // otherwise every client at the table receives the identity
+                // the squeeze is supposed to keep in one player's hands.
+                // (holder == None only carries peeks on a solo table, where
+                // the sole viewer made them.)
+                let redact = |statuses: &[CardStatus], holder: Option<PlayerId>| {
+                    statuses
+                        .iter()
+                        .map(|s| match s {
+                            CardStatus::Peeked if matches!(holder, Some(h) if h != pid) => {
+                                CardStatus::FaceDown
+                            }
+                            s => *s,
+                        })
+                        .collect::<Vec<_>>()
+                };
+                TableView {
+                    phase: PhaseTag::Dealing,
+                    player: hand_view(&round.player, &redact(&reveal.player, player_squeezer)),
+                    banker: hand_view(&round.banker, &redact(&reveal.banker, banker_squeezer)),
+                    bets: player.bets.clone(),
+                    bankroll: player.bankroll,
+                    table_min: self.config.table_min,
+                    table_max: self.config.table_max,
+                    outcome: None,
+                    payouts: None,
+                    events: derive_events(round, reveal),
+                    scoreboard: self.scoreboard(),
+                    explain: round.trace.clone(),
+                    seats,
+                    player_squeezer,
+                    banker_squeezer,
+                }
+            }
         };
         Ok(view)
     }
@@ -651,6 +697,58 @@ mod tests {
             },
             42,
         )
+    }
+
+    #[test]
+    fn tied_stakes_give_the_squeeze_to_the_first_seated() {
+        // The doc contract is "ties: first seated". a joins before b and they
+        // stake the Player side identically, so a must hold the squeeze.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
+        assert_eq!(t.view_for(a).unwrap().player_squeezer, Some(a));
+    }
+
+    #[test]
+    fn a_peeked_card_is_hidden_from_players_without_the_squeeze() {
+        // A peeked card's identity belongs to the squeezer alone. Another seat
+        // must see it as face-down until it's actually revealed — otherwise the
+        // squeeze's suspense leaks to every client at the table.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.deal().unwrap();
+        t.peek(a, Side::Player, 0).unwrap();
+        // the holder sees their own sliver
+        assert!(matches!(t.view_for(a).unwrap().player.cards[0], CardView::Peeked { .. }));
+        // b holds only the Banker squeeze — the Player peek must stay hidden
+        assert!(matches!(t.view_for(b).unwrap().player.cards[0], CardView::FaceDown));
+        // once a reveals it, it's public to everyone
+        t.reveal(a, Side::Player, 0).unwrap();
+        assert!(matches!(t.view_for(b).unwrap().player.cards[0], CardView::FaceUp(_)));
+    }
+
+    #[test]
+    fn outcome_clears_when_the_next_coup_begins() {
+        // After settle the view shows Settled with the outcome. Re-betting
+        // starts a fresh coup: phase, cards and payouts all reset — outcome
+        // must reset with them, not linger from the previous round.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        assert!(t.view_for(a).unwrap().outcome.is_some());
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Betting);
+        assert!(v.payouts.is_none());
+        assert!(v.outcome.is_none());
     }
 
     #[test]
@@ -1057,5 +1155,26 @@ mod tests {
         }
         // surviving 200 coups proves the cut-card reshuffle path works
         assert!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len() == 200);
+    }
+
+    #[test]
+    fn scoreboard_cache_stays_fresh_and_consistent() {
+        // The memoized scoreboard must grow by one bead each settled coup (not
+        // go stale) and return an identical board on a repeat view (cache hit).
+        let mut t = table();
+        let a = t.join("a", 10_000_000).unwrap();
+        for expected in 1..=6 {
+            t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+            let first = t.view_for(a).unwrap().scoreboard;
+            let second = t.view_for(a).unwrap().scoreboard; // cache-hit path
+            assert_eq!(first, second, "repeat view returned a different board");
+            assert_eq!(
+                first.bead_plate.cells.len(),
+                expected,
+                "cache went stale — bead count didn't track the coup count"
+            );
+        }
     }
 }

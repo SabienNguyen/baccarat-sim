@@ -39,6 +39,15 @@ export function HomeScreen({ onPlay, onMultiplayer }: HomeScreenProps) {
         </div>
       )}
 
+      {mode === "menu" && (
+        <nav className="home-learn" aria-label="Learn baccarat">
+          <span>New to baccarat?</span>
+          <a href="how-to-play/">How to play</a>
+          <a href="glossary/">Glossary</a>
+          <a href="baccarat-roads/">Scoreboard roads</a>
+        </nav>
+      )}
+
       {mode === "single" && (
         <div className="home-tables" aria-label="Choose a table">
           {TABLES.map((t) => (

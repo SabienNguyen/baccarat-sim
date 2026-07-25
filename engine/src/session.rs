@@ -160,6 +160,10 @@ pub struct Session {
     config: SessionConfig,
     history: Vec<RoundRecord>,
     phase: Phase,
+    /// Memoized scoreboard keyed on history length; `history` is append-only,
+    /// so this skips recomputing all five roads on every snapshot (built after
+    /// every command). Same behavior as `derive_scoreboard`.
+    sb_cache: std::cell::RefCell<Option<(usize, ScoreboardSnapshot)>>,
 }
 
 impl Session {
@@ -178,7 +182,21 @@ impl Session {
             history: Vec::new(),
             phase: Phase::Betting { bets: Vec::new() },
             config,
+            sb_cache: std::cell::RefCell::new(None),
         }
+    }
+
+    /// The scoreboard, recomputed only when `history` grew since the last call.
+    fn scoreboard(&self) -> ScoreboardSnapshot {
+        let len = self.history.len();
+        if let Some((cached_len, snap)) = self.sb_cache.borrow().as_ref() {
+            if *cached_len == len {
+                return snap.clone();
+            }
+        }
+        let snap = derive_scoreboard(&self.history);
+        *self.sb_cache.borrow_mut() = Some((len, snap.clone()));
+        snap
     }
 
     /// The current state as a snapshot.
@@ -255,7 +273,7 @@ impl Session {
             outcome: if fully_revealed { Some(round.outcome) } else { None },
             payouts,
             events: derive_events(round, reveal),
-            scoreboard: derive_scoreboard(&self.history),
+            scoreboard: self.scoreboard(),
             explain: round.trace.clone(),
         }
     }
@@ -380,7 +398,7 @@ impl Session {
                 outcome: None,
                 payouts: None,
                 events: Vec::new(),
-                scoreboard: derive_scoreboard(&self.history),
+                scoreboard: self.scoreboard(),
                 explain: Vec::new(),
             },
             Phase::Dealing { round, reveal, bets } => {
