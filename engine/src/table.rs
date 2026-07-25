@@ -334,10 +334,13 @@ impl Table {
             }
             .into());
         }
-        if self.players.iter().all(|p| p.bets.is_empty()) {
+        // A real pit deals the coup whether or not there's money on the felt —
+        // you're allowed to sit and watch the shoe build. So an empty felt is
+        // fine; an EMPTY TABLE isn't.
+        if self.players.is_empty() {
             return Err(CommandError::NoBetsPlaced.into());
         }
-        // The pit waits for the whole table: everyone bets or sits out.
+        // The pit still waits for the whole table: everyone bets or sits out.
         if self.players.iter().any(|p| !p.decided()) {
             return Err(TableError::WaitingOnPlayers);
         }
@@ -991,13 +994,46 @@ mod tests {
     }
 
     #[test]
-    fn deal_needs_a_bet_from_someone() {
+    fn deal_waits_for_an_undecided_seat() {
+        // A seat that has neither bet nor sat out still blocks the deal (the
+        // single-player adapter narrates this as "chips down first").
         let mut t = table();
         let _a = t.join("a", 100_000).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+        // ...and with nobody seated at all there's no coup to deal
+        let mut empty = table();
         assert!(matches!(
-            t.deal(),
+            empty.deal(),
             Err(TableError::Command(CommandError::NoBetsPlaced))
         ));
+    }
+
+    #[test]
+    fn a_watched_hand_deals_with_no_money_on_the_felt() {
+        // Like standing at a real table without betting: the coup is dealt, the
+        // house turns both hands, the result joins the roads, and the roll is
+        // untouched.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.sit_out(a).unwrap();
+        t.deal().unwrap();
+
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Dealing);
+        // nobody bet either side, so both hands belong to the house dealer
+        assert_eq!(v.player_squeezer, None);
+        assert_eq!(v.banker_squeezer, None);
+        assert!(t.dealer_flip_pending());
+        while t.dealer_flip_one() {}
+
+        t.settle().unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.bankroll, 100_000, "a watched hand costs nothing");
+        assert_eq!(v.payouts.as_deref(), Some(&[][..]), "settled, with no payouts");
+        assert_eq!(v.scoreboard.bead_plate.cells.len(), 1, "it still joins the roads");
+        // and the next coup can be bet normally
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
     }
 
     #[test]
@@ -1295,6 +1331,71 @@ mod tests {
         let min = counts.iter().min().unwrap();
         let max = counts.iter().max().unwrap();
         eprintln!("coups per shoe over {n} shoes: mean {mean:.1}, min {min}, max {max}");
+    }
+
+    /// Do players actually reach the end of a shoe (~80 coups), or does the run
+    /// end first? Flat-bets Banker at the Low table ($500 roll, $1 min, $5,000
+    /// goal) across a range of stake sizes.
+    /// `cargo test -p baccarat-engine --release runs_vs_shoe_length -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn runs_vs_shoe_length() {
+        const SHOE: u32 = 80; // measured mean, see coups_per_shoe
+        const GOAL: i64 = 500_000;
+        const BUY_IN: i64 = 50_000;
+        const MIN: i64 = 100;
+        eprintln!("stake     median hands   reach 1 shoe   hit goal   bust");
+        for stake in [100i64, 500, 2_500, 10_000, 50_000] {
+            let runs = 600u32;
+            let (mut lens, mut shoe_end, mut goals, mut busts) = (Vec::new(), 0u32, 0u32, 0u32);
+            for seed in 0..runs as u64 {
+                let mut t = Table::new(
+                    TableConfig {
+                        table_min: MIN,
+                        table_max: 50_000,
+                        ruleset: Ruleset::Commission,
+                        max_seats: 1,
+                    },
+                    seed,
+                );
+                let p = t.join("p", BUY_IN).unwrap();
+                let mut hands = 0u32;
+                loop {
+                    let roll = t.view_for(p).unwrap().bankroll;
+                    if roll >= GOAL {
+                        goals += 1;
+                        break;
+                    }
+                    if roll < MIN {
+                        busts += 1;
+                        break;
+                    }
+                    if hands >= 240 {
+                        break; // grinder: cap at ~3 shoes
+                    }
+                    let bet = stake.min(roll).max(MIN);
+                    t.place_bet(p, BetKind::Main(BetSpot::Banker), bet).unwrap();
+                    t.deal().unwrap();
+                    t.settle().unwrap();
+                    hands += 1;
+                }
+                if hands >= SHOE {
+                    shoe_end += 1;
+                }
+                lens.push(hands);
+            }
+            lens.sort_unstable();
+            let median = lens[lens.len() / 2];
+            let pct = |n: u32| 100.0 * n as f64 / runs as f64;
+            eprintln!(
+                "${:<8} {:<14} {:<14.1} {:<10.1} {:.1}",
+                stake / 100,
+                median,
+                pct(shoe_end),
+                pct(goals),
+                pct(busts)
+            );
+        }
     }
 
     #[test]

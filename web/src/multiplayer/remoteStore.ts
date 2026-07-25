@@ -91,6 +91,10 @@ export function createRemoteStore(opts: {
 
     newShoe: () => send({ type: "new_shoe" }),
 
+    // Watching without betting is `sit_out` at a live table; the deal fires
+    // once every seat has decided.
+    watchHand: () => send({ type: "sit_out" }),
+
     // A seat's bankroll is the server's to change, and multiplayer bust/rebuy
     // handling isn't built yet (backlog F6/F7) — `busted` is hardcoded false
     // here, so this is never reached. No-op rather than faking money locally.

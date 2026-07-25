@@ -114,6 +114,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const seats = useStore(active, (s) => s.seats);
   const squeezers = useStore(active, (s) => s.squeezers);
   const sitOut = useStore(active, (s) => s.sitOut);
+  const watchHand = useStore(active, (s) => s.watchHand);
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
@@ -279,6 +280,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
+          onWatch={seats === null ? watchHand : undefined}
         />
         {showNudge && nudge !== null && (
           <BonusNudge hit={nudge} onDismiss={() => setDismissedNudgeSeq(settleSeq)} />

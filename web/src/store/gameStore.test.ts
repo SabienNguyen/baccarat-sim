@@ -243,6 +243,34 @@ test("a settle that leaves the roll under the table minimum busts the run", () =
   expect(store.getState().busted).toBe(true);
 });
 
+test("watching a hand sits out and deals, with nothing staked", () => {
+  const dealt = snapshotWith({ phase: "Dealing" });
+  const sitOut = vi.fn(() => ({ ok: true as const, snapshot: snapshotWith() }));
+  const deal = vi.fn(() => ({ ok: true as const, snapshot: dealt }));
+  const store = createGameStore({ ...fakeSession({ ok: true, snapshot: dealt }), sitOut, deal });
+
+  store.getState().watchHand();
+
+  // skip the coup, then let the dealer run it — in that order
+  expect(sitOut).toHaveBeenCalledOnce();
+  expect(deal).toHaveBeenCalledOnce();
+  expect(sitOut.mock.invocationCallOrder[0]).toBeLessThan(deal.mock.invocationCallOrder[0]);
+  expect(store.getState().snapshot.phase).toBe("Dealing");
+  expect(store.getState().snapshot.bets).toEqual([]);
+});
+
+test("a refused sit-out doesn't go on to deal", () => {
+  const sitOut = vi.fn(() => ({ ok: false as const, error: "NoBetsPlaced" as const }));
+  const deal = vi.fn(() => ({ ok: true as const, snapshot: snapshotWith() }));
+  const store = createGameStore({
+    ...fakeSession({ ok: true, snapshot: snapshotWith() }),
+    sitOut,
+    deal,
+  });
+  store.getState().watchHand();
+  expect(deal).not.toHaveBeenCalled();
+});
+
 test("re-buying clears the bust and sweeps the felt without a new shoe", () => {
   const broke = snapshotWith({ phase: "Settled", bankroll: 300, payouts: [] });
   const toppedUp = snapshotWith({ phase: "Settled", bankroll: 50_300, payouts: [] });

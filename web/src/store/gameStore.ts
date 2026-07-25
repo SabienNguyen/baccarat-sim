@@ -66,6 +66,8 @@ export interface GameState {
   stake: (kind: BetKind, denom?: number) => void;
   clearBets: () => void;
   deal: () => void;
+  /** Deal a coup with nothing staked, to watch the shoe (single player). */
+  watchHand: () => void;
   peek: (side: Side, index: number) => void;
   reveal: (side: Side, index: number) => void;
   settle: () => void;
@@ -162,6 +164,19 @@ export function createGameStore(
 
       deal: () => {
         set({ lastDelta: null, lastFlip: null });
+        apply(session.deal());
+      },
+
+      // Watch a coup without betting, the way you can at a real table: skip this
+      // hand, then let the dealer run it. The result still joins the roads.
+      watchHand: () => {
+        if (!session.sitOut) return; // multiplayer sits out through the server
+        set({ lastDelta: null, lastFlip: null });
+        const skipped = session.sitOut();
+        if (!skipped.ok) {
+          apply(skipped);
+          return;
+        }
         apply(session.deal());
       },
 
