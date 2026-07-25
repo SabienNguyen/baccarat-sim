@@ -11,7 +11,11 @@ test("shows bankroll, phase, and table limits", () => {
 
 test("shows outcome and payouts when settled", () => {
   render(<Hud snapshot={settledSnapshot()} />);
-  expect(screen.getByText(/PlayerWin/)).toBeInTheDocument();
+  // This asserted /PlayerWin/ — the wire enum the box used to print verbatim,
+  // which the all-caps display font rendered as "PLAYERWIN". The outcome is
+  // words now, so the old spelling must be gone rather than merely joined.
+  expect(screen.getByText("Player win")).toBeInTheDocument();
+  expect(screen.queryByText(/PlayerWin/)).toBeNull();
   expect(screen.getByText("+$5.00")).toBeInTheDocument();
 });
 

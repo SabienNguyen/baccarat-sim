@@ -50,3 +50,18 @@
   width: 3.5em;
   text-align: center;
 }
+
+/* `width: 100%` is only a request while table-layout is auto: the cells'
+   min-content width won, so on a narrow phone the tableau pushed 13px past the
+   viewport. Fixed layout makes the 100% binding and wraps the prose instead. */
+@media (max-width: 430px) {
+  .tc-table {
+    table-layout: fixed;
+    font-size: 13px;
+  }
+  .tc-table th,
+  .tc-table td {
+    padding: 2px 4px;
+    overflow-wrap: anywhere;
+  }
+}
