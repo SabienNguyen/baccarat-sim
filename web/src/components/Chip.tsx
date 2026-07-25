@@ -49,9 +49,17 @@ export function Chip({ cents, selected, disabled, onSelect }: ChipProps) {
   );
 }
 
-/** A small read-only chip, for stacks on the felt and the hand tray. */
-export function MiniChip({ cents }: { cents: number }) {
+/**
+ * One chip in a stack on the felt. `index` is its height in the tower, counting
+ * from the bottom — CSS reads it as `--i` to offset and layer the chip, so the
+ * stack rises off the table instead of spreading sideways.
+ */
+export function MiniChip({ cents, index = 0 }: { cents: number; index?: number }) {
   return (
-    <span className={`mini-chip ${CHIP_COLOR[cents] ?? ""}`} title={formatCents(cents)} />
+    <span
+      className={`mini-chip ${CHIP_COLOR[cents] ?? ""}`}
+      title={formatCents(cents)}
+      style={{ "--i": index } as React.CSSProperties}
+    />
   );
 }

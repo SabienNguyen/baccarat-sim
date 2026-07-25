@@ -87,7 +87,7 @@ function BetSpot({ spot, betting, staked, shape, denoms, onStake }: BetSpotProps
   return (
     <button
       type="button"
-      className={`spot spot--${shape}`}
+      className={`spot spot--${shape}${staked > 0 ? " is-staked" : ""}`}
       aria-label={`Bet ${spot.label}`}
       disabled={!betting}
       onClick={() => onStake(spot.kind)}
@@ -103,12 +103,18 @@ function BetSpot({ spot, betting, staked, shape, denoms, onStake }: BetSpotProps
       <span className="spot-name">{spot.display}</span>
       <span className="spot-payout">{spot.payout}</span>
       {staked > 0 && (
-        <span className="spot-chips">
-          {chips.slice(0, 8).map((c, i) => (
-            <MiniChip key={i} cents={c} />
-          ))}
+        <>
+          {/* The tower and the amount are both positioned out of flow. They used
+              to sit in the spot's flex column, and because a grid item won't
+              shrink below its content, a row of eight chips forced every column
+              wide enough to run the whole felt off a phone screen. */}
+          <span className="spot-chips" aria-hidden="true">
+            {chips.slice(0, 8).map((c, i) => (
+              <MiniChip key={i} cents={c} index={i} />
+            ))}
+          </span>
           <span className="spot-stake">{formatCents(staked)}</span>
-        </span>
+        </>
       )}
     </button>
   );

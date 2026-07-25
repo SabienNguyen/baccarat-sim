@@ -73,17 +73,23 @@
 .chip--gold .chip-face { color: #1a1208; text-shadow: none; }
 
 /* Tiny read-only chips for spot stacks and the hand tray. */
+/* A chip in a felt stack. Each one is a flattened disc rather than a circle —
+   seen from the player's seat a stack is a short cylinder, so the ellipse plus a
+   lit top edge and a shadowed lower edge is what makes the tower read as having
+   height. `--i` is the chip's place in the stack, set by MiniChip. */
 .mini-chip {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--i, 0) * var(--chip-step));
+  z-index: var(--i, 0);
+  width: var(--chip-w);
+  height: var(--chip-h);
   border-radius: 50%;
   border: 2px solid var(--ink);
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.4);
-  margin-left: -6px;
-}
-.mini-chip:first-child {
-  margin-left: 0;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 1px 0 rgba(0, 0, 0, 0.4);
 }
 .mini-chip.chip--white { background: #e9e4d6; }
 .mini-chip.chip--red { background: var(--chip-red); }
@@ -160,6 +166,10 @@
   border: 3px solid rgba(255, 247, 230, 0.85);
   cursor: pointer;
   position: relative;
+  /* A grid item defaults to `min-width: auto`, so any wide child can force its
+     column past its 1fr share and run the felt off-screen. Nothing in a spot
+     should ever do that again. */
+  min-width: 0;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
 }
 .spot:disabled {
@@ -177,19 +187,58 @@
   border-radius: 4px;
   padding: 2px 6px;
 }
+/* The chip tower. Absolutely positioned on purpose: a spot is a grid item, and
+   a grid item's `min-width: auto` means anything in its flow can force the whole
+   column wider — which is exactly how a row of chips used to push the felt off a
+   phone screen. Out of flow, the stack cannot resize its spot at any count. */
 .spot-chips {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+  --chip-w: 26px;
+  --chip-h: 12px;
+  --chip-step: 5px;
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  width: var(--chip-w);
+  height: var(--chip-h);
+  transform: translateX(-50%);
+  pointer-events: none;
 }
+/* The shadow the stack drops on the felt, which is what sells it as sitting on
+   top of the table rather than being printed on it. */
+.spot-chips::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  height: var(--chip-h);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  filter: blur(2px);
+  z-index: 0;
+}
+/* A compact pill that hugs its number, but capped at the spot's width so a big
+   stake ellipsises inside the spot instead of widening it. */
 .spot-stake {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 6px);
   font-family: var(--font-text);
   font-size: 16px;
   color: var(--gold);
   background: rgba(0, 0, 0, 0.55);
   border-radius: 4px;
-  padding: 0 6px;
+  padding: 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Real chips cover the layout printing; fade it so the stack reads as on top. */
+.spot.is-staked .spot-name,
+.spot.is-staked .spot-payout {
+  opacity: 0.6;
 }
 /* Main bets: large arched areas. */
 .spot--player,
@@ -227,6 +276,24 @@
 }
 .spot--side .spot-stake {
   font-size: 12px;
+}
+/* Smaller circle, shorter tower. */
+.spot--side .spot-chips {
+  --chip-w: 20px;
+  --chip-h: 9px;
+  --chip-step: 4px;
+  bottom: 17px;
+}
+/* A 77px circle can't hold a name, a payout, a tower and an amount at once —
+   the stack landed straight on the odds and made them unreadable. Once you have
+   money down the amount is what you look at, and the odds are a tap away in the
+   ⓘ panel, so the payout stands aside and the name moves to the top. */
+.spot--side.is-staked {
+  justify-content: flex-start;
+  padding-top: 9px;
+}
+.spot--side.is-staked .spot-payout {
+  display: none;
 }
 
 /* --- responsive felt --- */
