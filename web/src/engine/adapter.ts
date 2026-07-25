@@ -27,6 +27,8 @@ export interface GameSession {
   reveal(hand: Side, index: number): CommandResult;
   settle(): CommandResult;
   newShoe(): CommandResult;
+  /** Top up the roll without disturbing the shoe (table sessions only). */
+  rebuy?(amountCents: number): CommandResult;
   /** Table sessions only: the house dealer's unbet-hand flips. */
   dealerFlipPending?(): boolean;
   dealerNextSide?(): Side | undefined;
@@ -149,6 +151,7 @@ export function createTableSession(config: SessionConfig): GameSession {
     reveal: (hand, index) => run(() => inner.reveal(hand, index)),
     settle: () => run(() => inner.settle()),
     newShoe: () => run(() => inner.new_shoe()),
+    rebuy: (amountCents) => run(() => inner.rebuy(safeCents(amountCents))),
     dealerFlipPending: () => inner.dealer_flip_pending(),
     dealerNextSide: () => inner.dealer_next_side(),
     dealerFlipOne: () => run(() => inner.dealer_flip_one()),

@@ -20,19 +20,14 @@
   color: var(--gold);
   text-shadow: 1px 1px 0 var(--ink);
 }
-.bonus-nudge-cta {
+/* Informational only — the notice names the bonus and its payout, it never
+   offers to place the bet (see BonusNudge.tsx for why). */
+.bonus-nudge-note {
   align-self: flex-start;
   font-family: var(--font-text);
   font-size: 18px;
   color: #fff7e6;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
   text-align: left;
-}
-.bonus-nudge-cta:hover {
-  color: var(--gold);
 }
 .bonus-nudge-x {
   position: absolute;

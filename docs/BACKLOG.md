@@ -37,7 +37,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
 | A1 | Cut-card behavior: let the cut card emerge mid-shoe, finish the hand plus one "last hand", show a cut-card marker — instead of today's preemptive reshuffle at ≤14 cards | M | `session.rs:268`, `table.rs:286`; no statistical bias today, purely procedure |
-| A2 | Big Road dragon tail: cap columns at 6 rows and bend right; switch roads from letters to traditional colored circles with tie-slash + pair dots | M | `roads.tsx:99-117`; derived-road *math* is already correct |
+| A2 | Big Road dragon tail: cap columns at 6 rows and bend right | M | ⚙ partly done: colored circles + tie-slash shipped earlier; **pair dots + animal bonus tokens done 2026-07-24** (traditional blue top-left / red bottom-right pair dots, plus pixel-art Dragon 7 / Panda 8 / Tiger tokens hung off the ring — engine now carries `dragon7`/`panda8`/`tiger` flags per cell). Still open: the 6-row column cap and right-bend for a long dragon tail |
 | A3 | Ruleset toggle: Commission vs EZ Baccarat (no-commission, Dragon-7 bar) — engine fully implements `EzBaccarat`, UI hard-wires `Commission` | S | `tables.ts:76`, `rooms.rs:48`, `adapter.ts` |
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |

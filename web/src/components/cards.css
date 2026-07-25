@@ -246,6 +246,10 @@
 
 /* --- hands on the felt stage --- */
 .card-stage {
+  /* The felt is a gesture surface, not a document: a drag here squeezes a card,
+     so it must never start a text selection (which would fight the peel). */
+  user-select: none;
+  -webkit-user-select: none;
   display: flex;
   gap: 64px;
   justify-content: center;

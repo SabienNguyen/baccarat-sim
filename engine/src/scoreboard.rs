@@ -7,15 +7,30 @@ pub struct RoundRecord {
     pub outcome: Outcome,
     pub player_pair: bool,
     pub banker_pair: bool,
+    /// Banker won with a three-card 7 — the EZ Baccarat "Dragon 7".
+    pub dragon7: bool,
+    /// Player won with a three-card 8 — the EZ Baccarat "Panda 8".
+    pub panda8: bool,
+    /// Banker won on a total of 6 — the "Tiger".
+    pub tiger: bool,
 }
 
 impl RoundRecord {
     /// Build a record from a finished round.
     pub fn from_round(round: &RoundResult) -> RoundRecord {
+        // The animal bonuses a real EZ Baccarat / Tiger display marks on the
+        // road. Conditions mirror sidebets.rs (the paytable stays there — these
+        // are only the display flags).
+        let banker_won = round.outcome == Outcome::BankerWin;
         RoundRecord {
             outcome: round.outcome,
             player_pair: round.player.is_pair(),
             banker_pair: round.banker.is_pair(),
+            dragon7: banker_won && round.banker.total() == 7 && round.banker.cards.len() == 3,
+            panda8: round.outcome == Outcome::PlayerWin
+                && round.player.total() == 8
+                && round.player.cards.len() == 3,
+            tiger: banker_won && round.banker.total() == 6,
         }
     }
 }
@@ -55,6 +70,10 @@ pub struct BigRoadCell {
     pub ties: u8,
     pub player_pair: bool,
     pub banker_pair: bool,
+    /// Animal-bonus marks a real display stamps on the winning cell.
+    pub dragon7: bool,
+    pub panda8: bool,
+    pub tiger: bool,
 }
 
 /// Logical columns (unbounded height); the 6-row dragon-tail bend is front-end layout.
@@ -140,6 +159,9 @@ fn build_big_road(history: &[RoundRecord]) -> BigRoad {
             ties: pending_ties, // attach any held leading ties to this first cell
             player_pair: r.player_pair,
             banker_pair: r.banker_pair,
+            dragon7: r.dragon7,
+            panda8: r.panda8,
+            tiger: r.tiger,
         };
         pending_ties = 0;
 
@@ -204,7 +226,7 @@ mod derived_road_tests {
     use super::*;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
     }
 
     // B B P P P B P B B
@@ -277,7 +299,7 @@ mod bead_plate_tests {
     use super::*;
 
     fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
-        RoundRecord { outcome, player_pair: pp, banker_pair: bp }
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false }
     }
 
     #[test]
@@ -323,7 +345,7 @@ mod big_road_core_tests {
     use super::*;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
     }
 
     #[test]
@@ -357,7 +379,7 @@ mod invariants_tests {
     use crate::round::RoundResult;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
     }
 
     #[test]
@@ -423,7 +445,7 @@ mod big_road_tie_tests {
     use super::*;
 
     fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
-        RoundRecord { outcome, player_pair: pp, banker_pair: bp }
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false }
     }
     fn win(outcome: Outcome) -> RoundRecord {
         rec(outcome, false, false)
@@ -458,6 +480,55 @@ mod big_road_tie_tests {
         assert_eq!(s.big_road.columns[0].len(), 2);
         assert_eq!(s.big_road.columns[0][0].ties, 1);
         assert_eq!(s.big_road.columns[0][1].ties, 0);
+    }
+
+    #[test]
+    fn animal_bonus_flags_land_on_the_winning_cell() {
+        use crate::card::{Card, Rank, Suit};
+        use crate::hand::Hand;
+        let c = |rank: Rank| Card { rank, suit: Suit::Spades };
+        let rr = |player: Vec<Card>, banker: Vec<Card>, outcome| RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        };
+
+        // Dragon 7: banker wins with a THREE-card 7 (2+2+3).
+        let d7 = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Four)],
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Three)],
+            Outcome::BankerWin,
+        ));
+        assert!(d7.dragon7 && !d7.panda8);
+        // a TWO-card banker 7 is an ordinary win, not a Dragon
+        let plain7 = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Four)],
+            vec![c(Rank::Three), c(Rank::Four)],
+            Outcome::BankerWin,
+        ));
+        assert!(!plain7.dragon7);
+
+        // Panda 8: player wins with a three-card 8.
+        let p8 = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Three), c(Rank::Three)],
+            vec![c(Rank::Two), c(Rank::Five)],
+            Outcome::PlayerWin,
+        ));
+        assert!(p8.panda8 && !p8.dragon7);
+
+        // Tiger: banker wins on 6 (any card count).
+        let tiger = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Three)],
+            vec![c(Rank::Two), c(Rank::Four)],
+            Outcome::BankerWin,
+        ));
+        assert!(tiger.tiger);
+
+        // and the flags ride onto the Big Road cell for that coup
+        let road = derive_scoreboard(&[d7]);
+        assert!(road.big_road.columns[0][0].dragon7);
+        assert!(!road.big_road.columns[0][0].panda8);
     }
 
     #[test]

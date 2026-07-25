@@ -38,8 +38,27 @@ export function storeFor(tier: TableTier): StoreApi<GameState> {
   return store;
 }
 
-/** Wipe a tier's saved roll and drop its store so the next storeFor() re-buys in. */
+/**
+ * Buy back in at this table's starting roll.
+ *
+ * This tops the seat up *in place* rather than rebuilding the session: handing
+ * the dealer more cash doesn't get you a fresh shoe, so the cards already dealt
+ * stay dealt and the roads keep running. Only if the store doesn't exist yet
+ * (or can't re-buy, e.g. a stubbed session) do we fall back to dropping it so
+ * the next `storeFor()` builds a fresh table.
+ */
 export function resetStore(tier: TableTier): void {
+  const store = stores.get(tier);
+  const spec = tableSpec(tier);
+  if (store) {
+    const state = store.getState();
+    const topUp = spec.starting_bankroll - state.snapshot.bankroll;
+    if (state.rebuy && topUp > 0) {
+      state.rebuy(topUp);
+      saveBankroll(tier, store.getState().snapshot.bankroll);
+      return;
+    }
+  }
   clearBankroll(tier);
   stores.delete(tier);
 }

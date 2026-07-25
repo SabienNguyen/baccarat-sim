@@ -6,8 +6,8 @@
 use crate::round::{play_round, RoundResult};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::session::{
-    derive_events, hand_view, BetKind, CardStatus, CommandError, Event, HandView, PhaseTag,
-    PlacedBet, RevealState,
+    derive_events, fully_revealed, hand_view, BetKind, CardStatus, CommandError, Event, HandView,
+    PhaseTag, PlacedBet, RevealState,
 };
 use crate::settle::{settle_with, Bet, Ruleset};
 use crate::shoe::{Shoe, CUT_CARD};
@@ -178,6 +178,12 @@ impl Table {
         self.players.len()
     }
 
+    /// Cards left in the shoe. Play stops and reshuffles at the cut card, so
+    /// this counts down to `CUT_CARD`, not to zero.
+    pub fn shoe_remaining(&self) -> usize {
+        self.shoe.remaining()
+    }
+
     /// Sit down with a buy-in. Allowed mid-round; betting waits for the next coup.
     pub fn join(&mut self, name: &str, buy_in: i64) -> Result<PlayerId, TableError> {
         debug_assert!(buy_in >= 0, "negative buy-in");
@@ -296,6 +302,26 @@ impl Table {
             .into());
         }
         self.player_mut(pid)?.bets.clear();
+        Ok(())
+    }
+
+    /// Buy more chips without leaving the table. In a pit you hand over cash
+    /// and keep playing the *same* shoe — the cards already dealt stay dealt and
+    /// the roads keep running — so this only tops up a seat's bankroll and
+    /// touches nothing about the shoe or the history.
+    pub fn rebuy(&mut self, pid: PlayerId, amount: i64) -> Result<(), TableError> {
+        debug_assert!(amount >= 0, "negative rebuy");
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing,
+            }
+            .into());
+        }
+        let player = self.player_mut(pid)?;
+        player.bankroll = player.bankroll.saturating_add(amount.max(0));
+        // a fresh stake clears the finished round's display, like place_bet does
+        player.payouts = None;
         Ok(())
     }
 
@@ -663,7 +689,16 @@ impl Table {
                     payouts: None,
                     events: derive_events(round, reveal),
                     scoreboard: self.scoreboard(),
-                    explain: round.trace.clone(),
+                    // The trace names the cards outright ("...it was 3"), so it
+                    // must NOT ride along while any card is still face down —
+                    // with Explain open that spoiled every squeeze before the
+                    // player lifted the corner. Once both hands are fully
+                    // exposed there's nothing left to give away.
+                    explain: if fully_revealed(reveal) {
+                        round.trace.clone()
+                    } else {
+                        Vec::new()
+                    },
                     seats,
                     player_squeezer,
                     banker_squeezer,
@@ -854,14 +889,34 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.deal().unwrap();
-        let dealing = t.view_for(a).unwrap();
-        assert!(!dealing.explain.is_empty(), "the trace shows while cards are out");
+        // ...but NOT before the cards are turned: the trace names the values
+        // outright ("...it was 3"), so shipping it mid-squeeze spoiled every
+        // hand for anyone playing with Explain open.
+        assert!(
+            t.view_for(a).unwrap().explain.is_empty(),
+            "the trace must stay hidden while cards are face down"
+        );
+
+        // Expose the whole coup: the player turns the hand they bet, the house
+        // flips the rest, and ritual order means the two interleave.
+        for _ in 0..12 {
+            let v = t.view_for(a).unwrap();
+            for i in 0..v.player.cards.len() {
+                let _ = t.reveal(a, Side::Player, i);
+            }
+            while t.dealer_flip_pending() {
+                t.dealer_flip_one();
+            }
+        }
+        let revealed = t.view_for(a).unwrap();
+        assert!(revealed.player.total.is_some() && revealed.banker.total.is_some());
+        assert!(!revealed.explain.is_empty(), "trace appears once the coup is exposed");
 
         t.settle().unwrap();
         let settled = t.view_for(a).unwrap();
         assert_eq!(settled.phase, PhaseTag::Settled);
         // same round, same trace — not replaced by the empty-panel hint
-        assert_eq!(settled.explain, dealing.explain);
+        assert_eq!(settled.explain, revealed.explain);
         assert!(!settled.explain.is_empty());
 
         // and the next deal clears it so the fresh Betting felt shows no stale trace
@@ -1155,6 +1210,91 @@ mod tests {
         }
         // surviving 200 coups proves the cut-card reshuffle path works
         assert!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len() == 200);
+    }
+
+    #[test]
+    fn rebuy_tops_up_the_roll_without_touching_the_shoe() {
+        // Buying more chips must NOT reshuffle: the coups already played stay on
+        // the roads and the shoe keeps its position, exactly like handing cash
+        // to the dealer mid-shoe.
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        for _ in 0..4 {
+            t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+        }
+        let before = t.view_for(a).unwrap();
+        let beads = before.scoreboard.bead_plate.cells.len();
+        assert_eq!(beads, 4);
+
+        t.rebuy(a, 100_000).unwrap();
+        let after = t.view_for(a).unwrap();
+        assert_eq!(after.bankroll, before.bankroll + 100_000, "roll topped up");
+        // the shoe and its history are untouched
+        assert_eq!(after.scoreboard.bead_plate.cells.len(), beads, "roads survived");
+        assert_eq!(after.scoreboard.big_road.columns, before.scoreboard.big_road.columns);
+        // and the next card off the shoe is the shoe's next card, not a new deal
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        assert_eq!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len(), beads + 1);
+    }
+
+    #[test]
+    fn rebuy_is_refused_mid_deal() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        assert!(matches!(
+            t.rebuy(a, 1_000),
+            Err(TableError::Command(CommandError::WrongPhase { .. }))
+        ));
+    }
+
+    /// How long is a shoe, really? Counts coups between reshuffles.
+    /// `cargo test -p baccarat-engine --release coups_per_shoe -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn coups_per_shoe() {
+        let mut counts = Vec::new();
+        for seed in 0..40u64 {
+            let mut t = Table::new(
+                TableConfig {
+                    table_min: 100,
+                    table_max: 1_000_000,
+                    ruleset: Ruleset::Commission,
+                    max_seats: 1,
+                },
+                seed,
+            );
+            let a = t.join("a", i64::MAX / 4).unwrap();
+            // play until the shoe reshuffles: the bead plate keeps growing, so
+            // detect the reshuffle by watching for the coup that follows it
+            let mut coups = 0u32;
+            let mut prev_remaining = usize::MAX;
+            loop {
+                t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
+                t.deal().unwrap();
+                t.settle().unwrap();
+                coups += 1;
+                let r = t.shoe_remaining();
+                if r > prev_remaining {
+                    break; // remaining went UP: a fresh shoe was loaded
+                }
+                prev_remaining = r;
+                if coups > 500 {
+                    break;
+                }
+            }
+            counts.push(coups - 1); // the last coup came off the new shoe
+        }
+        let n = counts.len() as f64;
+        let mean = counts.iter().map(|c| *c as f64).sum::<f64>() / n;
+        let min = counts.iter().min().unwrap();
+        let max = counts.iter().max().unwrap();
+        eprintln!("coups per shoe over {n} shoes: mean {mean:.1}, min {min}, max {max}");
     }
 
     #[test]
