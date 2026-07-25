@@ -113,6 +113,42 @@ test("the info icon opens the bonus-bets explainer", async () => {
   expect(screen.getByRole("dialog", { name: "Bonus bets" })).toHaveTextContent(/Dragon 7/);
 });
 
+test("the explainer documents only bets the felt actually offers", async () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  await userEvent.click(screen.getByRole("button", { name: "What are the bonus bets?" }));
+  const dialog = screen.getByRole("dialog", { name: "Bonus bets" });
+  // The engine settles these too, but no spot offers them, so teaching them
+  // here would advertise bets nobody can place.
+  for (const absent of [/Big Tiger/i, /Small Tiger/i, /Tiger Tie/i, /Tiger Pair/i]) {
+    expect(dialog).not.toHaveTextContent(absent);
+  }
+});
+
+test("both Dragon Bonus sides are on the felt and stake their own side", async () => {
+  const onStake = vi.fn();
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onStake={onStake} />);
+  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
+
+  await userEvent.click(screen.getByRole("button", { name: "Bet Player Dragon Bonus" }));
+  expect(onStake).toHaveBeenLastCalledWith({ Side: { DragonBonus: "Player" } });
+
+  await userEvent.click(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" }));
+  expect(onStake).toHaveBeenLastCalledWith({ Side: { DragonBonus: "Banker" } });
+});
+
+test("the Dragon Bonus spots don't read as a duplicate of Dragon 7", async () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
+  // Three spots carry the word "dragon"; each has to say which bet it is.
+  expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toHaveTextContent("40:1");
+  expect(screen.getByRole("button", { name: "Bet Player Dragon Bonus" })).toHaveTextContent(
+    "P DRAGON",
+  );
+  expect(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" })).toHaveTextContent(
+    "B DRAGON",
+  );
+});
+
 test("Clear bets is disabled when nothing is staged", () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   expect(screen.getByRole("button", { name: "Clear bets" })).toBeDisabled();

@@ -135,17 +135,28 @@ const SIDE_CALLS: Record<string, { label: string; odds: string; term: string }> 
   BankerPair: { label: "Banker pair", odds: "eleven to one", term: "pair" },
   Dragon7: { label: "Dragon Seven", odds: "forty to one", term: "dragon-7" },
   Panda8: { label: "Panda Eight", odds: "twenty-five to one", term: "panda-8" },
-  DragonBonus: { label: "Dragon Bonus", odds: "paid on the margin", term: "dragon-bonus" },
+  DragonBonusPlayer: {
+    label: "Player Dragon Bonus",
+    odds: "paid on the margin",
+    term: "dragon-bonus",
+  },
+  DragonBonusBanker: {
+    label: "Banker Dragon Bonus",
+    odds: "paid on the margin",
+    term: "dragon-bonus",
+  },
   Tiger: { label: "Tiger", odds: "the six bites", term: "tiger" },
   BigTiger: { label: "Big Tiger", odds: "fifty to one", term: "big-tiger" },
   SmallTiger: { label: "Small Tiger", odds: "twenty-two to one", term: "small-tiger" },
-  TigerTie: { label: "Tiger Tie", odds: "thirty-five to one", term: "tiger-tie" },
+  TigerTie: { label: "Tiger Tie", odds: "forty-five to one", term: "tiger-tie" },
   TigerPair: { label: "Tiger Pair", odds: "paid", term: "tiger-pair" },
 };
 
 function sideKey(kind: BetKind): string | null {
   if (typeof kind === "object" && "Side" in kind) {
-    return typeof kind.Side === "string" ? kind.Side : "DragonBonus";
+    // Both Dragon Bonus sides are on the felt, so the key carries which one —
+    // otherwise the dealer calls "Dragon Bonus" without saying whose.
+    return typeof kind.Side === "string" ? kind.Side : `DragonBonus${kind.Side.DragonBonus}`;
   }
   return null;
 }

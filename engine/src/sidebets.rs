@@ -101,10 +101,14 @@ pub fn small_tiger_pays(round: &RoundResult, stake: i64) -> i64 {
     }
 }
 
-/// Tiger Tie: a 6–6 tie — 35:1.
+/// Tiger Tie: a 6–6 tie — 45:1.
+///
+/// 45:1 is the current published payout; the bet launched at 35:1, which priced
+/// a 30.7% house edge — the worst number in the whole engine. See A7/A8 in
+/// docs/BACKLOG.md and the measured figures in `candidate_paytables`.
 pub fn tiger_tie_pays(round: &RoundResult, stake: i64) -> i64 {
     if round.outcome == Outcome::Tie && round.banker.total() == 6 {
-        stake * 35
+        stake * 45
     } else {
         -stake
     }
@@ -386,7 +390,7 @@ mod tiger_tests {
     #[test]
     fn tiger_tie_pays_thirtyfive_on_six_six() {
         let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
-        assert_eq!(tiger_tie_pays(&r, 100), 3_500);
+        assert_eq!(tiger_tie_pays(&r, 100), 4_500);
     }
 
     #[test]
@@ -576,7 +580,7 @@ mod dispatch_tests {
     #[test]
     fn dispatch_tiger_tie() {
         let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
-        assert_eq!(settle_side(SideBet::TigerTie, 100, &r), 3_500);
+        assert_eq!(settle_side(SideBet::TigerTie, 100, &r), 4_500);
     }
 
     #[test]

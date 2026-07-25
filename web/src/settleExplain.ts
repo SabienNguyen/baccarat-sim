@@ -1,10 +1,14 @@
 import type { BetKind, BetPayout } from "./engine/types";
 import { formatCents } from "./format";
 
-/** The side-bet key a payout carries: "PlayerPair", … or "DragonBonus". */
+/**
+ * The side-bet key a payout carries: "PlayerPair", … or, for the two-sided
+ * Dragon Bonus, "DragonBonusPlayer" / "DragonBonusBanker" — both sides are on
+ * the felt, so the note has to name which one paid.
+ */
 function sideKey(kind: BetKind): string | null {
   if (typeof kind === "object" && "Side" in kind) {
-    return typeof kind.Side === "string" ? kind.Side : "DragonBonus";
+    return typeof kind.Side === "string" ? kind.Side : `DragonBonus${kind.Side.DragonBonus}`;
   }
   return null;
 }
@@ -36,7 +40,8 @@ const SIDE_DESC: Record<string, (m: number) => string> = {
   BankerPair: (m) => `Banker Pair — the Banker's first two cards matched, paid ${m}:1.`,
   Dragon7: (m) => `Dragon 7 — the Banker won with a three-card 7, paid ${m}:1.`,
   Panda8: (m) => `Panda 8 — the Player won with a three-card 8, paid ${m}:1.`,
-  DragonBonus: (m) => `Dragon Bonus — paid ${m}:1 on the winning side's margin.`,
+  DragonBonusPlayer: (m) => `Player Dragon Bonus — paid ${m}:1 on the Player's winning margin.`,
+  DragonBonusBanker: (m) => `Banker Dragon Bonus — paid ${m}:1 on the Banker's winning margin.`,
   Tiger: (m) => `Tiger — the Banker won on a 6, paid ${m}:1.`,
 };
 

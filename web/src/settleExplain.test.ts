@@ -63,6 +63,15 @@ test("handles the Dragon Bonus variable payout by its actual multiplier", () => 
   expect(notes[0]).toContain("9:1");
 });
 
+test("names which Dragon Bonus side paid, now that both are on the felt", () => {
+  expect(sideBetNotes([pay({ Side: { DragonBonus: "Player" } }, 100, 900)])[0]).toMatch(
+    /Player Dragon Bonus/,
+  );
+  expect(sideBetNotes([pay({ Side: { DragonBonus: "Banker" } }, 100, 400)])[0]).toMatch(
+    /Banker Dragon Bonus/,
+  );
+});
+
 test("explains a push when a main bet ties", () => {
   const note = pushNote([pay({ Main: "Player" }, 5_000, 0)]);
   expect(note).not.toBeNull();

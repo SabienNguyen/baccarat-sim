@@ -3,17 +3,19 @@ import type { GlossaryEntry } from "../engine/types";
 import { glossaryEntry } from "../glossaryData";
 import "./bonusinfo.css";
 
-/** The bonus bets explained, in felt order, with the Tiger family expanded. */
+/**
+ * The bonus bets explained, in felt order — one row per spot you can actually
+ * reach, with the two-sided bets sharing a row. The engine settles four more
+ * (Big/Small Tiger, Tiger Tie, Tiger Pair) that no spot offers; documenting
+ * those here taught bets nobody could place, so they live in the glossary
+ * proper instead. Keep this list in step with `SIDE_SPOTS` in BetRail.tsx.
+ */
 const BONUS_TERMS: Array<{ term: string; title?: string; payout: string }> = [
   { term: "pair", title: "Player / Banker Pair", payout: "11:1" },
+  { term: "dragon-bonus", title: "Player / Banker Dragon Bonus", payout: "up to 30:1" },
   { term: "dragon-7", payout: "40:1" },
   { term: "panda-8", payout: "25:1" },
-  { term: "dragon-bonus", payout: "up to 30:1" },
   { term: "tiger", payout: "12:1 / 20:1" },
-  { term: "big-tiger", payout: "50:1" },
-  { term: "small-tiger", payout: "22:1" },
-  { term: "tiger-tie", payout: "35:1" },
-  { term: "tiger-pair", payout: "varies" },
 ];
 
 interface BonusInfoModalProps {

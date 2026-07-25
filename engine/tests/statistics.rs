@@ -90,7 +90,7 @@ fn side_bet_house_edges_match_published_paytables() {
         (0.1668, 0.03), // Tiger 12/20:1
         (0.1525, 0.04), // Big Tiger 50:1
         (0.1433, 0.03), // Small Tiger 22:1
-        (0.3074, 0.03), // Tiger Tie 35:1
+        (0.1151, 0.03), // Tiger Tie 45:1
         (0.1612, 0.03), // Tiger Pair 4/20/100:1
     ];
 
