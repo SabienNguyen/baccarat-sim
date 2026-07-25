@@ -1,4 +1,5 @@
 import type { RoundSnapshot } from "../engine/types";
+import { betLabel } from "../betKind";
 import { formatCents } from "../format";
 import { VolumeControl } from "./VolumeControl";
 import "./hud.css";
@@ -16,12 +17,9 @@ function formatNet(net: number): string {
   return net >= 0 ? `+${formatCents(net)}` : formatCents(net);
 }
 
-/** A short human label for a BetKind. */
-function describeBet(kind: RoundSnapshot["bets"][number]["kind"]): string {
-  if ("Main" in kind) return kind.Main;
-  if (typeof kind.Side === "string") return kind.Side;
-  return Object.keys(kind.Side)[0];
-}
+// Labels come from `betKind.ts` so the ledger, the dealer's call and the settle
+// notes name a bet the same way — and so the two Dragon Bonus sides don't both
+// render as a bare "DragonBonus".
 
 export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
   const progress = goal ? Math.min(snapshot.bankroll / goal, 1) : 0;
@@ -72,7 +70,7 @@ export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
         <ul aria-label="payouts" className="hud-payouts">
           {snapshot.payouts.map((p, i) => (
             <li key={i}>
-              <span className="hud-payout-bet">{describeBet(p.bet.kind)}</span>
+              <span className="hud-payout-bet">{betLabel(p.bet.kind)}</span>
               <span className={`hud-payout-net ${p.net >= 0 ? "is-win" : "is-loss"}`}>
                 {formatNet(p.net)}
               </span>

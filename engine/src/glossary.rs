@@ -56,7 +56,7 @@ pub fn glossary() -> Vec<GlossaryEntry> {
         e("small-tiger", "Small Tiger", "Side bet: Banker wins with a two-card 6.",
           "The Small Tiger pays 22:1 when the Banker wins with a two-card total of 6."),
         e("tiger-tie", "Tiger Tie", "Side bet: the round ties on 6.",
-          "The Tiger Tie pays 35:1 when the round is a Tie with both hands totaling 6."),
+          "The Tiger Tie pays 45:1 when the round is a Tie with both hands totaling 6."),
         e("tiger-pair", "Tiger Pair", "Side bet on either hand's first-two-card pair.",
           "The Tiger Pair pays on a pair in either hand, with bigger payouts for a double pair or twin identical pairs."),
         e("squeeze", "Squeeze", "Slowly revealing a card by its edge for suspense.",

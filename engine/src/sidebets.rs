@@ -101,10 +101,14 @@ pub fn small_tiger_pays(round: &RoundResult, stake: i64) -> i64 {
     }
 }
 
-/// Tiger Tie: a 6–6 tie — 35:1.
+/// Tiger Tie: a 6–6 tie — 45:1.
+///
+/// 45:1 is the current published payout; the bet launched at 35:1, which priced
+/// a 30.7% house edge — the worst number in the whole engine. See A7/A8 in
+/// docs/BACKLOG.md and the measured figures in `candidate_paytables`.
 pub fn tiger_tie_pays(round: &RoundResult, stake: i64) -> i64 {
     if round.outcome == Outcome::Tie && round.banker.total() == 6 {
-        stake * 35
+        stake * 45
     } else {
         -stake
     }
@@ -386,7 +390,7 @@ mod tiger_tests {
     #[test]
     fn tiger_tie_pays_thirtyfive_on_six_six() {
         let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
-        assert_eq!(tiger_tie_pays(&r, 100), 3_500);
+        assert_eq!(tiger_tie_pays(&r, 100), 4_500);
     }
 
     #[test]
@@ -576,12 +580,166 @@ mod dispatch_tests {
     #[test]
     fn dispatch_tiger_tie() {
         let r = rr(vec![c(Rank::Two), c(Rank::Four)], vec![c(Rank::Three), c(Rank::Three)], Outcome::Tie);
-        assert_eq!(settle_side(SideBet::TigerTie, 100, &r), 3_500);
+        assert_eq!(settle_side(SideBet::TigerTie, 100, &r), 4_500);
     }
 
     #[test]
     fn dispatch_tiger_pair() {
         let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Two), c(Rank::Three)], Outcome::Tie);
         assert_eq!(settle_side(SideBet::TigerPair, 100, &r), 400);
+    }
+
+    /// Measured house edge and hit rate for every side bet at *our* paytables,
+    /// dealt from real shoes (cut card, burn ritual, and all), so the numbers
+    /// carry the card depletion a combinatorial table would miss. Informational
+    /// — run it when deciding which bets belong on the felt:
+    /// `cargo test -p baccarat-engine --release side_bet_house_edges -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn side_bet_house_edges() {
+        use crate::round::play_round;
+        use crate::shoe::{Shoe, CUT_CARD};
+
+        const SHOES: u64 = 500_000; // ~40M coups
+        const STAKE: i64 = 100;
+
+        let bets = [
+            ("PlayerPair", SideBet::PlayerPair),
+            ("BankerPair", SideBet::BankerPair),
+            ("Dragon7", SideBet::Dragon7),
+            ("Panda8", SideBet::Panda8),
+            ("DragonBonus(P)", SideBet::DragonBonus(BetSide::Player)),
+            ("DragonBonus(B)", SideBet::DragonBonus(BetSide::Banker)),
+            ("Tiger", SideBet::Tiger),
+            ("BigTiger", SideBet::BigTiger),
+            ("SmallTiger", SideBet::SmallTiger),
+            ("TigerTie", SideBet::TigerTie),
+            ("TigerPair", SideBet::TigerPair),
+        ];
+
+        let mut net = vec![0i64; bets.len()];
+        let mut wins = vec![0u64; bets.len()];
+        let mut pushes = vec![0u64; bets.len()];
+        let mut coups = 0u64;
+
+        for seed in 0..SHOES {
+            let mut shoe = Shoe::new_seeded(seed);
+            while shoe.remaining() > CUT_CARD {
+                let round = play_round(&mut shoe);
+                coups += 1;
+                for (i, (_, bet)) in bets.iter().enumerate() {
+                    let delta = settle_side(*bet, STAKE, &round);
+                    net[i] += delta;
+                    if delta > 0 {
+                        wins[i] += 1;
+                    } else if delta == 0 {
+                        pushes[i] += 1;
+                    }
+                }
+            }
+        }
+
+        eprintln!("{coups} coups over {SHOES} shoes\n");
+        eprintln!("{:<16}{:>12}{:>10}{:>9}", "bet", "house edge", "hit rate", "push");
+        for (i, (name, _)) in bets.iter().enumerate() {
+            let wagered = (coups as i64) * STAKE;
+            let edge = -(net[i] as f64) / wagered as f64 * 100.0;
+            let hit = wins[i] as f64 / coups as f64 * 100.0;
+            let push = pushes[i] as f64 / coups as f64 * 100.0;
+            eprintln!("{name:<16}{edge:>11.2}%{hit:>9.2}%{push:>8.2}%");
+        }
+    }
+
+    /// Candidate paytables we do *not* implement, priced the same way, so the
+    /// question "should the felt carry this instead?" is answered with numbers.
+    /// Every one of these is on a Las Vegas felt today (see docs/BACKLOG.md).
+    /// `cargo test -p baccarat-engine --release candidate_paytables -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn candidate_paytables() {
+        use crate::round::play_round;
+        use crate::shoe::{Shoe, CUT_CARD};
+
+        const SHOES: u64 = 500_000;
+        const STAKE: i64 = 100;
+
+        /// Banker wins with 6: 12:1 on two cards, 23:1 on three. The Venetian's
+        /// "Lucky 6" — the same event as our Tiger, paying 3 more on the long leg.
+        fn lucky6(r: &RoundResult, stake: i64) -> i64 {
+            match banker_six(r) {
+                Some(2) => stake * 12,
+                Some(_) => stake * 23,
+                None => -stake,
+            }
+        }
+
+        /// Player *wins* with exactly 7: 6:1 on two cards, 15:1 on three.
+        /// The Venetian's "Lucky 7" proposition.
+        fn lucky7(r: &RoundResult, stake: i64) -> i64 {
+            if r.outcome == Outcome::PlayerWin && r.player.total() == 7 {
+                if r.player.cards.len() == 2 {
+                    stake * 6
+                } else {
+                    stake * 15
+                }
+            } else {
+                -stake
+            }
+        }
+
+        /// Tiger Tie at the vendor's current 45:1 rather than our 35:1.
+        fn tiger_tie_45(r: &RoundResult, stake: i64) -> i64 {
+            if r.outcome == Outcome::Tie && r.banker.total() == 6 {
+                stake * 45
+            } else {
+                -stake
+            }
+        }
+
+        /// Either Pair: a pair in either hand, 5:1 — the common Vegas variant of
+        /// the two separate pair circles.
+        fn either_pair(r: &RoundResult, stake: i64) -> i64 {
+            if r.player.is_pair() || r.banker.is_pair() {
+                stake * 5
+            } else {
+                -stake
+            }
+        }
+
+        type Candidate = (&'static str, fn(&RoundResult, i64) -> i64);
+        let candidates: [Candidate; 4] = [
+            ("Lucky6 12/23", lucky6),
+            ("Lucky7 6/15", lucky7),
+            ("TigerTie 45:1", tiger_tie_45),
+            ("EitherPair 5:1", either_pair),
+        ];
+
+        let mut net = vec![0i64; candidates.len()];
+        let mut wins = vec![0u64; candidates.len()];
+        let mut coups = 0u64;
+
+        for seed in 0..SHOES {
+            let mut shoe = Shoe::new_seeded(seed);
+            while shoe.remaining() > CUT_CARD {
+                let round = play_round(&mut shoe);
+                coups += 1;
+                for (i, (_, pay)) in candidates.iter().enumerate() {
+                    let delta = pay(&round, STAKE);
+                    net[i] += delta;
+                    if delta > 0 {
+                        wins[i] += 1;
+                    }
+                }
+            }
+        }
+
+        eprintln!("{coups} coups over {SHOES} shoes\n");
+        eprintln!("{:<16}{:>12}{:>10}", "candidate", "house edge", "hit rate");
+        for (i, (name, _)) in candidates.iter().enumerate() {
+            let wagered = (coups as i64) * STAKE;
+            let edge = -(net[i] as f64) / wagered as f64 * 100.0;
+            let hit = wins[i] as f64 / coups as f64 * 100.0;
+            eprintln!("{name:<16}{edge:>11.2}%{hit:>9.2}%");
+        }
     }
 }
