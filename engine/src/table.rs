@@ -334,10 +334,13 @@ impl Table {
             }
             .into());
         }
-        if self.players.iter().all(|p| p.bets.is_empty()) {
+        // A real pit deals the coup whether or not there's money on the felt —
+        // you're allowed to sit and watch the shoe build. So an empty felt is
+        // fine; an EMPTY TABLE isn't.
+        if self.players.is_empty() {
             return Err(CommandError::NoBetsPlaced.into());
         }
-        // The pit waits for the whole table: everyone bets or sits out.
+        // The pit still waits for the whole table: everyone bets or sits out.
         if self.players.iter().any(|p| !p.decided()) {
             return Err(TableError::WaitingOnPlayers);
         }
@@ -991,13 +994,46 @@ mod tests {
     }
 
     #[test]
-    fn deal_needs_a_bet_from_someone() {
+    fn deal_waits_for_an_undecided_seat() {
+        // A seat that has neither bet nor sat out still blocks the deal (the
+        // single-player adapter narrates this as "chips down first").
         let mut t = table();
         let _a = t.join("a", 100_000).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+        // ...and with nobody seated at all there's no coup to deal
+        let mut empty = table();
         assert!(matches!(
-            t.deal(),
+            empty.deal(),
             Err(TableError::Command(CommandError::NoBetsPlaced))
         ));
+    }
+
+    #[test]
+    fn a_watched_hand_deals_with_no_money_on_the_felt() {
+        // Like standing at a real table without betting: the coup is dealt, the
+        // house turns both hands, the result joins the roads, and the roll is
+        // untouched.
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.sit_out(a).unwrap();
+        t.deal().unwrap();
+
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Dealing);
+        // nobody bet either side, so both hands belong to the house dealer
+        assert_eq!(v.player_squeezer, None);
+        assert_eq!(v.banker_squeezer, None);
+        assert!(t.dealer_flip_pending());
+        while t.dealer_flip_one() {}
+
+        t.settle().unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.bankroll, 100_000, "a watched hand costs nothing");
+        assert_eq!(v.payouts.as_deref(), Some(&[][..]), "settled, with no payouts");
+        assert_eq!(v.scoreboard.bead_plate.cells.len(), 1, "it still joins the roads");
+        // and the next coup can be bet normally
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
     }
 
     #[test]

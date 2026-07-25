@@ -184,6 +184,13 @@ impl WasmTable {
         self.view()
     }
 
+    /// Skip this coup. Paired with `deal`, this is how you watch a hand play out
+    /// without putting money down, the way you can at a real table.
+    pub fn sit_out(&mut self) -> Result<TableView, JsValue> {
+        self.inner.sit_out(self.me).map_err(table_err)?;
+        self.view()
+    }
+
     /// Buy more chips and keep playing the SAME shoe (no reshuffle, roads intact).
     pub fn rebuy(&mut self, amount: i64) -> Result<TableView, JsValue> {
         self.inner.rebuy(self.me, amount).map_err(table_err)?;

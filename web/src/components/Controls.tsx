@@ -13,6 +13,8 @@ interface ControlsProps {
   onToggleExplain?: () => void;
   /** Skip this coup (multiplayer tables). */
   onSitOut?: () => void;
+  /** Deal a coup with nothing staked, to watch the shoe (single player). */
+  onWatch?: () => void;
 }
 
 export function Controls({
@@ -25,6 +27,7 @@ export function Controls({
   explainOn,
   onToggleExplain,
   onSitOut,
+  onWatch,
 }: ControlsProps) {
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
@@ -39,6 +42,13 @@ export function Controls({
       {onSitOut && (
         <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onSitOut}>
           Sit out
+        </button>
+      )}
+      {/* Stand and watch a coup with nothing down, like you can at a real table.
+          Only offered while the felt is empty — once you've bet, Deal is the move. */}
+      {onWatch && !hasBets && (
+        <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onWatch}>
+          Watch hand
         </button>
       )}
       {onRevealAll && (
