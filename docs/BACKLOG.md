@@ -41,6 +41,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | A3 | Ruleset toggle: Commission vs EZ Baccarat (no-commission, Dragon-7 bar) — engine fully implements `EzBaccarat`, UI hard-wires `Commission` | S | `tables.ts:76`, `rooms.rs:48`, `adapter.ts` |
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
+| A8 | Our Tiger (banker wins with 6, 12:1 two-card / 20:1 three-card) is the same event as the Venetian's **Lucky 6**, which pays 12:1 / **23:1**. Both paytables are authentic; ours measures 16.81% and Lucky 6 measures 11.84%, making Tiger the worst bet on our felt. Candidate for a "Vegas felt" preset alongside A3/A4 rather than a silent reprice — the tiger token art on the Big Road is tied to the current name | S | `sidebets.rs:80`, `roadTokens.tsx` |
 | A7 | Tiger Tie pays 35:1 — the original Marina Bay Sands odds, since superseded by 45:1 in the vendor's own how-to-play. 35:1 measures a 30.7% house edge, the worst bet in the engine; 45:1 lands ~11.7%. Not offered on the felt today, so this is a one-line + one-test change with no visual impact | S | `sidebets.rs:106`, test `dispatch_tiger_tie` |
 | A6 | Jack rendered as a chess knight ♞ (a horse) — a Jack/Knave isn't a knight; use a J-appropriate glyph or the index treatment | S | `cardArt.ts:107` (cosmetic, deliberate retro styling) |
 | N1 | Shoe progress readout — cards remaining / shoe %, cut-card marker, shoe number; every real table shows this and it teaches shoe pacing. Needs `shoe.remaining()` exposed across the wasm boundary + a HUD chip | M | engine field + `Hud.tsx` |
@@ -68,6 +69,7 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | N4 | Default Explain ON at the Low "Learn the ropes" table (it's the only feature that teaches the drawing rules, hidden behind a toggle by default) + a static third-card tableau reference | S | ✅ done 2026-07-21 (coach flag on the low table opens Explain; `ThirdCardChart` renders the tableau, faithful to `banker_draws`) |
 | N6 | House-edge caption on the bet spots ("Banker best, Tie worst") | S | ❌ dropped 2026-07-21 — user didn't want raw percentages on the felt; edges stay in the Explain panel only |
 | N9 | **Explain says _why_ the card counts differ.** The trace stated the decision ("Banker stands on 6") but never the tableau reason. Now every draw/stand line names the rule and the actual player third card. Focus of the continuous Explain-clarity loop — see `docs/EXPLAIN.md` | — | ✅ started 2026-07-21 (engine `banker_reason`; richer player/natural lines) |
+| N10 | Show the measured house edge per bet **inside `BonusInfoModal`** — the felt spans 2.65% (Player Dragon Bonus) to 16.81% (Tiger), a 6× spread the player cannot see. Deliberately *not* N6: no percentages on the felt itself, only in the panel you open to learn, same place the Explain edges already live | S | `BonusInfoModal.tsx`, numbers from `side_bet_house_edges` |
 | N2 | First-run "How to play" / coach overlay — a true novice is dropped straight onto the felt with no primer | M | open |
 | N3b | Wire remaining orphan glossary entries `shoe` and `ez-baccarat` (ez only relevant once A3 ruleset toggle lands) | S | open |
 
@@ -226,6 +228,37 @@ organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
 
 ## Audit log
 
+- **2026-07-25 (what Las Vegas actually spreads):** Surveyed operator
+  how-to-play pages, the Nevada GCB approved-games list and the Vegas
+  Advantage table-game survey to check our felt against real Strip layouts.
+  Baccarat is Las Vegas's biggest non-blackjack game (~350 tables valley-wide,
+  250+ on the Strip). Findings:
+  - **Commission is the Strip standard.** The Venetian's own guide: "All
+    winning bets on the bank side are assessed a 5% commission."
+  - **Vegas commission-free is Super 6, not EZ.** The Venetian's no-commission
+    variation pays a winning Banker 6 at 50% of the stake — that is A4, not
+    A3's Dragon-7 bar. EZ Baccarat proper is hard to find on the Strip.
+  - **Stacking side bets is normal.** Gold Coast spread five on one felt
+    (Lucky Max/Tie Max 55:1, Rabbit Play, Dragon, Panda 8, Dragon 7), so our
+    six spots are unremarkable and a seventh needs no justification.
+  - **Dragon Bonus is live in Vegas, both sides.** Westgate posts it at
+    1:1–30:1 on a 4–9 margin with a $100 side-bet max; Caesars publishes 2025
+    gaming guides for it. Supports F1.
+  - **Tiger Pair is on Venetian felts** at exactly our 4/20/100:1. It is the
+    only Tiger-family bet with a Vegas placement found — no evidence for Big
+    Tiger, Small Tiger or Tiger Tie in Las Vegas.
+  - **Two bets we lack, priced.** Added `candidate_paytables` (same 40M-coup
+    harness) to answer whether they belong:
+
+    | candidate | edge | hit rate | verdict |
+    |---|---|---|---|
+    | Lucky 6 (12:1 / 23:1) | 11.84% | 5.38% | better than our Tiger's 16.81% — logged A8 |
+    | Tiger Tie at 45:1 | 11.51% | 1.92% | confirms A7 (vs 30.74% at 35:1) |
+    | Either Pair (5:1) | 13.72% | 14.38% | **worse** than our two 11:1 circles (10.35%) — don't switch |
+    | Lucky 7 (6:1 / 15:1) | 18.17% | 8.17% | on Venetian felts and worse than anything we offer — don't add |
+
+    Lucky 7 is the useful counterexample: "a Vegas casino spreads it" is not
+    an argument that a bet is worth offering.
 - **2026-07-25 (side-bet economics, measured not assumed):** Added
   `side_bet_house_edges` (ignored, informational) — 40M coups over 500k real
   shoes, cut card and burn included, settling all 10 side bets per coup.
