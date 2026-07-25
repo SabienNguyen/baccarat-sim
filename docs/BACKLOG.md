@@ -41,6 +41,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | A3 | Ruleset toggle: Commission vs EZ Baccarat (no-commission, Dragon-7 bar) — engine fully implements `EzBaccarat`, UI hard-wires `Commission` | S | `tables.ts:76`, `rooms.rs:48`, `adapter.ts` |
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
+| A7 | Tiger Tie pays 35:1 — the original Marina Bay Sands odds, since superseded by 45:1 in the vendor's own how-to-play. 35:1 measures a 30.7% house edge, the worst bet in the engine; 45:1 lands ~11.7%. Not offered on the felt today, so this is a one-line + one-test change with no visual impact | S | `sidebets.rs:106`, test `dispatch_tiger_tie` |
 | A6 | Jack rendered as a chess knight ♞ (a horse) — a Jack/Knave isn't a knight; use a J-appropriate glyph or the index treatment | S | `cardArt.ts:107` (cosmetic, deliberate retro styling) |
 | N1 | Shoe progress readout — cards remaining / shoe %, cut-card marker, shoe number; every real table shows this and it teaches shoe pacing. Needs `shoe.remaining()` exposed across the wasm boundary + a HUD chip | M | engine field + `Hud.tsx` |
 | N5 | Per-spot bet-limit signage incl. a side-bet max (distinct from F8's min enforcement) — real tables post per-position limits | S | `BetRail.tsx` |
@@ -74,8 +75,9 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
-| F1 | Banker-side Dragon Bonus spot (engine supports both sides; UI only offers Player) | S | `BetRail.tsx:47` |
-| F2 | Expose remaining Tiger family bets (Big/Small Tiger 50:1/22:1, Tiger Tie 35:1, Tiger Pair) — implemented + tested in engine, absent from `SIDE_SPOTS` | S | `sidebets.rs`, `BetRail.tsx` |
+| F1 | Banker-side Dragon Bonus spot (engine supports both sides; UI only offers Player) | S | `BetRail.tsx:47`. Real layouts carry both circles (NJAC 13:69E-1.12 requires two areas for a two-sided bonus wager), so the one-sided felt reads as missing. Measured 9.45% edge vs 2.65% for the Player side — label it honestly if added |
+| F2 | Expose remaining Tiger family bets (Big/Small Tiger 50:1/22:1, Tiger Tie 35:1, Tiger Pair) — implemented + tested in engine, absent from `SIDE_SPOTS` | S | `sidebets.rs`, `BetRail.tsx`. **Recommend NOT adding:** measured edges 14.5–30.7% (see audit log 2026-07-25), and Big/Small Tiger are just the unbundled legs of the Tiger already on the felt — zero new outcomes. Keep engine support for licensees |
+| F11 | Trim `BonusInfoModal`'s `BONUS_TERMS` to the bets actually on the felt — it documents 9, six are placeable; the four Tiger entries stay in the glossary proper | S | `BonusInfoModal.tsx:7` |
 | F3 | Session statistics panel: P/B/T counts, pair frequency, longest streak | S | derive from `history`/scoreboard |
 | F4 | Multiplayer chat or emotes at the table | M | server protocol addition |
 | F5 | Shareable table links (`?room=CODE` deep link joins directly) | S | ✅ done 2026-07-24 (G5) |
@@ -224,6 +226,36 @@ organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
 
 ## Audit log
 
+- **2026-07-25 (side-bet economics, measured not assumed):** Added
+  `side_bet_house_edges` (ignored, informational) — 40M coups over 500k real
+  shoes, cut card and burn included, settling all 10 side bets per coup.
+  Measured house edge / hit rate:
+
+  | bet | edge | hit rate | published |
+  |---|---|---|---|
+  | DragonBonus(Player) | **2.65%** | 28.99% | 2.65% |
+  | Dragon 7 | 7.73% | 2.25% | 7.61% |
+  | DragonBonus(Banker) | 9.45% | 28.26% | 9.37% |
+  | Panda 8 | 10.15% | 3.46% | 10.19% |
+  | Player Pair | 10.35% | 7.47% | 10.36% |
+  | Banker Pair | 10.38% | 7.47% | 10.36% |
+  | Small Tiger | 14.46% | 3.72% | 14.33% |
+  | Big Tiger | 15.40% | 1.66% | 15.25% |
+  | Tiger Pair | 16.10% | 14.38% | 16.12% |
+  | Tiger | 16.81% | 5.38% | — |
+  | Tiger Tie | 30.74% | 1.92% | 30.74% |
+
+  Every figure agrees with published analysis to ~0.1pp, which is an
+  independent check on the paytables *and* on the drawing tableau feeding
+  them. Small positive deltas on Dragon 7 / Dragon Bonus (Banker) are
+  expected: published numbers are combinatorial over a full shoe, ours carry
+  real cut-card depletion. Paytables cross-checked against Nevada GCB Rules
+  of Play (Tiger Baccarat) and the TCS John Huxley how-to-play: Tiger 12:1
+  two-card / 20:1 three-card, Small Tiger 22:1, Big Tiger 50:1, Tiger Pair
+  4/20/100:1 — all match. One deviation found: Tiger Tie (A7). Findings fed
+  F1/F2/F11.
+  Note: the felt's Tiger bet (16.81%) is *worse* than either of its own
+  unbundled legs, because 12:1 and 20:1 underprice both conditions.
 - **2026-07-20 (Opus 4.8, full engine + web sweep):** No rules bugs found.
   Verified correct against real punto banco: full drawing tableau incl. all
   banker edge cases, card values/mod-10 totals, naturals ending the coup,

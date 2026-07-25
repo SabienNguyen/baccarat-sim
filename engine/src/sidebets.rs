@@ -584,4 +584,65 @@ mod dispatch_tests {
         let r = rr(vec![c(Rank::Seven), c(Rank::Seven)], vec![c(Rank::Two), c(Rank::Three)], Outcome::Tie);
         assert_eq!(settle_side(SideBet::TigerPair, 100, &r), 400);
     }
+
+    /// Measured house edge and hit rate for every side bet at *our* paytables,
+    /// dealt from real shoes (cut card, burn ritual, and all), so the numbers
+    /// carry the card depletion a combinatorial table would miss. Informational
+    /// — run it when deciding which bets belong on the felt:
+    /// `cargo test -p baccarat-engine --release side_bet_house_edges -- --ignored --nocapture`
+    #[test]
+    #[ignore = "informational"]
+    fn side_bet_house_edges() {
+        use crate::round::play_round;
+        use crate::shoe::{Shoe, CUT_CARD};
+
+        const SHOES: u64 = 500_000; // ~40M coups
+        const STAKE: i64 = 100;
+
+        let bets = [
+            ("PlayerPair", SideBet::PlayerPair),
+            ("BankerPair", SideBet::BankerPair),
+            ("Dragon7", SideBet::Dragon7),
+            ("Panda8", SideBet::Panda8),
+            ("DragonBonus(P)", SideBet::DragonBonus(BetSide::Player)),
+            ("DragonBonus(B)", SideBet::DragonBonus(BetSide::Banker)),
+            ("Tiger", SideBet::Tiger),
+            ("BigTiger", SideBet::BigTiger),
+            ("SmallTiger", SideBet::SmallTiger),
+            ("TigerTie", SideBet::TigerTie),
+            ("TigerPair", SideBet::TigerPair),
+        ];
+
+        let mut net = vec![0i64; bets.len()];
+        let mut wins = vec![0u64; bets.len()];
+        let mut pushes = vec![0u64; bets.len()];
+        let mut coups = 0u64;
+
+        for seed in 0..SHOES {
+            let mut shoe = Shoe::new_seeded(seed);
+            while shoe.remaining() > CUT_CARD {
+                let round = play_round(&mut shoe);
+                coups += 1;
+                for (i, (_, bet)) in bets.iter().enumerate() {
+                    let delta = settle_side(*bet, STAKE, &round);
+                    net[i] += delta;
+                    if delta > 0 {
+                        wins[i] += 1;
+                    } else if delta == 0 {
+                        pushes[i] += 1;
+                    }
+                }
+            }
+        }
+
+        eprintln!("{coups} coups over {SHOES} shoes\n");
+        eprintln!("{:<16}{:>12}{:>10}{:>9}", "bet", "house edge", "hit rate", "push");
+        for (i, (name, _)) in bets.iter().enumerate() {
+            let wagered = (coups as i64) * STAKE;
+            let edge = -(net[i] as f64) / wagered as f64 * 100.0;
+            let hit = wins[i] as f64 / coups as f64 * 100.0;
+            let push = pushes[i] as f64 / coups as f64 * 100.0;
+            eprintln!("{name:<16}{edge:>11.2}%{hit:>9.2}%{push:>8.2}%");
+        }
+    }
 }
