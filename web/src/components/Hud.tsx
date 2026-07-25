@@ -1,6 +1,6 @@
 import type { RoundSnapshot } from "../engine/types";
 import { betLabel } from "../betKind";
-import { formatCents } from "../format";
+import { formatCents, outcomeLabel } from "../format";
 import { VolumeControl } from "./VolumeControl";
 import "./hud.css";
 
@@ -62,7 +62,7 @@ export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
       {snapshot.outcome !== null && (
         <div className="hud-box hud-box--outcome">
           <span className="hud-box-label">Outcome</span>
-          <span className="hud-box-value hud-box-value--small">{snapshot.outcome}</span>
+          <span className="hud-box-value hud-box-value--small">{outcomeLabel(snapshot.outcome)}</span>
         </div>
       )}
 

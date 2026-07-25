@@ -428,3 +428,29 @@
     font-size: 10px;
   }
 }
+
+/* --- narrow phones: both hands can hold three cards --- */
+/* Six 58px cards plus their 4px margins need 396px, so a coup where both sides
+   draw a third card pushed the page 8px wider than a 390px screen — and the
+   horizontal scroll that created is what made the table look like it had slid
+   off. Step the cards down once more so 3+3 always fits. Ratio held at ~0.7,
+   the same as every step above. */
+@media (max-width: 430px) {
+  .card {
+    width: 48px;
+    height: 69px;
+    margin: 2px;
+  }
+  .card-stage {
+    /* keeps the same ~45px of room for the label and total badge as the 520px
+       step, so a landing card still causes no layout shift */
+    min-height: 114px;
+    /* The deal animation flies each card in from beyond the right edge, which
+       widened the document by 52px on every single hand — a horizontal jiggle
+       (and scrollbar) once per deal. Clip the fly-in on the inline axis only,
+       so cards still enter from the shoe side but can no longer stretch the
+       page; `clip` leaves the block axis visible, unlike `hidden`. */
+    overflow-x: clip;
+    overflow-y: visible;
+  }
+}

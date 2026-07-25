@@ -37,7 +37,7 @@ at the bottom. Effort: S (< half day), M (a day or two), L (multi-day).
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
 | A1 | Cut-card behavior: let the cut card emerge mid-shoe, finish the hand plus one "last hand", show a cut-card marker — instead of today's preemptive reshuffle at ≤14 cards | M | `session.rs:268`, `table.rs:286`; no statistical bias today, purely procedure |
-| A2 | Big Road dragon tail: cap columns at 6 rows and bend right | M | ⚙ partly done: colored circles + tie-slash shipped earlier; **pair dots + animal bonus tokens done 2026-07-24** (traditional blue top-left / red bottom-right pair dots, plus pixel-art Dragon 7 / Panda 8 / Tiger tokens hung off the ring — engine now carries `dragon7`/`panda8`/`tiger` flags per cell). Still open: the 6-row column cap and right-bend for a long dragon tail |
+| A2 | Big Road dragon tail: cap columns at 6 rows and bend right | M | ⚙ partly done: colored circles + tie-slash shipped earlier; **pair dots + animal bonus tokens done 2026-07-24** (traditional blue top-left / red bottom-right pair dots, plus pixel-art Dragon 7 / Panda 8 / Tiger tokens hung off the ring — engine now carries `dragon7`/`panda8`/`tiger` flags per cell). Still open: the 6-row column cap and right-bend for a long dragon tail. **Measured 2026-07-25 (UI review loop):** columns do exceed six rows in practice — after 30 hands the Big Road's tallest column hit **8**, Cockroach Pig **14** and Small Road **11**, against a grid sized for six (`min-height: 192px`). So a long streak overflows its own box rather than bending right, and the derived roads have no cap at all |
 | A3 | Ruleset toggle: Commission vs EZ Baccarat (no-commission, Dragon-7 bar) — engine fully implements `EzBaccarat`, UI hard-wires `Commission` | S | `tables.ts:76`, `rooms.rs:48`, `adapter.ts` |
 | A4 | Super 6 / Tie 9:1 rule variants | M | engine change + table config |
 | A5 | "Ask/prediction" cells on derived roads (what Big Eye/Small/Cockroach would show if next is P vs B) — standard on electronic displays | M | `scoreboard.rs` + `roads.tsx` |
@@ -160,6 +160,17 @@ two-plus places to update with nothing to catch drift.
 
 ## UI consolidation / polish
 
+Findings from the recurring Playwright UI-review loop (see the dated audit-log
+entries). Items here were seen in a real browser but are judgment calls, so they
+are logged rather than changed unilaterally.
+
+| # | Item | Effort | Status |
+|---|------|--------|--------|
+| U1 | **HUD outcome showed the wire enum** — `snapshot.outcome` rendered raw, so the box read `BankerWin`, and since the display font is all-caps that came out `BANKERWIN` | S | ✅ done 2026-07-25 — `outcomeLabel()` in `format.ts`, with a test asserting no label contains a camel-case seam |
+| U2 | Desktop leaves ~440px of vertical dead space in the left column: the HUD is 460px tall and vertically centred in a 900px viewport, so there is **220px of bare felt above it and 220px below**, while the right column (roads + explain) fills nearly the full height. Either the HUD should carry more (N1 shoe readout, N7 commission tally both want a home) or the column should top-align | S | open — needs a design call, not just a CSS change |
+| U3 | The Full Roads dialog is correctly capped and internally scrollable (`max-height` + `overflow-y: auto`, no viewport overflow at 1440×900, 1280×720 or 390×664), but Small Road and Cockroach Pig sit below the fold with **no scroll affordance**, so they read as clipped rather than scrollable | S | open — a fade or a scrollbar gutter would settle it |
+| U4 | `NEW SHOE` renders in the same alarm red as `EXPLAIN`, giving a shoe reset the loudest treatment on the felt. Colour currently encodes enabled/disabled, not consequence | S | open — wants a considered button hierarchy, not a one-off tweak |
+
 | # | Item | Effort | Notes |
 |---|------|--------|-------|
 | C1 | Delete dead `exchange.css` (87 orphaned lines — no `ExchangeModal` exists) and extract the `.btn` base rule duplicated across 7 css files (incl. a double definition inside `controls.css`) into `theme.css` | S | `components/exchange.css`, `bonusinfo.css:31`, `bust.css:52`, `controls.css:9-22`, `cutdeck.css:76`, `scoreboard.css:190`, `victory.css:50` |
@@ -180,6 +191,8 @@ never be seen together. Measured per-section and fixed the biggest offenders.
 |---|------|--------|--------|
 | P1 | iOS viewport foundations — `100vh` hid content under Safari's collapsing URL bar; no safe-area handling (notch / home indicator); rubber-band bounce + grey tap-flash | S | ✅ fixed 2026-07-24 (`100dvh` with `vh` fallback, `viewport-fit=cover` + `env(safe-area-inset-*)` padding, `overscroll-behavior` scoped to `pointer: coarse` so desktop keeps native elastic scroll / trackpad swipe-back) |
 | P2 | Phone layout: HUD was pinned to `min-height: 460px` to mirror the desktop road dock (~440px of dead space); the primary action sat stranded between the felt and the chip rail; the card zone reserved 168px of empty felt | M | ✅ fixed 2026-07-24 — HUD reordered first + compacted to a 2-col stat grid (437→~190px), action bar pinned to the bottom (44px thumb targets, safe-area aware), card reserve 168→128px (verified no layout shift when cards land). Total **1810→1515px**; bankroll, dealer line, felt and all three bet spots now sit above the fold |
+| P8 | **Two more phone overflows, found by the UI-review loop.** (a) Cards step down 100→84→68→58px but stop at 520px, so six 58px cards plus margins needed 396px — a coup where *both* sides drew a third card pushed the document to 418px on a 390px screen. (b) The third-card tableau asked for `width: 100%` while `table-layout` was auto, so the cells' min-content won and it ran 13px past the edge | S | ✅ done 2026-07-25 — added a ≤430px card step (48×69px, ratio held at ~0.7) and made the tableau `table-layout: fixed`. Page is exactly 390px wide again |
+| P9 | **Every deal widened the page by 52px.** The deal animation flies each card in from beyond the right edge and `.card-stage` was `overflow: visible`, so the document stretched on *every hand* — a horizontal jiggle and scrollbar once per deal, sampled across 145 animation frames | S | ✅ done 2026-07-25 — `overflow-x: clip` on the stage below 430px, block axis left visible so nothing else is cut. Peak width across a full deal is now 390px, unchanged |
 | P6 | **Chips ran the felt off a phone screen.** `.spot-chips` was a horizontal row: eight 16px mini-chips plus the amount pill gave it an 87–103px min-content width, and because a grid item defaults to `min-width: auto`, that forced every bonus column past its `1fr` share. One chip on a bonus spot at 390px blew the document to 475px wide (+85px); six chips reached 539px (+149px), and `aspect-ratio: 1/1` grew the circles 77→117px so the page stretched vertically too | S | ✅ **done 2026-07-25** — chips now stack into a vertical tower, positioned out of flow along with the amount, so a stack of any size is one chip wide and cannot resize its spot. `min-width: 0` added to `.spot` as a standing guard. Verified across 12 viewports × 2 tabs × 2 states |
 | P7 | Table-limits string overflowed its HUD box, pushing 2px past a 320px viewport | S | ✅ **done 2026-07-25** — wraps below 340px only; constraining it unconditionally cost a line of height at 375–390px |
 | P3 | Chip rack still ~70px below the fold at 390x664 — a pre-armed chip means tapping a spot works without scrolling, but the denominations need a nudge. Needs real compaction (smaller spot arcs / a horizontal chip strip), not more padding trims | M | open — CSS-only trimming hit diminishing returns; next step is a phone-specific bet-rail layout |
@@ -231,6 +244,36 @@ real, traffic measurable, 1-click invite shipped); **PR B** = G7 (the durable
 organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
 
 ## Audit log
+
+- **2026-07-25 (UI review loop, iteration 1 — Playwright):** Built, served
+  locally and drove the real app in Chromium: 30 hands played through the actual
+  deal/reveal/auto-settle flow at 1440×900, 1280×720 and 390×664, screenshots at
+  each stage, zero page or console errors throughout.
+
+  Found and fixed: **U1**, the HUD outcome box rendering the wire enum.
+
+  Confirmed with measurements: **A2** — columns really do outgrow the six-row
+  grid (Big Road 8, Cockroach Pig 14, Small Road 11 after 30 hands).
+
+  Logged for a design call: **U2** (440px of dead felt in the desktop left
+  column), **U3** (Full Roads scroll affordance), **U4** (button colour encodes
+  state, not consequence).
+
+  Four things looked like bugs in the screenshots and were *not* — worth
+  recording so they don't get "fixed" later:
+  1. The Big Road appeared to drop marks. It does not: 29 non-tie results, 29
+     rendered marks. `useFollowLatest` scrolls the grid to the newest column, so
+     earlier columns are simply out of view.
+  2. A bonus token looked like it was spilling past the road's left edge. It is
+     not: `.road-grid` already carries `padding: 6px`, exactly covering the
+     token's `-6px` offset — measured clipping is 0 on both edges.
+  3. The Full Roads dialog looked clipped at the bottom. It is capped and
+     internally scrollable, and overflows the viewport by 0 at every size tested;
+     only the affordance is missing (U3).
+  4. The roads looked empty after 26 "hands" in the first pass. That was the
+     harness, not the app: single player has no Settle button (`onSettle` is
+     multiplayer-only), so the hands never completed. Re-run through Reveal all,
+     which auto-settles, and the roads filled correctly.
 
 - **2026-07-25 (EXACT — enumeration replaces sampling):** Added
   `engine/tests/exact_enumeration.rs`, which walks **all 1,659,001 reachable
