@@ -172,3 +172,44 @@ test("the public list paginates past eight tables", async () => {
   expect(screen.getByText("2 / 3")).toBeInTheDocument();
   expect(screen.getByText("ROOM08")).toBeInTheDocument();
 });
+
+test("a server that never answers reads as offline, not as a dropped connection", async () => {
+  const { socket, onExit } = mount();
+  // close with no open before it: the service was never reachable
+  act(() => socket.onclose?.());
+
+  expect(screen.getByText(/Multiplayer is offline/)).toBeInTheDocument();
+  expect(screen.getByText(/Single player works/)).toBeInTheDocument();
+  // "dropped" would claim a session that never existed
+  expect(screen.queryByText(/dropped/i)).toBeNull();
+
+  await userEvent.click(screen.getByRole("button", { name: "Play single player" }));
+  expect(onExit).toHaveBeenCalled();
+});
+
+test("a close after a live session still reads as a dropped connection", () => {
+  const { socket } = mount();
+  socket.open();
+  act(() => socket.onclose?.());
+  expect(screen.getByText(/dropped/i)).toBeInTheDocument();
+  expect(screen.queryByText(/Multiplayer is offline/)).toBeNull();
+});
+
+test("Try again reconnects instead of making the player reload", async () => {
+  const socket = new FakeSocket();
+  const later = new FakeSocket();
+  let n = 0;
+  render(
+    <Multiplayer
+      onExit={vi.fn()}
+      connect={() => (n++ === 0 ? socket : later) as unknown as WebSocket}
+    />,
+  );
+  act(() => socket.onclose?.());
+  expect(screen.getByText(/Multiplayer is offline/)).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(n).toBe(2); // a fresh socket, not a page reload
+  later.open();
+  expect(screen.getByText("Live Tables")).toBeInTheDocument();
+});

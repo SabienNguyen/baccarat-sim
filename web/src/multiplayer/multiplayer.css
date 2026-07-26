@@ -441,3 +441,18 @@
   filter: brightness(0.6);
   cursor: not-allowed;
 }
+
+/* The offline screen leads with the way forward (single player) and keeps the
+   retry secondary, since the service being down isn't the player's problem. */
+.mp-offline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+/* `.mp-cta` is normally the first control in a left-aligned column, so it
+   pins itself to the start; centred in this row it needs to sit inline. */
+.mp-offline-actions .mp-cta {
+  align-self: auto;
+}

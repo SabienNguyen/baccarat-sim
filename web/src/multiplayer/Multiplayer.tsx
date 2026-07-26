@@ -46,6 +46,9 @@ type Stage =
   | { at: "connecting" }
   | { at: "lobby" }
   | { at: "table"; store: RemoteStore; room: string }
+  // Never reached the table service at all — a different situation from a
+  // session that dropped, and the only one where single player is the answer.
+  | { at: "offline" }
   | { at: "dead"; why: string };
 
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
@@ -54,6 +57,10 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const ws = useRef<WebSocket | null>(null);
   const storeRef = useRef<RemoteStore | null>(null);
   const [stage, setStage] = useState<Stage>({ at: "connecting" });
+  // Bumped by "Try again" so the connect effect re-runs when the service comes
+  // back, instead of making the player reload the page.
+  const [attempt, setAttempt] = useState(0);
+  const opened = useRef(false);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 8;
@@ -78,11 +85,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     try {
       socket = connect ? connect() : new WebSocket(socketUrl());
     } catch {
-      setStage({ at: "dead", why: "The table service isn't reachable." });
+      setStage({ at: "offline" });
       return;
     }
     ws.current = socket;
     socket.onopen = () => {
+      opened.current = true;
       setStage({ at: "lobby" });
       socket.send(JSON.stringify({ type: "list_rooms" }));
       // Deep-link auto-join: on success we land at the table; on a bad code the
@@ -141,9 +149,13 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       }
     };
     socket.onclose = () => {
-      setStage((s) =>
-        s.at === "dead" ? s : { at: "dead", why: "Connection to the casino dropped." },
-      );
+      setStage((s) => {
+        if (s.at === "dead") return s;
+        // A close with no open before it means the service never answered, so
+        // "connection dropped" would be a lie — nothing was ever connected.
+        if (!opened.current) return { at: "offline" };
+        return { at: "dead", why: "Connection to the casino dropped." };
+      });
     };
     return () => {
       // Detach every handler, not just onclose: an in-flight message
@@ -155,7 +167,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   // Clear the "copied" flash timer on unmount so it can't fire against a
   // torn-down component.
@@ -176,6 +188,34 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         <button type="button" className="mp-back" onClick={onExit}>
           Back
         </button>
+      </div>
+    );
+  }
+
+  if (stage.at === "offline") {
+    return (
+      <div className="mp-screen">
+        <p className="mp-status">Multiplayer is offline.</p>
+        <p className="mp-substatus">
+          The table service isn't running right now. Single player works exactly the same —
+          same engine, same shoe, same roads — so you can keep playing.
+        </p>
+        <div className="mp-offline-actions">
+          <button type="button" className="mp-cta" onClick={onExit}>
+            Play single player
+          </button>
+          <button
+            type="button"
+            className="mp-back"
+            onClick={() => {
+              opened.current = false;
+              setStage({ at: "connecting" });
+              setAttempt((n) => n + 1);
+            }}
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
