@@ -3,6 +3,11 @@ import { TABLES, type TableTier } from "../tables";
 import { formatCents } from "../format";
 import "./home.css";
 
+/** GitHub Sponsors for the repo owner. Live the moment Sponsors is enabled on
+ *  the account; until then GitHub shows its own "not accepting" page, so the
+ *  link is never broken and needs no code change to switch on. */
+const SPONSOR_URL = "https://github.com/sponsors/SabienNguyen";
+
 interface HomeScreenProps {
   onPlay: (tier: TableTier) => void;
   onMultiplayer?: () => void;
@@ -45,6 +50,19 @@ export function HomeScreen({ onPlay, onMultiplayer }: HomeScreenProps) {
           <a href="how-to-play/">How to play</a>
           <a href="glossary/">Glossary</a>
           <a href="baccarat-roads/">Scoreboard roads</a>
+        </nav>
+      )}
+
+      {/* The only ask in the whole app, and it lives on the menu rather than
+          anywhere near the felt: nothing interrupts a hand, and nothing is
+          gated. The engine link is the commercial route — support is the
+          hobbyist one. */}
+      {mode === "menu" && (
+        <nav className="home-support" aria-label="Support this project">
+          <a href={SPONSOR_URL} target="_blank" rel="noopener noreferrer">
+            ♥ Support the project
+          </a>
+          <a href="license/">Using the engine commercially?</a>
         </nav>
       )}
 

@@ -27,3 +27,20 @@ test("multiplayer shows the table preview and a way back", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("button", { name: /Single Player/ })).toBeInTheDocument();
 });
+
+test("the menu carries one quiet ask, and it never follows you toward the felt", async () => {
+  render(<HomeScreen onPlay={vi.fn()} onMultiplayer={vi.fn()} />);
+
+  const support = screen.getByRole("link", { name: /Support the project/ });
+  expect(support).toHaveAttribute("href", "https://github.com/sponsors/SabienNguyen");
+  // opening a funding page must not hand the opener over
+  expect(support).toHaveAttribute("rel", expect.stringContaining("noopener"));
+  expect(screen.getByRole("link", { name: /engine commercially/ })).toHaveAttribute(
+    "href",
+    "license/",
+  );
+
+  // choosing a mode moves to the table picker; the ask stays behind on the menu
+  await userEvent.click(screen.getByRole("button", { name: /Single Player/i }));
+  expect(screen.queryByRole("link", { name: /Support the project/ })).toBeNull();
+});

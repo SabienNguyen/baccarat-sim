@@ -1,0 +1,10 @@
+# Puts a "Sponsor" button on the repository and on every release page.
+#
+# github: works the moment GitHub Sponsors is enabled on the account — no code
+# change needed to switch it on, and nothing breaks before then.
+# Uncomment and fill any of the others you actually set up; each one that is
+# present adds a button, each one left commented adds nothing.
+github: SabienNguyen
+# ko_fi: your-handle
+# buy_me_a_coffee: your-handle
+# custom: ["https://example.com/donate"]

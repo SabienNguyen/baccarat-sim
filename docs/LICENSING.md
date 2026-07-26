@@ -1,11 +1,41 @@
-# Licensing the engine — the money decision
+# Selling the engine
 
 `MONETIZATION.md` ranks **B2B engine licensing** as the highest-leverage path and
-calls the engine "the genuine moat." This document exists because that plan and
-the repository's current licence contradict each other, and because the
-contradiction gets more expensive every day it stands.
+calls the engine "the genuine moat." This document is how that gets sold: what the
+product actually is, who buys it, what to charge, and which parts are already open
+for business versus which need a decision first.
 
-## The blocker: the moat is currently a giveaway
+**Live now, no decision required:** services around the engine — rule variants,
+integration, a compliance audit report, a support window — advertised at
+`/license/` on the site. See the next section for why MIT does not stand in the
+way of that.
+
+## Correction to an earlier framing in this file
+
+An earlier draft called MIT "the blocker" and treated relicensing as a
+precondition for any revenue. That was wrong, and it mattered: it turned a live
+opportunity into something waiting on a legal decision.
+
+**MIT does not stop you selling.** It stops you selling *exclusivity* in the code.
+Everything a buyer actually needs beyond the source is unaffected and sellable
+today, with no licence change and nobody's permission:
+
+- bespoke rule variants and integration work (your labour, priced per scope);
+- a compliance audit report written for a certification reader (a new document you
+  author — it isn't in the repo, so the repo's licence has no bearing on it);
+- a support window with a named contact and prioritised fixes;
+- custom builds: extra side bets, other games to the same standard of proof, a
+  branded reskin.
+
+MIT means a buyer never has to ask. It also means nobody else will answer their
+auditor's questions. That gap is the product, and it is open for business now —
+which is what `/license/` on the site sells.
+
+Relicensing is therefore **optional upside**, not a gate. Read the next section as
+"here is what MIT costs you if you later want to sell the code itself", not "you
+cannot earn until you fix this".
+
+## The optional upside: MIT gives away code exclusivity
 
 `LICENSE` is **MIT**. In plain terms, MIT grants anyone — including a funded
 competitor or a social-casino operator — the right to:
@@ -15,9 +45,8 @@ competitor or a social-casino operator — the right to:
 - **sublicense and sell it**, with no payment and no obligation beyond keeping a
   copyright notice in a file nobody reads.
 
-So the asset the monetization plan intends to sell is, today, already available
-for free to every buyer we would approach. That is not a small mismatch: it is
-the single thing standing between the top-ranked plan and any revenue from it.
+So if the intent is ever to sell the *code* as exclusive IP, that option erodes
+with each MIT release. Selling services around the code does not depend on it.
 
 ### What can and cannot be undone
 
