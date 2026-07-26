@@ -44,6 +44,16 @@ building the account/payment spine for."
 ## Ranked paths that fit this product
 
 ### 1. B2B — license the engine or white-label the game (highest leverage)
+> **Not blocked, but reshaped by the repository licence.** `LICENSE` is MIT, which already grants
+> every prospective buyer the right to use, modify, sublicense and *sell* this
+> engine for free. The asset this path intends to sell is currently a giveaway.
+> Published commits keep their MIT grant permanently, but future versions can be
+> licensed differently, so selling *code exclusivity* erodes with each release.
+> Selling **services** — rule variants, integration, a compliance audit report,
+> a support window — is unaffected by MIT and is live now at `/license/`. See
+> **`LICENSING.md`** for what is being sold, who buys it, and price anchors.
+> Relicensing is optional upside, not a gate.
+
 The differentiator isn't the chips; it's a *provably correct*, 8-deck,
 statistically-validated Rust→WASM engine with the squeeze rendering, the roads,
 and a teaching dealer. That's a licensable component. Established market:
