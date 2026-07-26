@@ -93,6 +93,7 @@ ${ld}
   <a href="../how-to-play/">How to play</a>
   <a href="../glossary/">Glossary</a>
   <a href="../baccarat-roads/">Scoreboard roads</a>
+  <a href="../license/">License the engine</a>
   <a href="../">Play free ↗</a>
 </nav>
 </header>
@@ -313,6 +314,58 @@ const roadsLd = {
   mainEntityOfPage: `${SITE}baccarat-roads/`,
 };
 
+const licenseBody = `
+  <h1>License the Baccarat Engine</h1>
+  <p class="lede">A punto banco engine whose correctness is <em>proven by exhaustive
+  enumeration</em>, not asserted. Rust core, WASM boundary, runs in a browser or on a
+  server.</p>
+
+  <h2>Why this one</h2>
+  <p>Most casino-game engines ask you to trust their paytables. This one ships the proof,
+  and you can re-run it yourself in about three seconds.</p>
+  <ul>
+    <li><strong>Every reachable coup, enumerated.</strong> All <strong>1,659,001</strong>
+      of them, from a fresh 8-deck shoe, each with its exact hypergeometric weight — no
+      Monte Carlo, no error bars.</li>
+    <li><strong>Self-checking.</strong> Leaf probabilities sum to 0.999999999978, and the
+      outcome frequencies reproduce the canonical 8-deck figures to six decimals:
+      Player 44.624661%, Banker 45.859742%, Tie 9.515597%.</li>
+    <li><strong>Eleven side bets, all within 0.0033pp of published analysis</strong> —
+      pairs, Dragon 7, Panda 8, both Dragon Bonus sides, and the full Tiger family.</li>
+    <li><strong>Cross-checked against regulator sources</strong> (Nevada GCB Rules of
+      Play, NJAC 13:69F). That check is what caught a retired 35:1 Tiger Tie paytable and
+      corrected it to 45:1.</li>
+    <li><strong>Reproducible hands.</strong> The shoe RNG is pinned by name, so a seeded
+      shoe is bit-identical across dependency updates — an auditor can replay any hand.</li>
+    <li><strong>149 engine tests</strong> plus a seeded statistical suite.</li>
+  </ul>
+
+  <h2>What's included</h2>
+  <ul>
+    <li>The rules engine: full third-card tableau, naturals, commission and
+      commission-free (EZ) settlement, and eleven side bets.</li>
+    <li>All five pit scoreboards — Bead Plate, Big Road, Big Eye Boy, Small Road,
+      Cockroach Pig.</li>
+    <li>Optional presentation layer: the card squeeze, and a teaching dealer that explains
+      each drawing decision by rule.</li>
+    <li>A multiplayer table server, if you want live seats rather than a single-player
+      module.</li>
+  </ul>
+
+  <h2>How it's licensed</h2>
+  <p>Free to evaluate, and free for non-commercial use. Commercial use is licensed per
+  product — single-title, platform, and white-label/OEM terms are all available, as is a
+  written audit report of the enumeration results for a compliance reader.</p>
+  <p>Rule variants (Super 6, no-commission toggles, alternate paytables) are usually a
+  small change; ask.</p>
+
+  <h2>Get in touch</h2>
+  <p>Open an issue or start a discussion on
+  <a href="https://github.com/SabienNguyen/baccarat-sim">the GitHub repository</a> with
+  what you're building and which tier fits, and you'll get a reply.</p>
+  <p><a href="../">Play the live demo →</a></p>
+`;
+
 const written = [
   page({
     slug: "how-to-play",
@@ -345,6 +398,23 @@ const written = [
       "How to read the baccarat scoreboard: the Bead Plate, Big Road, and the three derived roads (Big Eye Boy, Small Road, Cockroach Pig) that track whether the shoe is choppy or streaky.",
     bodyHtml: roadsBody,
     jsonLd: roadsLd,
+  }),
+  page({
+    slug: "license",
+    title: "License the Baccarat Engine — Proven-Correct Rust/WASM Punto Banco",
+    description:
+      "A punto banco engine with correctness proven by exhaustive enumeration of all 1,659,001 reachable coups: every paytable within 0.0033pp of published analysis, cross-checked against Nevada GCB and New Jersey regulator sources. Commercial, single-title and white-label licensing.",
+    bodyHtml: licenseBody,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: "Baccarat Engine",
+      description:
+        "Rust/WASM punto banco engine with exhaustively verified rules and paytables, five pit scoreboards, and an optional multiplayer table server.",
+      brand: { "@type": "Brand", name: "Baccarat Simulator" },
+      image: OG_IMAGE,
+      url: `${SITE}license/`,
+    },
   }),
 ];
 
