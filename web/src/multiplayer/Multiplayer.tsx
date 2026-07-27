@@ -149,6 +149,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         const store = createRemoteStore({
           tier: msg.tier,
           view: msg.view,
+          me: msg.player,
           send: (m) => socket.send(JSON.stringify(m)),
         });
         storeRef.current = store;

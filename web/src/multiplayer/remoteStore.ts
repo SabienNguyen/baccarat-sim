@@ -27,9 +27,11 @@ function squeezersOf(view: TableViewMsg): { player: number | null; banker: numbe
 export function createRemoteStore(opts: {
   tier: TableTier;
   view: TableViewMsg;
+  /** This client's own seat id, so pushes can be read from its point of view. */
+  me: number;
   send: (msg: ClientMsg) => void;
 }): RemoteStore {
-  const { tier, send } = opts;
+  const { tier, send, me } = opts;
   const denoms = tableSpec(tier).denoms;
 
   const initialSnapshot = stripView(opts.view);
@@ -48,7 +50,9 @@ export function createRemoteStore(opts: {
     goal: null,
     goalReached: false,
     dismissGoal: () => set({ goalReached: false }),
-    // the server has no re-buy concept; remote play never busts locally
+    // Set from the seat view below: a player whose bankroll can't cover the
+    // table minimum is out of chips, and the table now deals past them rather
+    // than waiting (F6). The UI uses this to offer a rebuy or a way out.
     busted: false,
     denoms,
     selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
@@ -132,9 +136,11 @@ export function createRemoteStore(opts: {
     }
 
     const flip = lastFlipBetween(prev, next);
+    const mySeat = view.seats.find((s) => s.id === me);
     set({
       snapshot: next,
       seats: view.seats,
+      busted: mySeat?.broke ?? false,
       squeezers: squeezersOf(view),
       ...(flip ? { lastFlip: flip } : next.phase === "Betting" ? { lastFlip: null } : {}),
       lastDelta,
