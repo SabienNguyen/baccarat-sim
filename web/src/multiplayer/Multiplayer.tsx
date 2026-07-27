@@ -50,7 +50,15 @@ type Stage =
   // Never reached the table service at all — a different situation from a
   // session that dropped, and the only one where single player is the answer.
   | { at: "offline" }
+  // Trying to get back on by itself. F7 holds the seat for two minutes, so a
+  // reconnect inside that window returns the player to their own chair and
+  // bankroll — which only helps if a reconnect actually happens on its own.
+  | { at: "reconnecting"; attempt: number }
   | { at: "dead"; why: string };
+
+/** Retry schedule: 1s, 2s, 4s, 8s, 16s, 30s, then give up and ask the player. */
+const RETRY_MAX = 6;
+const retryDelay = (n: number) => Math.min(1000 * 2 ** n, 30_000);
 
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const [copied, setCopied] = useState(false);
@@ -62,6 +70,9 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   // back, instead of making the player reload the page.
   const [attempt, setAttempt] = useState(0);
   const opened = useRef(false);
+  /** Consecutive failed connects; reset the moment one succeeds. */
+  const retries = useRef(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [rooms, setRooms] = useState<RoomInfo[]>([]);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 8;
@@ -92,6 +103,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     ws.current = socket;
     socket.onopen = () => {
       opened.current = true;
+      retries.current = 0;
       setStage({ at: "lobby" });
       socket.send(JSON.stringify({ type: "list_rooms" }));
       // If a seat from this tab is still being held, take it back before doing
@@ -162,11 +174,21 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     };
     socket.onclose = () => {
       setStage((s) => {
+        // A close the *server* chose (AFK eviction, protocol skew) is a verdict,
+        // not a blip — retrying would just get thrown out again.
         if (s.at === "dead") return s;
-        // A close with no open before it means the service never answered, so
-        // "connection dropped" would be a lie — nothing was ever connected.
-        if (!opened.current) return { at: "offline" };
-        return { at: "dead", why: "Connection to the casino dropped." };
+
+        const n = retries.current;
+        if (n < RETRY_MAX) {
+          retries.current = n + 1;
+          retryTimer.current = setTimeout(() => setAttempt((a) => a + 1), retryDelay(n));
+          return { at: "reconnecting", attempt: n + 1 };
+        }
+        // Out of patience. A close with no open before it means the service
+        // never answered, so "connection dropped" would be a lie.
+        return opened.current
+          ? { at: "dead", why: "Connection to the casino dropped." }
+          : { at: "offline" };
       });
     };
     return () => {
@@ -176,6 +198,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       socket.onclose = null;
       socket.onmessage = null;
       socket.onopen = null;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
       socket.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,6 +227,21 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     );
   }
 
+  if (stage.at === "reconnecting") {
+    return (
+      <div className="mp-screen">
+        <p className="mp-status">Reconnecting…</p>
+        <p className="mp-substatus">
+          Your seat and chips are held for two minutes, so you'll come back to the same
+          table. Attempt {stage.attempt} of {RETRY_MAX}.
+        </p>
+        <button type="button" className="mp-back" onClick={onExit}>
+          Back
+        </button>
+      </div>
+    );
+  }
+
   if (stage.at === "offline") {
     return (
       <div className="mp-screen">
@@ -221,6 +259,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
             className="mp-back"
             onClick={() => {
               opened.current = false;
+              retries.current = 0;
               setStage({ at: "connecting" });
               setAttempt((n) => n + 1);
             }}

@@ -173,44 +173,68 @@ test("the public list paginates past eight tables", async () => {
   expect(screen.getByText("ROOM08")).toBeInTheDocument();
 });
 
-test("a server that never answers reads as offline, not as a dropped connection", async () => {
-  const { socket, onExit } = mount();
-  // close with no open before it: the service was never reachable
-  act(() => socket.onclose?.());
+/** Drive the retry budget to exhaustion so a terminal screen appears. */
+function exhaustRetries(sockets: FakeSocket[], openFirst = false) {
+  if (openFirst) sockets[0].open();
+  // RETRY_MAX retries are allowed, so the terminal screen needs one close beyond
+  // the budget — 6 closes still leaves it hopefully reconnecting.
+  for (let i = 0; i < 7; i++) {
+    act(() => sockets[sockets.length - 1].onclose?.());
+    act(() => vi.advanceTimersByTime(60_000));
+  }
+}
+
+function mountCollecting() {
+  const sockets: FakeSocket[] = [];
+  const onExit = vi.fn();
+  render(
+    <Multiplayer
+      onExit={onExit}
+      connect={() => {
+        const s = new FakeSocket();
+        sockets.push(s);
+        return s as unknown as WebSocket;
+      }}
+    />,
+  );
+  return { sockets, onExit };
+}
+
+test("a server that never answers reads as offline once retries are spent", async () => {
+  vi.useFakeTimers();
+  const { sockets, onExit } = mountCollecting();
+  exhaustRetries(sockets);
 
   expect(screen.getByText(/Multiplayer is offline/)).toBeInTheDocument();
   expect(screen.getByText(/Single player works/)).toBeInTheDocument();
   // "dropped" would claim a session that never existed
   expect(screen.queryByText(/dropped/i)).toBeNull();
+  vi.useRealTimers();
 
   await userEvent.click(screen.getByRole("button", { name: "Play single player" }));
   expect(onExit).toHaveBeenCalled();
 });
 
 test("a close after a live session still reads as a dropped connection", () => {
-  const { socket } = mount();
-  socket.open();
-  act(() => socket.onclose?.());
+  vi.useFakeTimers();
+  const { sockets } = mountCollecting();
+  exhaustRetries(sockets, true);
   expect(screen.getByText(/dropped/i)).toBeInTheDocument();
   expect(screen.queryByText(/Multiplayer is offline/)).toBeNull();
+  vi.useRealTimers();
 });
 
 test("Try again reconnects instead of making the player reload", async () => {
-  const socket = new FakeSocket();
-  const later = new FakeSocket();
-  let n = 0;
-  render(
-    <Multiplayer
-      onExit={vi.fn()}
-      connect={() => (n++ === 0 ? socket : later) as unknown as WebSocket}
-    />,
-  );
-  act(() => socket.onclose?.());
+  vi.useFakeTimers();
+  const { sockets } = mountCollecting();
+  exhaustRetries(sockets);
   expect(screen.getByText(/Multiplayer is offline/)).toBeInTheDocument();
+  const before = sockets.length;
+  vi.useRealTimers();
 
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-  expect(n).toBe(2); // a fresh socket, not a page reload
-  later.open();
+  expect(sockets.length).toBe(before + 1); // a fresh socket, not a page reload
+  sockets[sockets.length - 1].open();
   expect(screen.getByText("Live Tables")).toBeInTheDocument();
 });
 
@@ -243,4 +267,81 @@ test("standing up on purpose burns the token, so it isn't replayed", () => {
   socket.open();
   socket.push({ type: "left" });
   expect(sessionStorage.getItem("baccarat.seat")).toBeNull();
+});
+
+describe("auto-reconnect (F10)", () => {
+  test("a dropped socket retries by itself instead of dead-ending", () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    render(
+      <Multiplayer
+        onExit={vi.fn()}
+        connect={() => {
+          const s = new FakeSocket();
+          sockets.push(s);
+          return s as unknown as WebSocket;
+        }}
+      />,
+    );
+    sockets[0].open();
+    act(() => sockets[0].onclose?.());
+
+    // it announces the retry rather than declaring the connection dead
+    expect(screen.getByText(/Reconnecting/)).toBeInTheDocument();
+    expect(screen.queryByText(/dropped/i)).toBeNull();
+
+    // ...and actually opens a new socket once the backoff elapses
+    expect(sockets).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(sockets).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  test("the delay backs off rather than hammering the server", () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    render(
+      <Multiplayer
+        onExit={vi.fn()}
+        connect={() => {
+          const s = new FakeSocket();
+          sockets.push(s);
+          return s as unknown as WebSocket;
+        }}
+      />,
+    );
+    act(() => sockets[0].onclose?.());
+    act(() => vi.advanceTimersByTime(1000)); // 1st retry after 1s
+    expect(sockets).toHaveLength(2);
+
+    act(() => sockets[1].onclose?.());
+    act(() => vi.advanceTimersByTime(1000)); // 2nd waits 2s — not yet
+    expect(sockets).toHaveLength(2);
+    act(() => vi.advanceTimersByTime(1000));
+    expect(sockets).toHaveLength(3);
+    vi.useRealTimers();
+  });
+
+  test("a close the server chose is a verdict, not a blip — no retry", () => {
+    vi.useFakeTimers();
+    const sockets: FakeSocket[] = [];
+    render(
+      <Multiplayer
+        onExit={vi.fn()}
+        connect={() => {
+          const s = new FakeSocket();
+          sockets.push(s);
+          return s as unknown as WebSocket;
+        }}
+      />,
+    );
+    sockets[0].open();
+    sockets[0].push({ type: "closed", reason: "You were away too long." });
+    act(() => sockets[0].onclose?.());
+
+    expect(screen.getByText(/away too long/)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(sockets).toHaveLength(1);
+    vi.useRealTimers();
+  });
 });
