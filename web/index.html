@@ -57,7 +57,33 @@
     <title>Baccarat Simulator — Learn Baccarat Free in Your Browser</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Real content for a crawler (and for anyone with JS off): React replaces
+         all of it on mount, so it costs nothing at runtime, but the shell is no
+         longer an empty div to anything that doesn't execute the bundle. -->
+    <div id="root">
+      <h1>Baccarat Simulator — play free in your browser</h1>
+      <p>
+        A free baccarat (punto banco) simulator. No sign-up, no download, no real money:
+        deal a shoe, squeeze the cards, and watch the Big Road fill in exactly as it does
+        in a casino pit.
+      </p>
+      <p>
+        The rules engine is open source and its paytables are verified by enumerating
+        every reachable coup of an 8-deck shoe, so the odds you play against here are the
+        real ones — Banker 1.06%, Player 1.24%, Tie 14.36%.
+      </p>
+      <ul>
+        <li><a href="how-to-play/">How to play baccarat</a> — rules, card values and the
+          full third-card drawing tableau</li>
+        <li><a href="baccarat-odds/">Baccarat odds and house edge</a> — exact figures for
+          every main bet and side bet</li>
+        <li><a href="baccarat-roads/">Baccarat roads explained</a> — Big Road, Big Eye Boy,
+          Small Road and Cockroach Pig</li>
+        <li><a href="glossary/">Baccarat glossary</a> — naturals, the squeeze, commission,
+          Dragon 7, Panda 8 and more</li>
+      </ul>
+      <p>Loading the table…</p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

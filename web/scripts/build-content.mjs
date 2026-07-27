@@ -92,6 +92,7 @@ ${ld}
 <nav>
   <a href="../how-to-play/">How to play</a>
   <a href="../glossary/">Glossary</a>
+  <a href="../baccarat-odds/">Odds &amp; house edge</a>
   <a href="../baccarat-roads/">Scoreboard roads</a>
   <a href="../license/">License the engine</a>
   <a href="../">Play free ↗</a>
@@ -378,6 +379,140 @@ const licenseBody = `
   <p><a href="../">Play the live demo →</a></p>
 `;
 
+// The one page here that carries data nobody else has: house edges derived from
+// an exhaustive walk of every reachable coup, not from sampling or from copying
+// another site's table. Unique, checkable numbers are the only realistic way a
+// small site earns links in a niche this commercially contested.
+const oddsBody = `
+  <h1>Baccarat Odds &amp; House Edge</h1>
+  <p class="lede">Every figure below was computed by enumerating <strong>all 1,659,001
+  reachable coups</strong> of a fresh 8-deck shoe, each weighted by its exact probability.
+  No simulation, no rounding up from someone else's table — and you can re-run it
+  yourself.</p>
+
+  <h2>How often each side wins</h2>
+  <table>
+    <thead><tr><th>Result</th><th>Probability</th></tr></thead>
+    <tbody>
+      <tr><td>Banker wins</td><td>45.859742%</td></tr>
+      <tr><td>Player wins</td><td>44.624661%</td></tr>
+      <tr><td>Tie</td><td>9.515597%</td></tr>
+    </tbody>
+  </table>
+  <p>Those three sum to 100% and match the canonical 8-deck figures to six decimal
+  places, which is the check that the drawing tableau behind them is correct.</p>
+
+  <h2>House edge on the main bets</h2>
+  <table>
+    <thead><tr><th>Bet</th><th>Pays</th><th>House edge</th></tr></thead>
+    <tbody>
+      <tr><td>Banker</td><td>0.95 : 1 (5% commission)</td><td>1.06%</td></tr>
+      <tr><td>Player</td><td>1 : 1</td><td>1.24%</td></tr>
+      <tr><td>Tie</td><td>8 : 1</td><td>14.36%</td></tr>
+    </tbody>
+  </table>
+  <p>Each falls straight out of the probabilities above. Banker: 0.45859742 × 0.95 −
+  0.44624661 = −0.0106. Player: 0.44624661 − 0.45859742 = −0.0124. Tie:
+  0.09515597 × 8 − 0.90484403 = −0.1436.</p>
+  <p><strong>Banker is the best bet on the table</strong>, commission included. The Tie
+  costs roughly twelve times as much per unit staked.</p>
+
+  <h2>Side bet house edges, exact</h2>
+  <p>Ordered best to worst for the player. Every one lands within 0.0033 percentage
+  points of published analysis.</p>
+  <table>
+    <thead><tr><th>Side bet</th><th>Wins when</th><th>House edge</th></tr></thead>
+    <tbody>
+      <tr><td>Dragon Bonus (Player)</td><td>Player wins by 4+, or on a natural</td><td>2.65%</td></tr>
+      <tr><td>Dragon 7</td><td>Banker wins with a three-card 7</td><td>7.61%</td></tr>
+      <tr><td>Dragon Bonus (Banker)</td><td>Banker wins by 4+, or on a natural</td><td>9.37%</td></tr>
+      <tr><td>Panda 8</td><td>Player wins with a three-card 8</td><td>10.19%</td></tr>
+      <tr><td>Player / Banker Pair</td><td>That hand's first two cards match</td><td>10.36%</td></tr>
+      <tr><td>Tiger Tie</td><td>Tie on 6 (at 45:1)</td><td>11.50%</td></tr>
+      <tr><td>Small Tiger</td><td>Banker wins with a two-card 6</td><td>14.33%</td></tr>
+      <tr><td>Big Tiger</td><td>Banker wins with a three-card 6</td><td>15.25%</td></tr>
+      <tr><td>Tiger Pair</td><td>A pair in either hand</td><td>16.12%</td></tr>
+      <tr><td>Tiger</td><td>Banker wins with 6 (12:1 / 20:1)</td><td>16.68%</td></tr>
+    </tbody>
+  </table>
+  <p>Two things worth noticing. The <strong>Player Dragon Bonus at 2.65% is the only side
+  bet that is anywhere near the main bets</strong> — everything else is several times
+  worse than simply betting Banker. And the Banker side of the same bet costs 9.37%,
+  because the Banker hand reaches big winning margins far less often.</p>
+
+  <h2>Paytables vary — check the felt</h2>
+  <p>The same bet name can carry different odds from one casino to the next, and the
+  difference is not small:</p>
+  <table>
+    <thead><tr><th>Bet</th><th>Paytable</th><th>House edge</th></tr></thead>
+    <tbody>
+      <tr><td>Tiger Tie</td><td>35 : 1 (original)</td><td>30.74%</td></tr>
+      <tr><td>Tiger Tie</td><td>45 : 1 (current)</td><td>11.50%</td></tr>
+      <tr><td>Banker wins with 6</td><td>12:1 / 20:1 (&ldquo;Tiger&rdquo;)</td><td>16.68%</td></tr>
+      <tr><td>Banker wins with 6</td><td>12:1 / 23:1 (&ldquo;Lucky 6&rdquo;)</td><td>11.70%</td></tr>
+      <tr><td>Either Pair</td><td>5 : 1</td><td>13.71%</td></tr>
+      <tr><td>Lucky 7 (Player wins with 7)</td><td>6:1 / 15:1</td><td>18.30%</td></tr>
+    </tbody>
+  </table>
+  <p>A Tiger Tie at 35:1 and one at 45:1 are the same wager with nearly triple the cost.
+  Two circles printed with the same words are not the same bet.</p>
+
+  <h2>Check the numbers yourself</h2>
+  <p>The engine is open source, and the enumeration is a test you can run in about three
+  seconds:</p>
+  <pre><code>cargo test -p baccarat-engine --test exact_enumeration -- --nocapture</code></pre>
+  <p>It walks every reachable coup, asserts the leaf probabilities sum to 1, and prints
+  the table above.</p>
+  <p><a href="../">Play a free hand and watch the edges play out →</a></p>
+`;
+
+const oddsFaq = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What is the house edge in baccarat?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "On an 8-deck shoe the Banker bet has a 1.06% house edge including the 5% commission, the Player bet 1.24%, and the Tie 14.36%. Banker is the best bet on the table.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Which baccarat bet has the best odds?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Banker, at a 1.06% house edge, even after the 5% commission on wins. Player is 1.24%. Every side bet is worse: the best of them, the Player Dragon Bonus, costs 2.65%, and most cost 10% or more.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How often does the Banker win in baccarat?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Banker wins 45.859742% of coups, Player 44.624661%, and 9.515597% are ties, computed by enumerating every reachable coup of an 8-deck shoe.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Are baccarat side bets worth it?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Mathematically, no. The Player Dragon Bonus at 2.65% is the only one close to the main bets. Pairs cost 10.36%, Panda 8 costs 10.19%, and the Tiger family runs from 11.5% to 16.7%. A Tiger Tie paying 35:1 costs 30.74%.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Does the 5% commission make Banker a bad bet?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. The commission is already priced in: Banker wins often enough that 0.95:1 still beats Player's 1:1. Banker 1.06% versus Player 1.24%.",
+      },
+    },
+  ],
+};
+
 const written = [
   page({
     slug: "how-to-play",
@@ -427,6 +562,14 @@ const written = [
       image: OG_IMAGE,
       url: `${SITE}license/`,
     },
+  }),
+  page({
+    slug: "baccarat-odds",
+    title: "Baccarat Odds & House Edge — Exact Figures for Every Bet",
+    description:
+      "Exact baccarat house edges computed by enumerating all 1,659,001 reachable coups of an 8-deck shoe: Banker 1.06%, Player 1.24%, Tie 14.36%, plus every side bet from Dragon Bonus to the Tiger family.",
+    bodyHtml: oddsBody,
+    jsonLd: oddsFaq,
   }),
 ];
 
