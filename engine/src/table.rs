@@ -63,9 +63,20 @@ struct Player {
 }
 
 impl Player {
-    /// Bet down or sitting out — ready for the deal.
-    fn decided(&self) -> bool {
-        self.sitting_out || !self.bets.is_empty()
+    /// Bet down, sitting out, or unable to bet at all — ready for the deal.
+    ///
+    /// The affordability case is what stops one broke seat freezing the table.
+    /// A player whose bankroll won't cover the table minimum cannot place a bet
+    /// even if they want to, so waiting for them to "decide" waits forever;
+    /// treating them as decided is the same call a pit makes when it deals past
+    /// someone who has stopped buying in.
+    fn decided(&self, table_min: i64) -> bool {
+        self.sitting_out || !self.bets.is_empty() || self.broke(table_min)
+    }
+
+    /// Can't cover the table minimum, so can't take part in this coup.
+    fn broke(&self, table_min: i64) -> bool {
+        self.bankroll < table_min
     }
 }
 
@@ -115,6 +126,8 @@ pub struct SeatView {
     pub sitting_out: bool,
     /// Bet down or sitting out — the deal waits for everyone to decide.
     pub decided: bool,
+    /// Bankroll won't cover the table minimum, so this seat can't bet at all.
+    pub broke: bool,
 }
 
 pub struct Table {
@@ -341,7 +354,8 @@ impl Table {
             return Err(CommandError::NoBetsPlaced.into());
         }
         // The pit still waits for the whole table: everyone bets or sits out.
-        if self.players.iter().any(|p| !p.decided()) {
+        let table_min = self.config.table_min;
+        if self.players.iter().any(|p| !p.decided(table_min)) {
             return Err(TableError::WaitingOnPlayers);
         }
         if self.shoe.remaining() <= CUT_CARD {
@@ -606,7 +620,10 @@ impl Table {
                 bankroll: p.bankroll,
                 staked: p.bets.iter().map(|b| b.amount).sum(),
                 sitting_out: p.sitting_out,
-                decided: p.decided(),
+                decided: p.decided(self.config.table_min),
+                /// Out of chips for this table — the client shows a rebuy or
+                /// leave prompt, and the deal no longer waits on them.
+                broke: p.broke(self.config.table_min),
             })
             .collect();
         let (player_squeezer, banker_squeezer) = match &self.phase {
@@ -1417,5 +1434,75 @@ mod tests {
                 "cache went stale — bead count didn't track the coup count"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod broke_seat_tests {
+    use super::*;
+    use crate::settle::BetSpot;
+
+    fn table() -> Table {
+        Table::new(
+            TableConfig { table_min: 100, table_max: 10_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            7,
+        )
+    }
+
+    #[test]
+    fn a_seat_that_cannot_cover_the_minimum_does_not_freeze_the_table() {
+        let mut t = table();
+        let rich = t.join("rich", 5_000).unwrap();
+        let broke = t.join("broke", 50).unwrap(); // below the 100 minimum
+
+        t.place_bet(rich, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        // The broke seat never acts — it cannot, no bet it could make is legal.
+        // Before this fix the deal waited on them forever.
+        t.deal().expect("a seat that cannot bet must not block the coup");
+
+        let seat = t.view_for(rich).unwrap().seats.iter().find(|s| s.id == broke).cloned().unwrap();
+        assert!(seat.broke, "the view should mark them so the client can prompt");
+        assert!(seat.decided, "and treat them as decided");
+    }
+
+    #[test]
+    fn a_seat_that_can_still_afford_the_minimum_is_waited_for() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        let b = t.join("b", 100).unwrap(); // exactly the minimum — still playable
+
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        assert!(
+            matches!(t.deal(), Err(TableError::WaitingOnPlayers)),
+            "a player who can still bet must not be dealt past"
+        );
+
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.deal().expect("both decided now");
+    }
+
+    #[test]
+    fn going_broke_mid_session_unblocks_the_next_coup() {
+        // The realistic path: a player busts on a hand, then can't act.
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        let b = t.join("b", 150).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+
+        // Whatever the result, drain b below the minimum and confirm the table
+        // still moves without them.
+        while t.view_for(a).unwrap().seats.iter().find(|s| s.id == b).unwrap().bankroll >= 100 {
+            let left = t.view_for(a).unwrap().seats.iter().find(|s| s.id == b).unwrap().bankroll;
+            t.place_bet(b, BetKind::Main(BetSpot::Tie), left.min(10_000)).unwrap();
+            t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+        }
+
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.deal().expect("the busted seat must not hold the table hostage");
     }
 }

@@ -33,6 +33,7 @@ function setup() {
   const store = createRemoteStore({
     tier: "mid",
     view: view(),
+    me: 1,
     send: (m) => sent.push(m),
   });
   return { store, sent };
@@ -139,4 +140,25 @@ test("the dealer's announcement speaks until the next push arrives", () => {
   expect(store.getState().announcement).toBe("Turning the Banker hand…");
   store.handle({ type: "state", view: view() });
   expect(store.getState().announcement).toBeNull();
+});
+
+test("a seat that can't cover the table minimum is reported as busted", () => {
+  const { store } = setup();
+  const v = view();
+  // The server marks the seat; the store must surface it so the UI can offer a
+  // rebuy or a way out rather than leaving the player stuck unable to bet.
+  v.seats = [{ id: 1, name: "me", bankroll: 50, staked: 0, sitting_out: false, decided: true, broke: true }];
+  store.handle({ type: "state", view: v });
+  expect(store.getState().busted).toBe(true);
+});
+
+test("another player going broke doesn't mark me busted", () => {
+  const { store } = setup();
+  const v = view();
+  v.seats = [
+    { id: 1, name: "me", bankroll: 5000, staked: 0, sitting_out: false, decided: false, broke: false },
+    { id: 2, name: "them", bankroll: 10, staked: 0, sitting_out: false, decided: true, broke: true },
+  ];
+  store.handle({ type: "state", view: v });
+  expect(store.getState().busted).toBe(false);
 });
