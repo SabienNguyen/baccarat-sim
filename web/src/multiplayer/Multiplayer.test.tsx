@@ -213,3 +213,34 @@ test("Try again reconnects instead of making the player reload", async () => {
   later.open();
   expect(screen.getByText("Live Tables")).toBeInTheDocument();
 });
+
+test("a held seat is reclaimed on reconnect instead of buying in again", () => {
+  sessionStorage.setItem(
+    "baccarat.seat",
+    JSON.stringify({ room: "AB12CD", token: "tok-123" }),
+  );
+  const { socket } = mount();
+  socket.open();
+  const sent = socket.sent.map((s) => JSON.parse(s));
+  expect(sent).toContainEqual({ type: "rejoin", room: "AB12CD", token: "tok-123" });
+  sessionStorage.clear();
+});
+
+test("no stored seat means no rejoin attempt", () => {
+  sessionStorage.clear();
+  const { socket } = mount();
+  socket.open();
+  const kinds = socket.sent.map((s) => JSON.parse(s).type);
+  expect(kinds).not.toContain("rejoin");
+});
+
+test("standing up on purpose burns the token, so it isn't replayed", () => {
+  sessionStorage.setItem(
+    "baccarat.seat",
+    JSON.stringify({ room: "AB12CD", token: "tok-123" }),
+  );
+  const { socket } = mount();
+  socket.open();
+  socket.push({ type: "left" });
+  expect(sessionStorage.getItem("baccarat.seat")).toBeNull();
+});

@@ -7,6 +7,7 @@ import { GameTable } from "../App";
 import { TABLES, type TableTier } from "../tables";
 import { formatCents } from "../format";
 import type { ClientMsg, RoomInfo, ServerMsg } from "./protocol";
+import { clearSeatToken, loadSeat, saveSeatToken } from "./protocol";
 import { socketUrl } from "./protocol";
 import { urlParam } from "../urlParams";
 import { createRemoteStore, type RemoteStore } from "./remoteStore";
@@ -93,6 +94,13 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       opened.current = true;
       setStage({ at: "lobby" });
       socket.send(JSON.stringify({ type: "list_rooms" }));
+      // If a seat from this tab is still being held, take it back before doing
+      // anything else — a drop used to cost the player their whole bankroll.
+      // A refusal just leaves us in the lobby with the error notice.
+      const held = loadSeat();
+      if (held) {
+        socket.send(JSON.stringify({ type: "rejoin", room: held.room, token: held.token }));
+      }
       // Deep-link auto-join: on success we land at the table; on a bad code the
       // error handler leaves us in the (already-listed) lobby with the notice.
       if (autoRoom.current) {
@@ -125,6 +133,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
           return;
         }
+        if (msg.token) saveSeatToken(msg.room, msg.token);
         const store = createRemoteStore({
           tier: msg.tier,
           view: msg.view,
@@ -133,6 +142,9 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         storeRef.current = store;
         setStage({ at: "table", store, room: msg.room });
       } else if (msg.type === "left") {
+        // A deliberate stand-up, not a drop: the seat is gone, so the token is
+        // dead weight and must not be replayed on the next connect.
+        clearSeatToken();
         storeRef.current = null;
         setStage({ at: "lobby" });
         socket.send(JSON.stringify({ type: "list_rooms" }));
