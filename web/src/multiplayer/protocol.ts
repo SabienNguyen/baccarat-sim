@@ -51,7 +51,15 @@ export type ServerMsg =
   | { type: "error"; message: string }
   | { type: "closed"; reason: string };
 
-/** The deployed table service; static hosts (GitHub Pages) have no /ws. */
+/**
+ * Fallback address of the table service; static hosts (GitHub Pages) have no
+ * /ws of their own.
+ *
+ * Prefer the `VITE_WS_URL` build variable over editing this: the deploy workflow
+ * passes the repository variable of that name straight through, so multiplayer
+ * can move hosts without a source change. This constant is only what a build
+ * with nothing configured falls back to.
+ */
 const PROD_WS_URL = "wss://baccarat-sim.fly.dev/ws";
 
 /**

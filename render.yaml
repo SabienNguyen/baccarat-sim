@@ -1,0 +1,31 @@
+# One-click deploy of the table service to Render.
+#
+#   https://dashboard.render.com/blueprint/new  ->  point it at this repository
+#
+# Why Render is the default alternative: the free instance type needs no card,
+# supports WebSockets, and builds the existing Dockerfile unchanged — the server
+# already binds 0.0.0.0:$PORT, which is all any container host asks for.
+#
+# After the first deploy, copy the service URL and set it as a repository
+# *variable* named VITE_WS_URL (Settings -> Secrets and variables -> Actions ->
+# Variables), in wss:// form with the /ws path:
+#
+#   wss://<service-name>.onrender.com/ws
+#
+# The Pages workflow passes that straight into the web build, so multiplayer
+# moves hosts without a source change.
+services:
+  - type: web
+    name: baccarat-table-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    # Rooms live in memory (Arc<Mutex<Room>>), so a second replica would split
+    # players across tables that cannot see each other. One instance, always.
+    numInstances: 1
+    healthCheckPath: /health
+    envVars:
+      # Render injects its own PORT; the server reads it and falls back to 8788.
+      - key: RUST_LOG
+        value: info
+    autoDeploy: true
