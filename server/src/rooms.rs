@@ -31,6 +31,11 @@ const SEAT_GRACE: std::time::Duration = std::time::Duration::from_secs(30);
 /// a genuinely dead client is reaped by the idle timeout.
 pub const OUT_QUEUE: usize = 256;
 
+/// How long a dropped player keeps their seat and bankroll. Long enough to
+/// survive a tunnel, a backgrounded phone, or a Wi-Fi handover; short enough
+/// that an abandoned seat doesn't hold a chair at a busy table forever.
+pub const HOLD: std::time::Duration = std::time::Duration::from_secs(120);
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -45,6 +50,13 @@ pub struct Room {
     /// True once anyone has ever been seated; an empty room is only reaped
     /// after it has held a player (or aged out un-seated, see SEAT_GRACE).
     seated_once: bool,
+    /// Reconnect token -> the seat it can reclaim. A token is a bearer
+    /// credential for someone's money, so it is only ever sent to the player it
+    /// belongs to, and it is dropped the moment the seat is given up.
+    tokens: HashMap<String, PlayerId>,
+    /// Seats whose socket dropped, and when. They keep their bankroll and their
+    /// place at the table until HOLD elapses; the sweep evicts them after that.
+    held: HashMap<PlayerId, std::time::Instant>,
 }
 
 impl Room {
@@ -77,6 +89,8 @@ impl Room {
             conns: HashMap::new(),
             pacing: false,
             created: std::time::Instant::now(),
+            tokens: HashMap::new(),
+            held: HashMap::new(),
             seated_once: false,
         }
     }
@@ -87,6 +101,71 @@ impl Room {
     pub fn seat(&mut self, pid: PlayerId, tx: mpsc::Sender<ServerMsg>) {
         self.conns.insert(pid, tx);
         self.seated_once = true;
+        self.held.remove(&pid);
+    }
+
+    /// Mint the credential that lets this seat be reclaimed after a drop.
+    pub fn issue_token(&mut self, pid: PlayerId) -> String {
+        let token: String = {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            (0..32)
+                .map(|_| {
+                    const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+                    CHARS[rng.gen_range(0..CHARS.len())] as char
+                })
+                .collect()
+        };
+        self.tokens.insert(token.clone(), pid);
+        token
+    }
+
+    /// The socket went away. Keep the seat and the money; start the clock.
+    /// This is deliberately *not* `table.leave` — that forfeited a disconnected
+    /// player's bankroll, and let a busted one rejoin for a free rebuy.
+    pub fn hold_seat(&mut self, pid: PlayerId) {
+        self.conns.remove(&pid);
+        self.held.insert(pid, std::time::Instant::now());
+    }
+
+    /// Trade a token back for its seat, if that seat is still being held.
+    /// Fails closed: an unknown token, or one whose seat has already been
+    /// evicted or is still actively connected, reclaims nothing.
+    pub fn reclaim(&mut self, token: &str) -> Option<PlayerId> {
+        let pid = *self.tokens.get(token)?;
+        if !self.held.contains_key(&pid) {
+            return None;
+        }
+        self.held.remove(&pid);
+        Some(pid)
+    }
+
+    /// Give up a seat for good — a deliberate leave, or a hold that ran out.
+    pub fn release(&mut self, pid: PlayerId) {
+        self.conns.remove(&pid);
+        self.held.remove(&pid);
+        self.tokens.retain(|_, v| *v != pid);
+        let _ = self.table.leave(pid);
+    }
+
+    /// Evict seats whose hold expired. Returns true if any seat was freed.
+    pub fn expire_held(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        let gone: Vec<PlayerId> = self
+            .held
+            .iter()
+            .filter(|(_, since)| now.duration_since(**since) >= HOLD)
+            .map(|(pid, _)| *pid)
+            .collect();
+        for pid in &gone {
+            self.release(*pid);
+        }
+        !gone.is_empty()
+    }
+
+    /// A room is only idle when nobody is connected *and* nobody is being held.
+    pub fn is_vacant(&self) -> bool {
+        self.conns.is_empty() && self.held.is_empty()
     }
 
     pub fn info(&self) -> RoomInfo {
@@ -200,9 +279,11 @@ impl Registry {
             .collect();
         let mut candidates = Vec::new();
         for (id, room) in snapshot {
-            let room = room.lock().await;
+            let mut room = room.lock().await;
             let reapable = room.seated_once || room.created.elapsed() > SEAT_GRACE;
-            if room.conns.is_empty() && reapable {
+            // A held seat is still a seat: run the clock before judging emptiness.
+            room.expire_held();
+            if room.is_vacant() && reapable {
                 candidates.push(id);
             }
         }
@@ -213,8 +294,9 @@ impl Registry {
         for id in candidates {
             let still_dead = match rooms.get(&id) {
                 Some(room) => match room.try_lock() {
-                    Ok(room) => {
-                        room.conns.is_empty()
+                    Ok(mut room) => {
+                        room.expire_held();
+                        room.is_vacant()
                             && (room.seated_once || room.created.elapsed() > SEAT_GRACE)
                     }
                     Err(_) => false, // contended = in use = alive
@@ -403,5 +485,88 @@ mod tests {
             assert_eq!(id.len(), 6);
             assert!(id.chars().all(|c| !"01OIL".contains(c)));
         }
+    }
+}
+
+#[cfg(test)]
+mod reconnect_tests {
+    use super::*;
+
+    fn room_with_player() -> (Room, PlayerId) {
+        let mut room = Room::new("TEST01".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let pid = room.table.join("alice", buy_in).unwrap();
+        let (tx, _rx) = mpsc::channel(OUT_QUEUE);
+        room.seat(pid, tx);
+        (room, pid)
+    }
+
+    #[test]
+    fn a_dropped_socket_keeps_the_seat_and_the_money() {
+        let (mut room, pid) = room_with_player();
+        let before = room.table.view_for(pid).unwrap().bankroll;
+
+        let token = room.issue_token(pid);
+        room.hold_seat(pid);
+
+        // no connection, but the seat is still at the table with its bankroll
+        assert!(room.conns.is_empty());
+        assert!(!room.is_vacant(), "a held seat must keep the room alive");
+        assert_eq!(room.table.view_for(pid).unwrap().bankroll, before);
+
+        let (tx, _rx) = mpsc::channel(OUT_QUEUE);
+        let back = room.reclaim(&token).expect("token should reclaim the seat");
+        assert_eq!(back, pid);
+        room.seat(back, tx);
+        assert_eq!(room.table.view_for(pid).unwrap().bankroll, before);
+    }
+
+    #[test]
+    fn a_token_is_single_use_against_a_live_seat() {
+        // Reclaiming only works while the seat is held. Once someone is back on
+        // it, the same token must not hand a second connection the same chair.
+        let (mut room, pid) = room_with_player();
+        let token = room.issue_token(pid);
+        room.hold_seat(pid);
+        assert_eq!(room.reclaim(&token), Some(pid));
+        let (tx, _rx) = mpsc::channel(OUT_QUEUE);
+        room.seat(pid, tx);
+        assert_eq!(room.reclaim(&token), None, "seat is live again — no takeover");
+    }
+
+    #[test]
+    fn an_unknown_token_reclaims_nothing() {
+        let (mut room, pid) = room_with_player();
+        room.issue_token(pid);
+        room.hold_seat(pid);
+        assert_eq!(room.reclaim("not-a-real-token"), None);
+        assert_eq!(room.reclaim(""), None);
+    }
+
+    #[test]
+    fn releasing_a_seat_burns_its_tokens() {
+        // A deliberate leave must not leave a credential that still works.
+        let (mut room, pid) = room_with_player();
+        let token = room.issue_token(pid);
+        room.hold_seat(pid);
+        room.release(pid);
+        assert_eq!(room.reclaim(&token), None);
+        assert!(room.is_vacant());
+    }
+
+    #[test]
+    fn an_expired_hold_frees_the_chair() {
+        let (mut room, pid) = room_with_player();
+        let token = room.issue_token(pid);
+        room.hold_seat(pid);
+
+        assert!(!room.expire_held(), "still inside the hold window");
+        assert!(!room.is_vacant());
+
+        // wind the clock back past HOLD
+        room.held.insert(pid, std::time::Instant::now() - HOLD - std::time::Duration::from_secs(1));
+        assert!(room.expire_held(), "hold elapsed — seat should be freed");
+        assert!(room.is_vacant());
+        assert_eq!(room.reclaim(&token), None);
     }
 }

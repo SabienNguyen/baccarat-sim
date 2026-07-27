@@ -32,6 +32,7 @@ export type ClientMsg =
   | { type: "list_rooms" }
   | { type: "create_room"; name: string; tier: TableTier; private: boolean }
   | { type: "join_room"; room: string; name: string }
+  | { type: "rejoin"; room: string; token: string }
   | { type: "leave" }
   | { type: "bet"; kind: BetKind; amount: number }
   | { type: "sit_out" }
@@ -45,7 +46,16 @@ export type ClientMsg =
 export type ServerMsg =
   | { type: "rooms"; rooms: RoomInfo[] }
   | { type: "announce"; message: string }
-  | { type: "joined"; room: string; player: number; tier: TableTier; view: TableViewMsg; proto?: number }
+  | {
+      type: "joined";
+      room: string;
+      player: number;
+      tier: TableTier;
+      view: TableViewMsg;
+      proto?: number;
+      /** Credential for reclaiming this seat, bankroll intact, after a drop. */
+      token?: string;
+    }
   | { type: "state"; view: TableViewMsg }
   | { type: "left" }
   | { type: "error"; message: string }
@@ -75,4 +85,54 @@ export function socketUrl(): string {
     return `${proto}//${location.host}/ws`;
   }
   return PROD_WS_URL;
+}
+
+/**
+ * The reconnect credential for a room, kept in sessionStorage: it should
+ * survive a reload or a dropped socket, but not outlive the browser tab — a
+ * stale token on a shared machine is a seat with someone's money on it.
+ */
+const SEAT_KEY = "baccarat.seat";
+
+export function saveSeatToken(room: string, token: string): void {
+  try {
+    sessionStorage.setItem(SEAT_KEY, JSON.stringify({ room, token }));
+  } catch {
+    // private mode, or storage full — reconnect degrades to a fresh buy-in
+  }
+}
+
+/** The stored token for `room`, if the last seat taken was at that table. */
+export function loadSeatToken(room: string): string | null {
+  try {
+    const raw = sessionStorage.getItem(SEAT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { room?: unknown; token?: unknown };
+    if (parsed.room !== room) return null;
+    return typeof parsed.token === "string" ? parsed.token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Any stored seat, for reconnecting without knowing the room up front. */
+export function loadSeat(): { room: string; token: string } | null {
+  try {
+    const raw = sessionStorage.getItem(SEAT_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as { room?: unknown; token?: unknown };
+    return typeof p.room === "string" && typeof p.token === "string"
+      ? { room: p.room, token: p.token }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSeatToken(): void {
+  try {
+    sessionStorage.removeItem(SEAT_KEY);
+  } catch {
+    /* nothing to do */
+  }
 }

@@ -36,6 +36,8 @@ pub enum ClientMsg {
     ListRooms,
     CreateRoom { name: String, tier: Tier, private: bool },
     JoinRoom { room: String, name: String },
+    /// Reclaim a seat kept warm after a drop. The token came from `Joined`.
+    Rejoin { room: String, token: String },
     Leave,
     Bet { kind: BetKind, amount: i64 },
     SitOut,
@@ -61,7 +63,16 @@ pub enum ServerMsg {
     Rooms { rooms: Vec<RoomInfo> },
     /// The dealer's voice between flips ("Turning the Banker's cards…").
     Announce { message: String },
-    Joined { room: String, player: PlayerId, tier: Tier, view: TableView, proto: u32 },
+    Joined {
+        room: String,
+        player: PlayerId,
+        tier: Tier,
+        view: TableView,
+        proto: u32,
+        /// Bearer credential for reclaiming this exact seat, bankroll intact,
+        /// if the socket drops. Sent only to its owner; never broadcast.
+        token: String,
+    },
     State { view: TableView },
     Left,
     Error { message: String },

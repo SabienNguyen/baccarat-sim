@@ -252,10 +252,13 @@ async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
     if let Some(Seat { room, pid }) = seat.take() {
         {
             let mut guard = room.lock().await;
-            guard.conns.remove(&pid);
-            let _ = guard.table.leave(pid);
+            // Hold the seat rather than stand the player up: a dropped socket
+            // used to forfeit their whole bankroll, and let a busted player
+            // rejoin for a free full rebuy. The sweep evicts the seat once HOLD
+            // elapses, so an abandoned chair still frees itself.
+            guard.hold_seat(pid);
             guard.broadcast();
-            tracing::info!(room = %guard.id, "seat released on disconnect");
+            tracing::info!(room = %guard.id, "seat held for reconnect");
         }
         maybe_pace(room);
         registry.sweep().await;
@@ -298,6 +301,62 @@ async fn handle_command(
                             message: "The floor is full — join an open table instead.".into(),
                         });
                     }
+                }
+            }
+        }
+        ClientMsg::Rejoin { room, token } => {
+            if seat.is_some() {
+                let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
+                return true;
+            }
+            // A wrong token is indistinguishable from a bad room code, so it
+            // spends the same strike budget: the token is a bearer credential
+            // for someone's bankroll and must not be brute-forceable.
+            let reclaimed = match registry.get(&room).await {
+                Some(room) => {
+                    let mut guard = room.lock().await;
+                    match guard.reclaim(&token) {
+                        Some(pid) => {
+                            guard.seat(pid, tx.clone());
+                            *seat = Some(Seat { room: room.clone(), pid });
+                            match guard.table.view_for(pid) {
+                                Ok(view) => {
+                                    let fresh = guard.issue_token(pid);
+                                    let _ = tx.try_send(ServerMsg::Joined {
+                                        room: guard.id.clone(),
+                                        player: pid,
+                                        tier: guard.tier,
+                                        view,
+                                        proto: PROTOCOL_VERSION,
+                                        token: fresh,
+                                    });
+                                    guard.broadcast();
+                                    tracing::info!(room = %guard.id, "seat reclaimed");
+                                    true
+                                }
+                                // The seat vanished between reclaim and view —
+                                // undo the commit rather than hold a ghost.
+                                Err(_) => {
+                                    guard.release(pid);
+                                    *seat = None;
+                                    false
+                                }
+                            }
+                        }
+                        None => false,
+                    }
+                }
+                None => false,
+            };
+            if reclaimed {
+                *failed_joins = 0;
+            } else {
+                *failed_joins += 1;
+                let _ = tx.try_send(ServerMsg::Error {
+                    message: "That seat is gone — join as a new player.".into(),
+                });
+                if *failed_joins >= MAX_JOIN_FAILURES {
+                    return false;
                 }
             }
         }
@@ -402,12 +461,14 @@ async fn sit(
             // would see `None` and leave a ghost seat wedging the room (S9).
             *seat = Some(Seat { room: room.clone(), pid });
             let view = guard.table.view_for(pid).expect("just joined");
+            let token = guard.issue_token(pid);
             let _ = tx.try_send(ServerMsg::Joined {
                 room: guard.id.clone(),
                 player: pid,
                 tier: guard.tier,
                 view,
                 proto: PROTOCOL_VERSION,
+                token,
             });
             guard.broadcast();
             let (id, tier) = (guard.id.clone(), guard.tier);
