@@ -175,3 +175,93 @@ have. Ads on a free game realistically need five figures of monthly sessions
 before the cheque covers a coffee, and gambling-adjacent content is a common
 AdSense rejection category. Growth work (`GROWTH.md`) is the prerequisite for
 those, and it is a longer road than one licensing conversation.
+
+## How money actually reaches you
+
+A Sponsor button on a repository nobody visits earns nothing. Sponsorship is a
+bucket, not a plan. Revenue needs demand to *reach* the offer, and there are
+exactly three channels that do that. Two of them do not depend on the website
+having traffic, which is why they come first.
+
+### 1. Package registries — the durable inbound channel
+
+A studio that needs a baccarat engine does not search Google for a hobby project;
+they search crates.io, npm, and GitHub for "baccarat". Being the result is the
+whole game, and it costs one command.
+
+The crate is now publishable — metadata, keywords (`baccarat`, `casino`,
+`punto-banco`, `card-game`, `gambling`), categories, and a README written as the
+pitch rather than as docs. `cargo package` succeeds (20 files, 47 KiB).
+
+```sh
+cargo login          # once, token from https://crates.io/me
+cargo publish -p baccarat-engine
+```
+
+That single step buys, permanently and passively:
+
+- **crates.io** search presence for the word "baccarat", where there is little
+  serious competition;
+- **docs.rs**, auto-built, which ranks well and makes the API browsable to an
+  evaluating engineer;
+- **lib.rs** and the various "awesome Rust" aggregators;
+- a Google-indexed page whose first screen is the enumeration proof.
+
+The npm side (`engine-wasm`) is the same move for JavaScript buyers and is the
+larger audience for a browser game component. Worth doing second, once the crate
+name is held.
+
+**Name squatting is real**: `baccarat-engine` is currently unclaimed. Publishing
+holds it.
+
+### 2. Outbound — ten emails, not a funnel
+
+B2B for a component like this is not inbound marketing; it is a short list and a
+direct approach. The list is small enough to write by hand in an afternoon:
+
+- **HTML5 game licensors** who resell casino titles to operators (MarketJS and its
+  competitors). They buy engines as inventory and already have the buyers.
+- **Social-casino and sweepstakes operators** — they need correct games and carry
+  their own KYC and payments.
+- **Casino-affiliate and comparison sites** — they want a real playable game to
+  hold attention on a page; a branded module is an easy sell.
+- **Dealer schools and training products** — small cheques, short cycles, and the
+  fastest way to a first reference customer.
+
+A version of this, kept short, is what to send:
+
+> **Subject: proven-correct baccarat engine (Rust/WASM) — open source**
+>
+> I maintain an open-source punto banco engine whose paytables are verified by
+> exhaustive enumeration: all 1,659,001 reachable coups of an 8-deck shoe, every
+> side-bet edge within 0.0033pp of published analysis, cross-checked against
+> Nevada GCB and New Jersey regulator sources. It's MIT, so you can ship it
+> without talking to me.
+>
+> Playable here: <https://sabiennguyen.github.io/baccarat-sim/>
+> Source: <https://github.com/SabienNguyen/baccarat-sim>
+>
+> What I sell is the part MIT doesn't cover: rule variants and integration, a
+> compliance audit report written for a certification reader, and a support
+> window. If any of that is useful, happy to scope it.
+
+Leading with "it's free, you don't need me" is the point. It removes the reason to
+ignore the email, and the people who reply are the ones who actually need the
+services.
+
+### 3. The website — the slow channel
+
+Ads and sponsorship both need traffic the site does not have. `GROWTH.md` is the
+plan; the SEO pages and the `/license/` page are in place and indexed. Treat this
+as compounding background, not as this quarter's revenue.
+
+### Honest sequencing
+
+1. `cargo publish` (minutes, permanent, passive).
+2. Enable GitHub Sponsors (minutes; earns roughly nothing until traffic exists,
+   but costs nothing to have running).
+3. Send the ten emails (an afternoon; this is the one with four-figure outcomes).
+4. Let growth compound in the background.
+
+Steps 1 and 3 are where money actually comes from in the next quarter. Step 2 is
+worth doing because it is free, not because it will pay.
