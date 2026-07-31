@@ -64,29 +64,21 @@ export type ServerMsg =
   | { type: "closed"; reason: string };
 
 /**
- * Fallback address of the table service; static hosts (GitHub Pages) have no
- * /ws of their own.
+ * Where the table service lives, if it is not the host serving this page.
  *
- * Prefer the `VITE_WS_URL` build variable over editing this: the deploy workflow
- * passes the repository variable of that name straight through, so multiplayer
- * can move hosts without a source change. This constant is only what a build
- * with nothing configured falls back to.
- */
-const PROD_WS_URL = "wss://baccarat-sim.fly.dev/ws";
-
-/**
- * Socket URL for the table service. Priority: VITE_WS_URL (build-time
- * override), same-origin /ws in dev (vite proxies it to the local server),
- * else the deployed service.
+ * Set `VITE_WS_URL` at build time when the site and the table service are on
+ * different hosts — a static site on GitHub Pages plus a server elsewhere. When
+ * one host serves both (a VPS, or the server's own SPA_DIR), leave it unset and
+ * the client uses `/ws` on its own origin, which needs no configuration and
+ * cannot drift out of date.
  */
 export function socketUrl(): string {
   const configured = import.meta.env.VITE_WS_URL as string | undefined;
   if (configured) return configured;
-  if (import.meta.env.DEV) {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/ws`;
-  }
-  return PROD_WS_URL;
+  // Same origin as the page. `wss:` follows `https:` so a secure page never
+  // opens an insecure socket, which browsers block as mixed content anyway.
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/ws`;
 }
 
 /**
