@@ -1,0 +1,25 @@
+# Single-host deployment: one box serves the site and the live tables.
+#
+# Caddy is here for one reason — it gets and renews the TLS certificate on its
+# own, with no certbot, no cron, and no renewal you can forget. Replace the
+# domain, put this at /etc/caddy/Caddyfile, and `systemctl reload caddy`.
+#
+# The table service already serves the built SPA from SPA_DIR, so everything —
+# pages, assets and the /ws socket — comes from this one upstream. That means
+# the client needs no VITE_WS_URL: it defaults to /ws on its own origin.
+
+baccaratsimulator.com, www.baccaratsimulator.com {
+	encode zstd gzip
+
+	# WebSockets need no special handling in Caddy v2 — reverse_proxy upgrades
+	# the connection automatically. Long-lived sockets are the point here, so
+	# don't add a response timeout.
+	reverse_proxy localhost:8788
+
+	# The server sets its own security headers (CSP included), so nothing is
+	# added here that would fight them.
+	log {
+		output file /var/log/caddy/baccarat.log
+		format console
+	}
+}
