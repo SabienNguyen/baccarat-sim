@@ -41,9 +41,11 @@ never "casino"/"gambling," and lead with the no-wagering teaching angle._
 
 ### Tier 2 — worth trying (moderate effort / uncertain payoff)
 6. **CrazyGames** — demonstrably tolerates casino-style card games (hosts
-   Blackjack Master, Las Vegas Poker, a Card category). Requires real work: SDK
-   integration + an iframe-safe "portal-embed" build (G-stretch). Doubles as ad
-   revenue via their SDK. Payoff is a small slice of a big platform.
+   Blackjack Master, Las Vegas Poker, a Card category). The SDK integration and
+   the iframe-safe "portal-embed" build now exist: `npm run build:portal`
+   produces `web/dist-portal.zip` with the CrazyGames v3 adapter (see "Portal
+   builds" in `docs/DEPLOY.md`); what remains is the submission itself. Doubles
+   as ad revenue via their SDK. Payoff is a small slice of a big platform.
 7. **Casino/advantage-play forums + Discords** (Wizard of Vegas forum,
    blackjack/card-counting communities) — excellent audience fit; success needs
    genuine participation before promotion, moderation risk is real and per-venue.

@@ -140,6 +140,45 @@ advertise a host that isn't live.
 
 ---
 
+## Portal builds
+
+Game portals (CrazyGames, Armor Games, Newgrounds, itch.io) run the game inside
+a cross-origin iframe and take an uploaded zip. Build it with:
+
+```sh
+npm --workspace web run build:portal
+```
+
+That runs the normal build with `VITE_PORTAL=crazygames` into `web/dist-portal/`
+and zips it to `web/dist-portal.zip` (`web/scripts/zip-portal.mjs`, no extra
+dependencies; `CNAME` is left out). Set `VITE_WS_URL` as for the site build if
+live tables should work from inside the portal. Both outputs are gitignored.
+
+| Portal | Wants | Notes |
+|---|---|---|
+| CrazyGames | zip, `index.html` at the root | Uses their SDK v3 (`web/src/portal/crazygames.ts`): gameplay start/stop, happy time on a beaten table, a midgame ad on a fresh shoe, a rewarded ad for a fresh buy-in on the bust screen. The SDK is loaded from `sdk.crazygames.com` at runtime. |
+| itch.io | zip, `index.html` at the root | HTML5 project, "This file will be played in the browser". No SDK. |
+| Newgrounds | zip, `index.html` at the root | HTML5 upload, set the viewport size. No SDK. |
+| Armor Games | zip / hosted URL, by email | No SDK. |
+
+Only the portal build talks to a portal: the adapter is chosen at runtime by
+`?portal=crazygames`, then by the build-time `VITE_PORTAL`, and otherwise falls
+back to a null adapter that loads and contacts nothing (`web/src/portal/`).
+The CrazyGames code is a separate, lazily-imported chunk, so the plain
+`npm run build` bundle never fetches it. A portal build served on its own
+(outside a portal) still works — the SDK just fails to initialise and every
+portal call becomes a no-op, with a single console warning.
+
+Which copies are embeddable: the Pages build (`baccarat-sim.com`) and the zip
+send no framing headers and may be iframed. The Fly-served copy of the site
+keeps `frame-ancestors 'none'` in its CSP (`server/src/main.rs`) and cannot be
+embedded; portals must use the zip or the Pages URL, never `*.fly.dev`.
+Storage access (`localStorage` / `sessionStorage`) is guarded throughout, so a
+portal that partitions or blocks third-party storage degrades to "no
+persistence" rather than a blank page.
+
+---
+
 ## Alternative — one VPS (~$5/month)
 
 If Fly's idle stop (`min_machines_running = 0` in `fly.toml`) ever costs real

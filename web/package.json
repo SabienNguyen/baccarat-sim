@@ -6,6 +6,7 @@
     "dev": "vite",
     "build:content": "node scripts/build-content.mjs",
     "build": "node scripts/build-content.mjs && tsc --noEmit && vite build",
+    "build:portal": "node scripts/build-content.mjs && tsc --noEmit && VITE_PORTAL=crazygames vite build --outDir dist-portal && node scripts/zip-portal.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
