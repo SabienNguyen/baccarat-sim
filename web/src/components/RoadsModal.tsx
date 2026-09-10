@@ -2,30 +2,19 @@ import { useEffect, useRef } from "react";
 import type { BigRoad, Mark, ScoreboardSnapshot, Side } from "../engine/types";
 import { formatCents } from "../format";
 import { nextMarks } from "../roadForecast";
+import { boardTally, type BoardTally } from "../roadTally";
 import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
 import { FoodMark, HanGlyph, type FoodGlyph } from "./roadGlyphs";
 import { useFitCells } from "./useFitCells";
 
 interface RoadsModalProps {
   scoreboard: ScoreboardSnapshot;
+  /** Bead-plate counts, if the caller already has them (Scoreboard memoises one). */
+  tally?: BoardTally;
   /** Posted table limits in cents; the limits panel is left off without them. */
   tableMin?: number;
   tableMax?: number;
   onClose: () => void;
-}
-
-/** Running counts for the board's tally panel, read off the bead plate. */
-export function boardTally(scoreboard: ScoreboardSnapshot) {
-  const t = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, games: 0 };
-  for (const cell of scoreboard.bead_plate.cells) {
-    t.games += 1;
-    if (cell.outcome === "BankerWin") t.banker += 1;
-    else if (cell.outcome === "PlayerWin") t.player += 1;
-    else t.tie += 1;
-    if (cell.banker_pair) t.bankerPair += 1;
-    if (cell.player_pair) t.playerPair += 1;
-  }
-  return t;
 }
 
 /** A labelled two-column card (mark / label / value) shared by the side panels. */
@@ -38,8 +27,7 @@ function BoardCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function TallyPanel({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
-  const t = boardTally(scoreboard);
+function TallyPanel({ tally: t }: { tally: BoardTally }) {
   const rows: [string, React.ReactNode, number][] = [
     ["Banker", <HanGlyph kind="banker" size={18} />, t.banker],
     ["Player", <HanGlyph kind="player" size={18} />, t.player],
@@ -179,7 +167,7 @@ function LimitsPanel({ min, max }: { min: number; max: number }) {
  * plate, tallies, next-hand key and limits across the top, then the Big Road,
  * Big Eye Boy, and the Small Road / Cockroach Pig pair, with a welcome strip.
  */
-export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsModalProps) {
+export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: RoadsModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -202,6 +190,7 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
   const { cell, scale } = useFitCells(boardRef, fitRef);
 
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
+  const counts = tally ?? boardTally(scoreboard);
 
   return (
     <div className="roads-backdrop" onClick={onClose}>
@@ -226,7 +215,7 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
           >
             <div className="roads-top">
               <BeadPlateView plate={scoreboard.bead_plate} />
-              <TallyPanel scoreboard={scoreboard} />
+              <TallyPanel tally={counts} />
               <NextHandPanel big={scoreboard.big_road} />
               {hasLimits && <LimitsPanel min={tableMin} max={tableMax} />}
             </div>
