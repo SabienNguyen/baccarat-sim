@@ -4,7 +4,7 @@
 
 use crate::protocol::{RoomInfo, ServerMsg, Tier};
 use baccarat_engine::settle::Ruleset;
-use baccarat_engine::table::{PlayerId, Table, TableConfig, TableError};
+use baccarat_engine::table::{FlipRequest, PlayerId, Table, TableConfig, TableError};
 use futures_util::FutureExt;
 use rand::Rng;
 use std::collections::HashMap;
@@ -363,6 +363,28 @@ async fn pace_loop(room: &Arc<Mutex<Room>>) {
     }
 }
 
+/// The dealer's line when a squeezer asks for a house card early, spoken to
+/// the whole table so everyone knows why that hand turned out of order.
+/// Called after the table accepted the request, so the house hand is the
+/// side no seat holds.
+pub fn flip_request_line(table: &Table, pid: PlayerId, count: FlipRequest) -> String {
+    let (name, house) = match table.view_for(pid) {
+        Ok(view) => (
+            view.seats
+                .iter()
+                .find(|s| s.id == pid)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "The squeezer".into()),
+            if view.player_squeezer.is_none() { "Player" } else { "Banker" },
+        ),
+        Err(_) => ("The squeezer".into(), "house"),
+    };
+    match count {
+        FlipRequest::One => format!("{name} asks for one — the dealer turns a {house} card."),
+        FlipRequest::Both => format!("{name} asks for both — the dealer turns the {house} hand."),
+    }
+}
+
 /// Human dealer speech for refusals, mirrored from the web's narrateError.
 pub fn error_message(err: &TableError) -> String {
     use baccarat_engine::session::CommandError as E;
@@ -376,6 +398,7 @@ pub fn error_message(err: &TableError) -> String {
             format!("The {side:?} hand's cards are in another player's hands.")
         }
         TableError::OutOfOrder => "Order, order — Player hand first, then Banker.".into(),
+        TableError::NothingToTurn => "Nothing for the dealer to turn just now.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {
             format!("Too rich for this table — the max is ${}.{:02}.", max / 100, max % 100)
         }
@@ -568,5 +591,40 @@ mod reconnect_tests {
         assert!(room.expire_held(), "hold elapsed — seat should be freed");
         assert!(room.is_vacant());
         assert_eq!(room.reclaim(&token), None);
+    }
+}
+
+#[cfg(test)]
+mod flip_request_line_tests {
+    use super::*;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::settle::BetSpot;
+
+    fn seated_player_squeezer() -> (Table, PlayerId) {
+        let mut table = Table::new(
+            TableConfig { table_min: 100, table_max: 1_000_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            3,
+        );
+        let pid = table.join("Sabien", 100_000).unwrap();
+        table.place_bet(pid, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        table.deal().unwrap();
+        (table, pid)
+    }
+
+    #[test]
+    fn names_the_asker_and_the_house_hand() {
+        let (mut table, pid) = seated_player_squeezer();
+        table.request_dealer_flip(pid, FlipRequest::One).unwrap();
+        let line = flip_request_line(&table, pid, FlipRequest::One);
+        assert!(line.contains("Sabien"), "{line}");
+        assert!(line.contains("Banker"), "{line}");
+        assert!(line.contains("one"), "{line}");
+        let both = flip_request_line(&table, pid, FlipRequest::Both);
+        assert!(both.contains("both"), "{both}");
+    }
+
+    #[test]
+    fn a_refused_request_has_dealer_speech() {
+        assert!(!error_message(&TableError::NothingToTurn).is_empty());
     }
 }

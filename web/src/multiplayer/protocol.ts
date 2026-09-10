@@ -1,6 +1,6 @@
 // Wire types for the table service — mirrors server/src/protocol.rs.
 
-import type { BetKind, RoundSnapshot, Side } from "../engine/types";
+import type { BetKind, FlipRequest, RoundSnapshot, Side } from "../engine/types";
 import type { TableTier } from "../tables";
 
 /** One seat's public face, shown to the whole table. */
@@ -42,6 +42,8 @@ export type ClientMsg =
   | { type: "deal" }
   | { type: "peek"; hand: Side; index: number }
   | { type: "reveal"; hand: Side; index: number }
+  /** Ask the dealer to turn one/both house cards early (the squeezer only). */
+  | { type: "dealer_flip"; count: FlipRequest }
   | { type: "settle" }
   | { type: "new_shoe" };
 

@@ -41,6 +41,7 @@ export function createRemoteStore(opts: {
     lastError: null,
     seats: opts.view.seats,
     squeezers: squeezersOf(opts.view),
+    me,
     lastFlip: null,
     announcement: null,
     sitOut: () => send({ type: "sit_out" }),
@@ -73,6 +74,9 @@ export function createRemoteStore(opts: {
     deal: () => send({ type: "deal" }),
     peek: (side, index) => send({ type: "peek", hand: side, index }),
     reveal: (side, index) => send({ type: "reveal", hand: side, index }),
+    // Server-authoritative: it checks the squeeze, turns the house card(s)
+    // and pushes the new view to every seat, with the dealer's line.
+    requestDealerFlip: (count) => send({ type: "dealer_flip", count }),
     settle: () => send({ type: "settle" }),
 
     // Cosmetic: flip the local view back to Betting with a swept table; the

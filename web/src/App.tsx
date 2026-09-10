@@ -11,6 +11,8 @@ import { urlParam } from "./urlParams";
 import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { canSqueeze } from "./squeezeRights";
+import { dealerFlipOffer } from "./dealerFlip";
+import { DealerFlipRequest } from "./components/DealerFlipRequest";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail, type BetView } from "./components/BetRail";
@@ -115,6 +117,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
   const squeezers = useStore(active, (s) => s.squeezers);
+  const me = useStore(active, (s) => s.me);
+  const requestDealerFlip = useStore(active, (s) => s.requestDealerFlip);
   const sitOut = useStore(active, (s) => s.sitOut);
   const watchHand = useStore(active, (s) => s.watchHand);
   const goal = useStore(active, (s) => s.goal);
@@ -179,6 +183,15 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const bankerLocked =
     !isFaceUp(snapshot.player.cards[0] ?? "FaceDown") ||
     !isFaceUp(snapshot.player.cards[1] ?? "FaceDown");
+
+  // The high-limit ask: while you squeeze your hand you may have the dealer
+  // turn one or both of HIS cards first. Offered only while it would be
+  // honoured (see dealerFlipOffer); the engine/server is the real gate.
+  const flipOffer = dealerFlipOffer(snapshot, squeezers, me);
+  const flipControls = (side: "Player" | "Banker") =>
+    flipOffer?.side === side ? (
+      <DealerFlipRequest offer={flipOffer} onRequest={requestDealerFlip} />
+    ) : undefined;
 
   // free to bet = the roll minus live wagers. In Settled the bets are
   // already resolved (the bankroll reflects them), so the whole roll is free.
@@ -263,6 +276,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             squeezable={canSqueeze("Player", seats, squeezers)}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
+            actions={flipControls("Player")}
           />
           <Hand
             side="Banker"
@@ -275,6 +289,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             onReveal={(i) => {
               if (!bankerLocked) reveal("Banker", i);
             }}
+            actions={flipControls("Banker")}
           />
         </div>
         <Controls

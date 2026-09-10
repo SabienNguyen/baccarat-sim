@@ -408,6 +408,12 @@ async fn handle_command(
             };
             let pid = *pid;
             let mut room = room.lock().await;
+            // A dealer-flip request is the one command the dealer speaks to:
+            // the whole table should hear why a house card turned early.
+            let flip_ask = match &table_cmd {
+                ClientMsg::DealerFlip { count } => Some(*count),
+                _ => None,
+            };
             let result = match table_cmd {
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
@@ -415,6 +421,7 @@ async fn handle_command(
                 ClientMsg::Deal => room.table.deal(),
                 ClientMsg::Peek { hand, index } => room.table.peek(pid, hand, index),
                 ClientMsg::Reveal { hand, index } => room.table.reveal(pid, hand, index),
+                ClientMsg::DealerFlip { count } => room.table.request_dealer_flip(pid, count),
                 ClientMsg::Settle => room.table.settle(),
                 ClientMsg::NewShoe => room.table.new_shoe(),
                 _ => unreachable!("non-table commands handled above"),
@@ -422,6 +429,9 @@ async fn handle_command(
             match result {
                 Ok(()) => {
                     room.broadcast();
+                    if let Some(count) = flip_ask {
+                        room.announce(rooms::flip_request_line(&room.table, pid, count));
+                    }
                     drop(room);
                     if let Some(Seat { room, .. }) = seat.as_ref() {
                         maybe_pace(room.clone());

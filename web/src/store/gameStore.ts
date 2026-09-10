@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { RoundSnapshot, BetKind, CommandError, Side } from "../engine/types";
+import type { RoundSnapshot, BetKind, CommandError, Side, FlipRequest } from "../engine/types";
 import type { SeatView } from "../multiplayer/protocol";
 import { lastFlipBetween, type Flip } from "../cards";
 
@@ -34,6 +34,12 @@ export interface GameState {
   seats: SeatView[] | null;
   /** Who holds each hand's cards (multiplayer squeeze rights). */
   squeezers: { player: number | null; banker: number | null } | null;
+  /** This client's own seat id, to read `squeezers` from its point of view
+   *  (a single-player table seats its player as 0). */
+  me: number;
+  /** The high-limit courtesy: while still squeezing your own hand, ask the
+   *  dealer to turn one or both of the house hand's cards early. */
+  requestDealerFlip: (count: FlipRequest) => void;
   /** Skip this coup (multiplayer); no-op alone at a single-player table. */
   sitOut: () => void;
   /** The card that just turned, for the dealer's call. */
@@ -132,7 +138,9 @@ export function createGameStore(
       snapshot: session.snapshot(),
       lastError: null,
       seats: null,
-      squeezers: null,
+      // read the rights off the opening snapshot too, not just after a command
+      squeezers: squeezersOf(session.snapshot()),
+      me: 0, // the sole seat at a single-player table
       sitOut: () => {},
       lastFlip: null,
       announcement: null,
@@ -182,6 +190,24 @@ export function createGameStore(
 
       peek: (side, index) => apply(session.peek(side, index)),
       reveal: (side, index) => apply(session.reveal(side, index)),
+
+      // "Flip one" / "flip both": the dealer turns house cards at the
+      // squeezer's request, with a word to the table. The line clears after
+      // a beat so his call of the card that turned can be read.
+      requestDealerFlip: (count) => {
+        if (!session.requestDealerFlip) return; // a plain session has no house dealer
+        const result = session.requestDealerFlip(count);
+        apply(result);
+        if (!result.ok) return;
+        const line =
+          count === "Both"
+            ? "As you like — the dealer turns both of the house's cards."
+            : "As you like — the dealer turns one of the house's cards.";
+        set({ announcement: line });
+        setTimeout(() => {
+          if (get().announcement === line) set({ announcement: null });
+        }, DEALER_FLIP_MS);
+      },
 
       settle: () => {
         // Read the pre-settle bankroll straight from the session (the engine's

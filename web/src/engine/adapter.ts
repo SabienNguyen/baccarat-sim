@@ -7,6 +7,7 @@ import type {
   CommandError,
   Side,
   GlossaryEntry,
+  FlipRequest,
 } from "./types";
 
 /** An engine refusal or, from a table, the dealer's plain speech. */
@@ -35,6 +36,9 @@ export interface GameSession {
   dealerFlipPending?(): boolean;
   dealerNextSide?(): Side | undefined;
   dealerFlipOne?(): CommandResult;
+  /** Table sessions only: ask the dealer to turn one or both house cards
+   *  early, while your own hand is still being squeezed. */
+  requestDealerFlip?(count: FlipRequest): CommandResult;
 }
 
 /**
@@ -114,6 +118,9 @@ function tableErrorToSpeech(error: TableError): SessionError {
   if (typeof error === "object" && error !== null && "NotYourSqueeze" in error) {
     return { Message: `The ${error.NotYourSqueeze.side} hand's cards are in the dealer's hands.` };
   }
+  if (error === "NothingToTurn") {
+    return { Message: "Nothing for the dealer to turn just now." };
+  }
   return { Message: "Order, order — Player hand first, then Banker." };
 }
 
@@ -158,6 +165,7 @@ export function createTableSession(config: SessionConfig): GameSession {
     dealerFlipPending: () => inner.dealer_flip_pending(),
     dealerNextSide: () => inner.dealer_next_side(),
     dealerFlipOne: () => run(() => inner.dealer_flip_one()),
+    requestDealerFlip: (count) => run(() => inner.request_dealer_flip(count)),
   };
 }
 
