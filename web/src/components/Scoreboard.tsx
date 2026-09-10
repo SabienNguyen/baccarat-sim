@@ -17,7 +17,14 @@ function tally(scoreboard: ScoreboardSnapshot): { p: number; b: number; t: numbe
   return { p, b, t };
 }
 
-export function Scoreboard({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
+interface ScoreboardProps {
+  scoreboard: ScoreboardSnapshot;
+  /** Posted table limits in cents, for the full board's limits panel. */
+  tableMin?: number;
+  tableMax?: number;
+}
+
+export function Scoreboard({ scoreboard, tableMin, tableMax }: ScoreboardProps) {
   const [showAll, setShowAll] = useState(false);
   const counts = tally(scoreboard);
   return (
@@ -33,7 +40,14 @@ export function Scoreboard({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
       <button type="button" className="full-roads-btn" onClick={() => setShowAll(true)}>
         Full roads
       </button>
-      {showAll && <RoadsModal scoreboard={scoreboard} onClose={() => setShowAll(false)} />}
+      {showAll && (
+        <RoadsModal
+          scoreboard={scoreboard}
+          tableMin={tableMin}
+          tableMax={tableMax}
+          onClose={() => setShowAll(false)}
+        />
+      )}
     </section>
   );
 }

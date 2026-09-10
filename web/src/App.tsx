@@ -325,7 +325,11 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
         />
       </main>
       <div className="board-dock">
-        <Scoreboard scoreboard={snapshot.scoreboard} />
+        <Scoreboard
+          scoreboard={snapshot.scoreboard}
+          tableMin={snapshot.table_min}
+          tableMax={snapshot.table_max}
+        />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
       <WinPopup key={settleSeq} amount={lastDelta} />

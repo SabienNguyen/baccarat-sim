@@ -289,8 +289,8 @@
   padding: 24px;
 }
 .roads-modal {
-  max-width: min(900px, 92vw);
-  max-height: 88vh;
+  width: min(1220px, 94vw);
+  max-height: 92vh;
   overflow: auto;
 }
 .roads-modal-head {
@@ -316,11 +316,192 @@
   padding: 8px 12px;
   cursor: pointer;
 }
-.roads-grid {
+/* --- the board: laid out like a Macau electronic scoreboard ---
+   Top row: bead plate | tally | next-hand key | limits. Then the Big Road and
+   Big Eye Boy full width, the Small Road / Cockroach Pig pair, and a strip. */
+.roads-board {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.roads-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: stretch;
+}
+.roads-bottom {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
-.roads-grid .road.bead {
-  grid-column: 1 / -1;
+/* the road grids fill their slot so the whole board reads as one display */
+.roads-board .road-grid {
+  width: 100%;
+}
+/* compact one-line headings on the board: fun name, then the traditional one */
+.roads-board .road-title {
+  flex-direction: row;
+  justify-content: center;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.roads-board .road.chinatown .road-title {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.roads-board .road.chinatown {
+  margin-top: 8px;
+  padding: 8px 8px 8px;
+}
+.roads-board .road.chinatown .bead-grid {
+  min-height: 189px; /* six 27px rows: same depth as the other roads */
+}
+
+/* side cards: lacquer face, gold figures, an ink frame like the road paper */
+.board-card {
+  border-collapse: collapse;
+  background: var(--lacquer);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(240, 213, 138, 0.35);
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #f4ecd8;
+  min-width: 150px;
+  align-self: stretch;
+}
+.board-card-title {
+  caption-side: top;
+  padding: 6px 8px 4px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 1px 1px 0 var(--ink);
+  border-bottom: 2px solid var(--ink);
+  background: rgba(0, 0, 0, 0.25);
+}
+.board-card th,
+.board-card td {
+  padding: 3px 8px;
+  text-align: left;
+  font-weight: normal;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.board-card tbody tr:last-child th,
+.board-card tbody tr:last-child td {
+  border-bottom: none;
+}
+.board-card .board-mark {
+  width: 18px;
+  padding-right: 0;
+}
+.board-card .board-mark .han-glyph {
+  display: block;
+  border-radius: 2px;
+}
+.board-card .board-mark .han-glyph--banker {
+  background: var(--chip-red);
+}
+.board-card .board-mark .han-glyph--player {
+  background: var(--chip-blue);
+}
+.board-card .board-mark .han-glyph--tie {
+  background: var(--road-tie);
+}
+/* a pair dot sitting in a table cell instead of a road corner */
+.pair-dot--inline {
+  position: static;
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 0 auto;
+}
+.board-card .board-value {
+  text-align: right;
+  color: var(--gold);
+  font-size: 12px;
+  text-shadow: 1px 1px 0 var(--ink);
+}
+/* the game-number and limits rows have no mark: let the label take its column */
+.board-row--plain th {
+  padding-left: 8px;
+}
+.board-card--key thead th {
+  text-align: center;
+  padding: 4px 6px 2px;
+}
+.board-card--key thead .han-glyph {
+  display: inline-block;
+  border-radius: 2px;
+}
+.board-card--key thead .han-glyph--banker {
+  background: var(--chip-red);
+}
+.board-card--key thead .han-glyph--player {
+  background: var(--chip-blue);
+}
+.board-card--key .board-key-cell {
+  text-align: center;
+  width: 32px;
+  height: 26px;
+  padding: 2px 6px;
+  /* a swatch of road paper behind each forecast mark */
+  background: var(--road-paper);
+  border: 1px solid var(--ink);
+}
+.board-card--key .board-key-cell .food-mark {
+  margin: 0 auto;
+}
+.board-card--key .board-key-label {
+  font-size: 8px;
+}
+
+.roads-footer {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  color: #1a1208;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  padding: 5px 8px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* phones: everything stacks; the three cards share a row where they fit */
+@media (max-width: 700px) {
+  .roads-backdrop {
+    padding: 8px;
+  }
+  .roads-modal {
+    width: 100%;
+    max-height: 96vh;
+  }
+  .roads-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .roads-top > .road.chinatown {
+    grid-column: 1 / -1;
+  }
+  .roads-top > .board-card {
+    min-width: 0;
+    width: 100%;
+  }
+  /* the limits card is the odd one out: give it the whole row */
+  .roads-top > .board-card:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+  .roads-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
