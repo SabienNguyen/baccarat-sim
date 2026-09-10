@@ -511,8 +511,26 @@
   height: calc(var(--road-cell) * 16 / 27);
   margin: 0 auto;
 }
+/* row label: the food name over the traditional road name */
 .board-card--key .board-key-label {
   font-size: max(7px, calc(var(--road-cell) * 8 / 27));
+  line-height: 1.1;
+}
+.board-card--key .board-key-fun {
+  display: block;
+}
+.board-card--key .board-key-trad {
+  display: block;
+  font-family: var(--font-text);
+  font-size: max(9px, calc(var(--road-cell) * 12 / 27));
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-2);
+}
+/* forecast overlay: a colour neither side would stamp next fades back */
+.board-card--key .board-key-cell--dim .food-mark {
+  opacity: 0.35;
+  filter: none;
 }
 
 /* phones: the board stacks and scrolls instead of fitting (useFitCells
