@@ -54,8 +54,8 @@ jobs:
           # VITE_WS_URL (Settings -> Secrets and variables -> Actions -> Variables)
           # to move multiplayer to a different host without touching source. Left
           # unset, the client falls back to /ws on its own origin, which on Pages
-          # is nothing. Production value: wss://table.baccarat-sim.com/ws
-          VITE_WS_URL: ${{ vars.VITE_WS_URL }}
+          # is nothing, so the workflow defaults to the production table host.
+          VITE_WS_URL: ${{ vars.VITE_WS_URL || 'wss://table.baccarat-sim.com/ws' }}
 
       - name: Enable Pages
         uses: actions/configure-pages@v5
