@@ -27,6 +27,16 @@
   --gold: #f0d58a;
   --chip-red: #c0202a;
   --chip-blue: #1f6feb;
+  /* roads — the pit display's cream paper, its faint rule lines, tie green */
+  --road-paper: #f4efe0;
+  --road-grid-line: rgba(21, 17, 15, 0.14);
+  --road-cell: #fff;
+  --road-tie: #1d7a3a;
+  /* Chinatown bead plate — red lacquer frame, warm parchment, red rule lines */
+  --lacquer: #9e1a20;
+  --lacquer-hi: #c9393b;
+  --parchment: #f6e7c4;
+  --parchment-line: rgba(158, 26, 32, 0.22);
   /* panels — oxblood salon (was Balatro violet) */
   --panel-face: #3a1720;
   --panel-bevel-hi: #6a2b38;

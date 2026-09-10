@@ -17,32 +17,109 @@
   text-shadow: 2px 2px 0 var(--ink);
 }
 
-/* --- bead plate (full-roads modal) --- */
+/* --- reskinned road headings: fun name on top, traditional name under it --- */
+.road-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.road-title-fun {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.road-title-trad {
+  font-family: var(--font-text);
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--accent-2);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+.lantern {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 var(--ink));
+}
+
+/* --- bead plate, dressed as Chinatown (full-roads modal) ---
+   Red lacquer frame with a gold inner trim; the pagoda eave rides the top
+   edge and the lanterns hang either side of the title. Accents, not a mural. */
+.road.chinatown {
+  position: relative;
+  margin-top: 14px; /* room for the eave, which rises off the frame */
+  padding: 8px 10px 10px;
+  border: 3px solid var(--lacquer);
+  border-radius: 4px;
+  outline: 2px solid var(--ink);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    inset 0 0 0 3px var(--ink),
+    4px 4px 0 var(--shadow);
+}
+.pagoda-roof {
+  position: absolute;
+  /* sits flush on the ink outline: 3 tiers of 3px plus a 1px ink line each */
+  top: -17px;
+  left: -2px;
+  right: -2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+/* three stepped tiers, each a crisp 3px course with an ink line under it:
+   gold ridge, red roof, gold eave — the same lacquer-and-gold as the frame */
+.pagoda-roof span {
+  display: block;
+  height: 3px;
+  border-bottom: 1px solid var(--ink);
+  box-sizing: content-box;
+}
+.pagoda-roof span:nth-child(1) {
+  width: 30%;
+  background: var(--gold);
+}
+.pagoda-roof span:nth-child(2) {
+  width: 60%;
+  background: var(--lacquer-hi);
+}
+.pagoda-roof span:nth-child(3) {
+  width: 100%;
+  background: var(--gold);
+}
+/* six rows deep, filled top to bottom then on to the next column, like the
+   real bead plate; fixed 24px tiles so a bead is a bead and not a slab */
 .bead-grid {
   list-style: none;
   margin: 0;
   padding: 6px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, 24px);
+  grid-auto-columns: 24px;
   gap: 3px;
-  background-color: #f4efe0;
+  overflow-x: auto;
+  background-color: var(--parchment);
   background-image:
-    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
+    linear-gradient(var(--parchment-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--parchment-line) 1px, transparent 1px);
   background-size: 27px 27px;
   background-position: 5px 5px;
   border: 2px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 4px;
 }
+/* a lacquer tile per bead: square with a soft corner, bevelled like a seal */
 .bead-grid li {
-  border-radius: 50%;
-  font-family: var(--font-display);
-  font-size: 11px;
-  text-align: center;
-  min-height: 24px;
-  line-height: 24px;
-  color: #fff;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  position: relative; /* anchor for the pair dots */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.35);
 }
 .bead-grid li[data-outcome="PlayerWin"] {
   background: var(--chip-blue);
@@ -51,7 +128,12 @@
   background: var(--chip-red);
 }
 .bead-grid li[data-outcome="Tie"] {
-  background: #1d7a3a;
+  background: var(--road-tie);
+}
+.han-glyph {
+  display: block;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
 }
 
 /* --- the pit display: cream board, red/blue circles --- */
@@ -62,11 +144,11 @@
   /* always hold six rows so the road reads like the pit display */
   min-height: 192px;
   align-items: flex-start;
-  background-color: #f4efe0;
+  background-color: var(--road-paper);
   /* faint cell grid so an empty board still reads as a pit display */
   background-image:
-    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
+    linear-gradient(var(--road-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--road-grid-line) 1px, transparent 1px);
   background-size: 30px 30px;
   background-position: 5px 5px;
   border: 2px solid var(--ink);
@@ -98,13 +180,13 @@
 }
 /* big road: hollow-circle look in real display colors */
 .road-grid li[data-side="Player"] {
-  background: #fff;
+  background: var(--road-cell);
   border: 4px solid var(--chip-blue);
   color: var(--chip-blue);
   text-shadow: none;
 }
 .road-grid li[data-side="Banker"] {
-  background: #fff;
+  background: var(--road-cell);
   border: 4px solid var(--chip-red);
   color: var(--chip-red);
   text-shadow: none;
@@ -142,16 +224,18 @@
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.35));
 }
 
-/* derived roads keep their red/blue marks */
-.road-grid li[data-mark="Red"] {
-  color: var(--chip-red);
-  background: #fff;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+/* derived roads: the red/blue mark is now a food icon sitting straight on the
+   paper — no ring, no disc — but the cell keeps its 27px footprint so the
+   columns line up and the follow-latest scroll is unchanged */
+.road-grid li[data-mark] {
+  background: transparent;
+  border-radius: 0;
 }
-.road-grid li[data-mark="Blue"] {
-  color: var(--chip-blue);
-  background: #fff;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+.food-mark {
+  display: block;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.3));
 }
 
 /* win counters, like the pit display footer */
@@ -177,7 +261,7 @@
   background: var(--chip-red);
 }
 .tally--t {
-  background: #1d7a3a;
+  background: var(--road-tie);
 }
 
 .full-roads-btn {

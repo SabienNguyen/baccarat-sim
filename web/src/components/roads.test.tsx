@@ -1,6 +1,8 @@
-import { render } from "@testing-library/react";
-import { BigRoadView } from "./roads";
-import type { BigRoad, BigRoadCell } from "../engine/types";
+import { render, screen, within } from "@testing-library/react";
+import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
+import { RoadsModal } from "./RoadsModal";
+import { scoredSnapshot } from "../test/fixtures";
+import type { BeadCell, BigRoad, BigRoadCell, DerivedRoad } from "../engine/types";
 
 function cell(): BigRoadCell {
   return { side: "Banker", ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false };
@@ -42,4 +44,84 @@ test("the big road follows the latest column when it outgrows the window", () =>
   Object.defineProperty(grid, "scrollWidth", { value: 900, configurable: true });
   rerender(<BigRoadView road={road(21)} />);
   expect(grid.scrollLeft).toBe(900);
+});
+
+// --- food roads + Chinatown bead plate (presentation only) ---
+
+const derived: DerivedRoad = { columns: [["Red", "Blue"], ["Red"]] };
+
+test.each([
+  ["donut", "Big Eye Boy", "DONUTS"],
+  ["burger", "Small Road", "HAMBURGERS"],
+  ["fries", "Cockroach Pig", "FRENCH FRIES"],
+] as const)("the %s road draws a pixel icon per mark under its fun title", (glyph, label, title) => {
+  const { container } = render(<DerivedRoadView label={label} glyph={glyph} road={derived} />);
+  // accessible name stays the traditional one; the fun name is the visible title
+  const road = screen.getByLabelText(label);
+  expect(within(road).getByText(title)).toBeInTheDocument();
+  expect(within(road).getByText(label)).toBeInTheDocument();
+  // one icon per mark, in this road's food, named for what the colour means
+  expect(container.querySelectorAll(`svg[data-glyph="${glyph}"]`)).toHaveLength(3);
+  expect(within(road).getAllByRole("img", { name: "Banker" })).toHaveLength(2);
+  expect(within(road).getAllByRole("img", { name: "Player" })).toHaveLength(1);
+  // the colour meaning survives on the cell, and the old text glyph is gone
+  expect(container.querySelectorAll('li[data-mark="Red"]')).toHaveLength(2);
+  expect(container.textContent).not.toMatch(/[●○]/);
+  // grid geometry is untouched: still one <ul> per column inside .road-grid
+  expect(container.querySelectorAll(".road-grid > ul")).toHaveLength(2);
+});
+
+test("the Chinatown bead plate draws each outcome as a pixel character", () => {
+  const cells: BeadCell[] = [
+    { outcome: "BankerWin", player_pair: false, banker_pair: true },
+    { outcome: "PlayerWin", player_pair: true, banker_pair: false },
+    { outcome: "Tie", player_pair: false, banker_pair: false },
+  ];
+  const { container } = render(<BeadPlateView plate={{ cells }} />);
+  const board = screen.getByLabelText("Bead Plate");
+  expect(within(board).getByText("CHINATOWN")).toBeInTheDocument();
+  expect(within(board).getByText("Bead Plate")).toBeInTheDocument();
+  // one pixel character per bead, named for the outcome
+  expect(within(board).getByRole("img", { name: "Banker" })).toBeInTheDocument();
+  expect(within(board).getByRole("img", { name: "Player" })).toBeInTheDocument();
+  expect(within(board).getByRole("img", { name: "Tie" })).toBeInTheDocument();
+  expect(container.querySelectorAll(".bead-grid li[data-outcome] svg.han-glyph")).toHaveLength(3);
+  // no Latin P/B/T fallback text left in the beads (only the svg <title>s)
+  for (const li of container.querySelectorAll(".bead-grid li")) {
+    const ownText = [...li.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE);
+    expect(ownText).toHaveLength(0);
+  }
+  // pairs still show, as the corner pixel dots
+  expect(container.querySelectorAll(".bead-grid .pair-dot--banker")).toHaveLength(1);
+  expect(container.querySelectorAll(".bead-grid .pair-dot--player")).toHaveLength(1);
+});
+
+test("the bead plate follows its newest column like the other roads", () => {
+  const bead = (): BeadCell => ({ outcome: "BankerWin", player_pair: false, banker_pair: false });
+  const plate = (n: number) => ({ cells: Array.from({ length: n }, bead) });
+  const { container, rerender } = render(<BeadPlateView plate={plate(60)} />);
+  const grid = container.querySelector<HTMLElement>(".bead-grid")!;
+  Object.defineProperty(grid, "scrollWidth", { value: 700, configurable: true });
+  rerender(<BeadPlateView plate={plate(61)} />); // starts an eleventh column
+  expect(grid.scrollLeft).toBe(700);
+});
+
+test("the full roads window hands each derived road its food", () => {
+  render(<RoadsModal scoreboard={scoredSnapshot().scoreboard} onClose={() => {}} />);
+  const dialog = screen.getByRole("dialog", { name: "All roads" });
+  expect(within(dialog).getByLabelText("Big Eye Boy").querySelector('[data-glyph="donut"]')).not.toBeNull();
+  expect(within(dialog).getByLabelText("Small Road").querySelector('[data-glyph="burger"]')).not.toBeNull();
+  expect(within(dialog).getByLabelText("Cockroach Pig").querySelector('[data-glyph="fries"]')).not.toBeNull();
+  // the Big Road is not part of the reskin: no food, no characters
+  const big = within(dialog).getByLabelText("Big Road");
+  expect(big.querySelectorAll("[data-glyph], .han-glyph")).toHaveLength(0);
+});
+
+test("the Big Road markup is untouched by the reskin", () => {
+  const columns: BigRoadCell[][] = [
+    [{ ...cell(), side: "Player", player_pair: true }, { ...cell(), side: "Player", ties: 2 }],
+    [{ ...cell(), banker_pair: true, tiger: true }],
+  ];
+  const { container } = render(<BigRoadView road={{ columns }} />);
+  expect(container.innerHTML).toMatchInlineSnapshot(`"<div aria-label="Big Road" class="road big"><h4>Big Road <span class="road-info"><button type="button" class="road-info-btn" aria-label="What is the Big Road?">?</button></span></h4><div class="road-grid"><ul><li data-side="Player">P<span class="pair-dot pair-dot--player" title="Player pair"></span></li><li data-side="Player">P/2</li></ul><ul><li data-side="Banker">B<span class="pair-dot pair-dot--banker" title="Banker pair"></span><svg class="bonus-token bonus-token--tiger" width="11" height="11" viewBox="0 0 8 8" role="img" aria-label="Tiger"><title>Tiger</title><rect x="0" y="0" width="1" height="1" fill="#e08a2e"></rect><rect x="7" y="0" width="1" height="1" fill="#e08a2e"></rect><rect x="0" y="1" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="1" width="1" height="1" fill="#e08a2e"></rect><rect x="6" y="1" width="1" height="1" fill="#e08a2e"></rect><rect x="7" y="1" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="2" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="3" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="6" y="2" width="1" height="1" fill="#e08a2e"></rect><rect x="0" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="3" width="1" height="1" fill="#15110f"></rect><rect x="2" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="3" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="3" width="1" height="1" fill="#15110f"></rect><rect x="6" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="7" y="3" width="1" height="1" fill="#e08a2e"></rect><rect x="0" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="2" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="3" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="6" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="7" y="4" width="1" height="1" fill="#e08a2e"></rect><rect x="0" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="5" width="1" height="1" fill="#15110f"></rect><rect x="2" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="3" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="5" width="1" height="1" fill="#15110f"></rect><rect x="6" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="7" y="5" width="1" height="1" fill="#e08a2e"></rect><rect x="1" y="6" width="1" height="1" fill="#e08a2e"></rect><rect x="2" y="6" width="1" height="1" fill="#15110f"></rect><rect x="3" y="6" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="6" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="6" width="1" height="1" fill="#15110f"></rect><rect x="6" y="6" width="1" height="1" fill="#e08a2e"></rect><rect x="2" y="7" width="1" height="1" fill="#e08a2e"></rect><rect x="3" y="7" width="1" height="1" fill="#e08a2e"></rect><rect x="4" y="7" width="1" height="1" fill="#e08a2e"></rect><rect x="5" y="7" width="1" height="1" fill="#e08a2e"></rect></svg></li></ul></div></div>"`);
 });
