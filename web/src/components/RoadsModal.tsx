@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { BigRoad, ScoreboardSnapshot } from "../engine/types";
+import type { BigRoad, Mark, ScoreboardSnapshot, Side } from "../engine/types";
 import { formatCents } from "../format";
 import { nextMarks } from "../roadForecast";
 import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
@@ -63,19 +63,62 @@ function TallyPanel({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
   );
 }
 
-const FORECAST_ROWS: [FoodGlyph, string][] = [
-  ["donut", "Donuts"],
-  ["burger", "Hamburgers"],
-  ["fries", "French fries"],
+/** Each derived road's food, its fun name, and the traditional name. */
+const KEY_ROWS: [FoodGlyph, string, string][] = [
+  ["donut", "Donuts", "Big Eye Boy"],
+  ["burger", "Hamburgers", "Small Road"],
+  ["fries", "French fries", "Cockroach Pig"],
 ];
 
-/** What each derived road would stamp if the next hand went Banker / Player. */
+/** The colour a side's column stands for in the key, and its plain name. */
+const SIDE_MARK: Record<Side, Mark> = { Banker: "Red", Player: "Blue" };
+const MARK_NAME: Record<Mark, string> = { Red: "red", Blue: "blue" };
+
+/**
+ * One key cell: always shows this road's food in the column's colour (red
+ * under 庄, blue under 闲) so the panel reads as a legend on an empty shoe.
+ * The forecast sits on top: once the roads have started, a colour neither
+ * side would produce next is dimmed, and the cell says what its side would
+ * stamp.
+ */
+function KeyCell({
+  glyph,
+  road,
+  side,
+  forecast,
+  predicted,
+}: {
+  glyph: FoodGlyph;
+  road: string;
+  side: Side;
+  /** what this side would stamp next, if the road has started */
+  forecast: Mark | null;
+  /** the colours some side would stamp next (empty before the road starts) */
+  predicted: Set<Mark>;
+}) {
+  const colour = SIDE_MARK[side];
+  const dim = predicted.size > 0 && !predicted.has(colour);
+  const title = forecast
+    ? `${road}: ${side} next → ${MARK_NAME[forecast]} ${glyph}`
+    : `${road}: ${MARK_NAME[colour]} ${glyph}`;
+  return (
+    <td
+      className={`board-key-cell${dim ? " board-key-cell--dim" : ""}`}
+      data-forecast={forecast ? MARK_NAME[forecast] : "none"}
+      title={title}
+    >
+      <FoodMark glyph={glyph} mark={colour} size={16} />
+    </td>
+  );
+}
+
+/** Legend for the three food roads, with the next-hand forecast laid over it. */
 function NextHandPanel({ big }: { big: BigRoad }) {
   const ifBanker = nextMarks(big, "Banker");
   const ifPlayer = nextMarks(big, "Player");
   return (
-    <table className="board-card board-card--key" aria-label="Next hand">
-      <caption className="board-card-title">Next hand</caption>
+    <table className="board-card board-card--key" aria-label="Key · Next hand">
+      <caption className="board-card-title">Key · Next hand</caption>
       <thead>
         <tr>
           <td />
@@ -88,19 +131,21 @@ function NextHandPanel({ big }: { big: BigRoad }) {
         </tr>
       </thead>
       <tbody>
-        {FORECAST_ROWS.map(([glyph, label], i) => (
-          <tr key={glyph} aria-label={label}>
-            <th scope="row" className="board-key-label">
-              {label}
-            </th>
-            <td className="board-key-cell">
-              {ifBanker[i] && <FoodMark glyph={glyph} mark={ifBanker[i]} size={16} />}
-            </td>
-            <td className="board-key-cell">
-              {ifPlayer[i] && <FoodMark glyph={glyph} mark={ifPlayer[i]} size={16} />}
-            </td>
-          </tr>
-        ))}
+        {KEY_ROWS.map(([glyph, label, road], i) => {
+          const predicted = new Set<Mark>();
+          if (ifBanker[i]) predicted.add(ifBanker[i]);
+          if (ifPlayer[i]) predicted.add(ifPlayer[i]);
+          return (
+            <tr key={glyph} aria-label={label}>
+              <th scope="row" className="board-key-label">
+                <span className="board-key-fun">{label}</span>
+                <span className="board-key-trad">{road}</span>
+              </th>
+              <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} predicted={predicted} />
+              <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} predicted={predicted} />
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );

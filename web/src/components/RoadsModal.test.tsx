@@ -85,27 +85,61 @@ test("the limits panel is left off when the board has no table to quote", () => 
   expect(screen.queryByRole("table", { name: "Table limits" })).toBeNull();
 });
 
-test("the next-hand key forecasts each derived road for a Banker or Player result", () => {
-  render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
-  const key = screen.getByRole("table", { name: "Next hand" });
-  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth
-  const donut = row(key, "Donuts");
-  const burger = row(key, "Hamburgers");
-  const fries = row(key, "French fries");
-  const marks = (r: HTMLElement) => [...r.querySelectorAll("svg[data-glyph]")].map((s) => s.getAttribute("aria-label"));
-  expect(marks(donut)).toEqual(["Player", "Player"]); // Blue, Blue
-  expect(marks(burger)).toEqual(["Player", "Player"]); // Blue, Blue
-  expect(marks(fries)).toEqual(["Banker", "Player"]); // Red, Blue
-  expect(donut.querySelectorAll('[data-glyph="donut"]')).toHaveLength(2);
-  expect(burger.querySelectorAll('[data-glyph="burger"]')).toHaveLength(2);
-  expect(fries.querySelectorAll('[data-glyph="fries"]')).toHaveLength(2);
+const cells = (r: HTMLElement) => [...r.querySelectorAll<HTMLElement>("td.board-key-cell")];
+const forecasts = (r: HTMLElement) => cells(r).map((c) => c.dataset.forecast);
+const dimmed = (r: HTMLElement) => cells(r).map((c) => c.classList.contains("board-key-cell--dim"));
+const colours = (r: HTMLElement) =>
+  [...r.querySelectorAll("svg[data-glyph]")].map((s) => s.getAttribute("aria-label"));
+
+test("the key is a legend even on an empty shoe: every road shows red and blue marks", () => {
+  const empty: ScoreboardSnapshot = {
+    bead_plate: { cells: [] },
+    big_road: { columns: [] },
+    big_eye_boy: { columns: [] },
+    small_road: { columns: [] },
+    cockroach_pig: { columns: [] },
+  };
+  render(<RoadsModal scoreboard={empty} onClose={() => {}} />);
+  const key = screen.getByRole("table", { name: "Key · Next hand" });
+  expect(within(key).getByText(/key · next hand/i)).toBeInTheDocument();
+  expect(key.querySelectorAll("svg[data-glyph]")).toHaveLength(6);
+  for (const [label, glyph, road] of [
+    ["Donuts", "donut", "Big Eye Boy"],
+    ["Hamburgers", "burger", "Small Road"],
+    ["French fries", "fries", "Cockroach Pig"],
+  ] as const) {
+    const r = row(key, label);
+    expect(within(r).getByText(road)).toBeInTheDocument(); // traditional name subtitle
+    expect(r.querySelectorAll(`[data-glyph="${glyph}"]`)).toHaveLength(2);
+    expect(colours(r)).toEqual(["Banker", "Player"]); // red under 庄, blue under 闲
+    expect(forecasts(r)).toEqual(["none", "none"]);
+    expect(dimmed(r)).toEqual([false, false]); // pure legend: nothing faded
+  }
 });
 
-test("the next-hand key shows an empty cell where a road has not started", () => {
+test("the forecast lays over the legend: the colour nobody would stamp next is dimmed", () => {
+  render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
+  const key = screen.getByRole("table", { name: "Key · Next hand" });
+  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth
+  const donut = row(key, "Donuts"); // Banker -> Blue, Player -> Blue
+  expect(forecasts(donut)).toEqual(["blue", "blue"]);
+  expect(dimmed(donut)).toEqual([true, false]); // red donut fades, blue stays full
+  expect(colours(donut)).toEqual(["Banker", "Player"]); // the legend marks themselves stay put
+  const fries = row(key, "French fries"); // Banker -> Red, Player -> Blue
+  expect(forecasts(fries)).toEqual(["red", "blue"]);
+  expect(dimmed(fries)).toEqual([false, false]);
+  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
+  expect(cells(fries)[1].title).toBe("Cockroach Pig: Player next → blue fries");
+});
+
+test("a road that has not started is shown as plain legend, not blank", () => {
   render(<RoadsModal scoreboard={scoredSnapshot().scoreboard} onClose={() => {}} />);
-  const key = screen.getByRole("table", { name: "Next hand" });
+  const key = screen.getByRole("table", { name: "Key · Next hand" });
   // scoredSnapshot's big road is [P],[B]: no road can mark a third column yet
-  expect(row(key, "French fries").querySelectorAll("svg[data-glyph]")).toHaveLength(0);
+  const fries = row(key, "French fries");
+  expect(fries.querySelectorAll("svg[data-glyph]")).toHaveLength(2);
+  expect(forecasts(fries)).toEqual(["none", "none"]);
+  expect(cells(fries)[0].title).toBe("Cockroach Pig: red fries");
 });
 
 test("the board locks page scroll while it is open and releases it on close", () => {
