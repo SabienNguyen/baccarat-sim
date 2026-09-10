@@ -16,19 +16,38 @@ function matches(query: string): boolean {
 }
 
 /**
- * Size the roads board to its viewport. `boardRef` is the flex slot the board
- * has to fill; `fitRef` is the wrapper inside it holding every band. On each
- * resize we measure how much of the wrapper is chrome (everything but the
- * six-row grids), solve for the largest integer cell that fits, apply it via
- * `--road-cell`, and re-measure until it settles — the chrome shifts a little
- * as headings and cards scale with the cell. If the 14px floor still
- * overflows, the wrapper is scaled down a little; past the legibility floor
- * it stays at 14px and the board scrolls instead.
+ * Height the board slot could still grow into: the dialog is content-sized
+ * up to a max-height, so the slot's own height is not the limit — the
+ * dialog's headroom under that max is. Zero once the dialog is clamped.
  */
-export function useFitCells(boardRef: RefObject<HTMLElement>, fitRef: RefObject<HTMLElement>): Fit {
+function headroom(board: HTMLElement): number {
+  const dialog = board.parentElement;
+  if (!dialog) return 0;
+  const max = parseFloat(getComputedStyle(dialog).maxHeight);
+  if (!Number.isFinite(max)) return 0; // max-height: none
+  return Math.max(0, max - dialog.offsetHeight);
+}
+
+/**
+ * Size the roads board to its viewport. `boardRef` is the flex slot the board
+ * has to fill; `fitRef` is the wrapper inside it holding every band;
+ * `frameRef` is the fixed overlay behind the dialog, whose size is the
+ * viewport's. On each resize we measure how much of the wrapper is chrome
+ * (everything but the six-row grids), solve for the largest integer cell
+ * that fits the slot plus the dialog's headroom, apply it via `--road-cell`,
+ * and re-measure until it settles — the chrome shifts a little as headings
+ * and cards scale with the cell. If the 14px floor still overflows, the
+ * wrapper is scaled down a little; past the legibility floor it stays at
+ * 14px and the board scrolls instead.
+ */
+export function useFitCells(
+  boardRef: RefObject<HTMLElement>,
+  fitRef: RefObject<HTMLElement>,
+  frameRef?: RefObject<HTMLElement>,
+): Fit {
   const [fit, setFit] = useState<Fit>(DEFAULT_FIT);
   const [pass, setPass] = useState(0);
-  // the slot's last seen size, so re-layouts that leave it alone (our own
+  // the frame's last seen size, so re-layouts that leave it alone (our own
   // --road-cell updates, a scrollbar toggling) do not restart the search
   const seen = useRef<{ w: number; h: number } | null>(null);
 
@@ -36,26 +55,26 @@ export function useFitCells(boardRef: RefObject<HTMLElement>, fitRef: RefObject<
   // fixed-point loop from oscillating between "fits" and "one px over".
   useLayoutEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
-    const board = boardRef.current;
-    if (!board) return;
+    const frame = frameRef?.current ?? boardRef.current;
+    if (!frame) return;
     const ro = new ResizeObserver(() => {
-      const w = board.clientWidth;
-      const h = board.clientHeight;
+      const w = frame.clientWidth;
+      const h = frame.clientHeight;
       if (seen.current && seen.current.w === w && seen.current.h === h) return;
       seen.current = { w, h };
       ceiling = MAX_ROAD_CELL;
       passes = 0;
       setPass((p) => p + 1);
     });
-    ro.observe(board);
+    ro.observe(frame);
     return () => ro.disconnect();
-  }, [boardRef]);
+  }, [boardRef, frameRef]);
 
   useLayoutEffect(() => {
     const board = boardRef.current;
     const wrap = fitRef.current;
     if (!board || !wrap) return;
-    const available = board.clientHeight;
+    const available = board.clientHeight + headroom(board);
     if (available <= 0) return; // no layout (jsdom) — keep the defaults
     if (matches(STACKED)) {
       if (fit !== DEFAULT_FIT) setFit(DEFAULT_FIT);

@@ -181,15 +181,17 @@ export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: R
     };
   }, []);
 
+  const backdropRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
-  const { cell, scale, scroll } = useFitCells(boardRef, fitRef);
+  // the backdrop is the viewport: the dialog inside it is content-sized
+  const { cell, scale, scroll } = useFitCells(boardRef, fitRef, backdropRef);
 
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
   const counts = tally ?? boardTally(scoreboard);
 
   return (
-    <div className="roads-backdrop" onClick={onClose}>
+    <div className="roads-backdrop" ref={backdropRef} onClick={onClose}>
       <div
         role="dialog"
         aria-label="All roads"
