@@ -322,6 +322,11 @@
   flex-direction: column;
   overflow: hidden;
   padding: 10px;
+  /* useFitCells sets --road-cell inline on this element, so the pitch has to
+     be resolved here too: a custom property computed on .board would be
+     inherited as a fixed 30px and the rule lines and card rows would never
+     shrink with the cells */
+  --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
 .roads-modal-head {
   flex: 0 0 auto;
