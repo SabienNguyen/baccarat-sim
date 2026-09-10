@@ -7,7 +7,7 @@
 [**▶ Play it free**](https://baccarat-sim.com/) · [How to play](https://baccarat-sim.com/how-to-play/) · [Odds & house edge](https://baccarat-sim.com/baccarat-odds/) · [Roads explained](https://baccarat-sim.com/baccarat-roads/) · [License the engine](https://baccarat-sim.com/license/)
 
 [![Build & Deploy](https://github.com/SabienNguyen/baccarat-sim/actions/workflows/deploy.yml/badge.svg)](https://github.com/SabienNguyen/baccarat-sim/actions/workflows/deploy.yml)
-[![Tests](https://img.shields.io/badge/tests-525%20passing-2ea44f)](#tests)
+[![Tests](https://img.shields.io/badge/tests-651%20passing-2ea44f)](#tests)
 [![Rust](https://img.shields.io/badge/engine-Rust%20→%20WASM-b7410e)](engine/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -18,10 +18,11 @@ No sign-up. No download. No real money.
 </div>
 
 Bend the corner of the card with your mouse, watch the pip edges come up — _two
-sides!_ — and let the dealer talk you through every draw. A chunky retro pixel
-look, a real chip economy, the full scoreboard roads, and a rules engine written
-in Rust, compiled to WebAssembly, and **proven correct by exhaustive
-enumeration** rather than by sampling.
+sides!_ — and let the dealer talk you through every draw, or ask him to turn his
+own cards first. A chunky retro pixel look, a real chip economy, a Macau-style
+scoreboard with all five roads, and a rules engine written in Rust, compiled to
+WebAssembly, and **proven correct by exhaustive enumeration** rather than by
+sampling.
 
 ## The game
 
@@ -35,6 +36,9 @@ enumeration** rather than by sampling.
   fingers and the card itself bends up off the felt, the genuine printed face
   riding the lifted flap upside down, near edge first — so a 9 reads as four legs
   up the long edge, exactly like paper.
+- **Ask the dealer** — the high-limit courtesy: while you squeeze Player against
+  a house-held Banker hand, _Flip one_ or _Flip both_ has the dealer turn his
+  cards early, announced to the table.
 - **A real chip economy** — your bankroll is physical chips in real casino
   colors. Pick up mixed stacks, drop them on the felt, and make change with the
   dealer (break plates down, color up, or just _get_ any chip you can cover).
@@ -47,6 +51,17 @@ enumeration** rather than by sampling.
   ambience and an optional lounge loop, with a persisted volume control.
 - **Explain mode** — see _why_ each third card was drawn, and the house edge of
   every bet you placed.
+- **The roads** — the Big Road beside the table, and a full Macau-style
+  scoreboard one click away.
+
+### Ask the dealer
+
+![Mid-squeeze: the Player card bent up off the felt, and under the Banker hand the dealer's offer — Flip one / Flip both](docs/screenshots/dealer-flip.png)
+
+The ask is reveal-order only: it never touches a third card, and it only shows
+while it would be honoured — your hand still down, the house's still face down
+behind it. At a shared table the server validates the request and broadcasts
+the dealer's call of the card that turned.
 
 ### The full bet menu
 
@@ -62,22 +77,32 @@ its odds aside so the stack has room.
 ### Scoreboard roads
 
 The Big Road sits beside the table like a pit display — pair dots and pixel-art
-bonus tokens included — with the Bead Plate, Big Eye Boy, Small Road and
-Cockroach Pig one click away, each with an explainer.
+bonus tokens included. **Full roads** opens a Macau-style scoreboard: a
+Chinatown bead plate with 庄 / 闲 / 和 pixel tiles, the Big Road with a six-row
+dragon tail that bends long runs along the bottom row, and the three derived
+roads drawn as food — donuts (Big Eye Boy), hamburgers
+(Small Road), french fries (Cockroach Pig) — beside a tally, a key that
+forecasts each derived road's mark for the next hand, and the table limits. The
+board sizes itself to the viewport with no scrolling, and every road has an
+explainer.
 
-![All five roads: Bead Plate, Big Road, Big Eye Boy, Small Road, Cockroach Pig](docs/screenshots/roads.png)
+![The full roads board: Chinatown bead plate, tally, next-hand key and table limits above the Big Road, with donuts, hamburgers and french fries below](docs/screenshots/roads.png)
 
 ### Multiplayer
 
 Public and private tables (6-character invite codes) on an authoritative Rust
 server. Real squeeze rights: the biggest Player bettor holds the Player cards,
 the biggest Banker bettor holds the Banker cards, and the house dealer turns any
-hand nobody bet — one card per beat, announced. Every coup is opt-in: bet or sit
-out, and the deal waits for the table.
+hand nobody bet — one card per beat, announced. Only the holder gets the squeeze
+gesture, peeks follow the ritual order, and the Player squeezer's flip request
+is validated by the server before the table hears it. Every coup is opt-in: bet
+or sit out, and the deal waits for the table.
 
-Drop your connection and your seat and bankroll are held for two minutes while
-the client reconnects on its own. Single player runs the **same table rules**
-with one seat.
+Nobody can freeze the table: a squeezer whose connection drops has 8 seconds to
+come back before the dealer turns that hand himself, and one who simply stops
+squeezing loses it after a 45-second squeeze clock. Drop your connection and
+your seat and bankroll are held for two minutes while the client reconnects on
+its own. Single player runs the **same table rules** with one seat.
 
 ### On a phone
 
@@ -116,10 +141,10 @@ uniformity test back it up. **A biased shuffle fails the build.**
 ## Architecture
 
 ```
-engine/        Rust — the rules, incl. the multiplayer Table. Pure logic, no UI. 152 tests.
+engine/        Rust — the rules, incl. the multiplayer Table. Pure logic, no UI. 183 tests.
 engine-wasm/   wasm-bindgen boundary: commands in, snapshots out.
-server/        Rust — axum WebSocket table server. Authoritative shoe, rooms, invite codes. 15 tests.
-web/           React + TypeScript — the whole table. 358 tests.
+server/        Rust — axum WebSocket table server. Authoritative shoe, rooms, invite codes. 33 tests.
+web/           React + TypeScript — the whole table. 435 tests.
 ```
 
 The engine knows nothing about rendering; the front-end contains zero game
@@ -158,11 +183,12 @@ container host works unchanged.
 point [a new Blueprint](https://dashboard.render.com/blueprint/new) at this
 repository. A `fly.toml` is also included if you prefer Fly.io.
 
-Then tell the site where the tables live: set a repository **variable** named
-`VITE_WS_URL` (Settings → Secrets and variables → Actions → Variables) to
-`wss://<your-host>/ws` — for the production Fly app that is
-`wss://table.baccarat-sim.com/ws`. The Pages workflow passes it into the build, so
-multiplayer changes hosts without a source change.
+Then tell the site where the tables live. The Pages workflow builds against the
+production Fly app, `wss://table.baccarat-sim.com/ws`, unless a repository
+**variable** named `VITE_WS_URL` (Settings → Secrets and variables → Actions →
+Variables) says otherwise — set it to `wss://<your-host>/ws` and multiplayer
+changes hosts without a source change. The full cutover, DNS to certificates, is
+in [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 Rooms live in memory and one instance owns them, so keep the service pinned to a
 single replica. Until it's deployed, the lobby says so plainly and single player
@@ -181,13 +207,17 @@ Every push runs both suites in CI and deploys the site to GitHub Pages.
 
 ## Status
 
-Complete and playable. **Single player** — three tables, win goals, bust-outs,
-persistent bankrolls — and **multiplayer** — public/private rooms, authentic
-squeeze rights, a paced house dealer, seats held through a disconnect, and a
-table that deals on past anyone out of chips.
+Complete and playable, live at [baccarat-sim.com](https://baccarat-sim.com/)
+with the table service on Fly at `table.baccarat-sim.com`. **Single player** —
+three tables, win goals, bust-outs, persistent bankrolls, dealer flip requests,
+the full roads board — and **multiplayer** — public/private rooms, authentic
+squeeze rights, a paced house dealer, seats held through a disconnect, a squeeze
+grace and clock so no one seat can stall a hand, and a table that deals on past
+anyone out of chips.
 
-The GitHub Pages deployment plays single player with no server at all; live
-tables light up once the table service is deployed.
+As of 2026-09-10: `cargo test` 216 passed (5 ignored: informational tables and
+a microbenchmark), `vitest` 435 passed. The site plays single player with no
+server at all; if the table service is ever down, the lobby says so plainly.
 
 ## Using the engine
 
