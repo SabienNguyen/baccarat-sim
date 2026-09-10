@@ -311,3 +311,65 @@ test("busting offers a re-buy and a way out", async () => {
   expect(onReset).toHaveBeenCalledTimes(2);
   expect(onLeave).toHaveBeenCalledOnce();
 });
+
+test("single-player: a chip tapped during the sweep leaves the felt clean for the next deal", () => {
+  // Reported as "cards vanish after a tie": the hand pushes, the player re-bets
+  // as the dealer is mucking the cards, and every card from then on is invisible
+  // until a page refresh. The sweep flag must not outlive the hand it swept.
+  vi.useFakeTimers();
+  try {
+    const tied: RoundSnapshot = {
+      ...dealingSnapshot(),
+      phase: "Settled",
+      player: {
+        cards: [
+          { FaceUp: { rank: "Four", suit: "Clubs" } },
+          { FaceUp: { rank: "Two", suit: "Hearts" } },
+        ],
+        total: 6,
+      },
+      banker: {
+        cards: [
+          { FaceUp: { rank: "King", suit: "Spades" } },
+          { FaceUp: { rank: "Six", suit: "Diamonds" } },
+        ],
+        total: 6,
+      },
+      bets: [],
+      outcome: "Tie",
+      payouts: [{ bet: { kind: { Main: "Player" }, amount: 500 }, net: 0 }],
+    };
+    const betting = bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] });
+    const nextDeal: RoundSnapshot = {
+      ...betting,
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: ["FaceDown", "FaceDown"], total: null },
+    };
+    let snap = tied;
+    const store = createGameStore(
+      fakeSession(tied, {
+        snapshot: () => snap,
+        placeBet: () => okResult((snap = betting)),
+        deal: () => okResult((snap = nextDeal)),
+      }),
+    );
+    const { container } = render(<App store={store} />);
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS - SWEEP_MS + 100)); // mid-sweep: the muck is playing
+    expect(container.querySelector(".card-stage.sweeping")).not.toBeNull();
+
+    // the player re-bets before the muck finishes — this opens the next hand
+    act(() => store.getState().stake({ Main: "Player" }));
+    expect(store.getState().snapshot.phase).toBe("Betting");
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS)); // well past where the muck would have ended
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+
+    // and the next deal's cards land on a felt that is NOT still sweeping
+    act(() => store.getState().deal());
+    expect(store.getState().snapshot.phase).toBe("Dealing");
+    expect(screen.getAllByLabelText("face-down card")).toHaveLength(4);
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

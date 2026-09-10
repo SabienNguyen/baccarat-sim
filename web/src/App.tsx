@@ -227,6 +227,11 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
     return () => {
       clearTimeout(sweep);
       clearTimeout(clear);
+      // The sweep belongs to THIS settled hand. If the hand ends early — a
+      // chip tapped mid-muck opens the next hand through `stake` — the `clear`
+      // timer above never fires, and a stranded `sweeping` would keep mucking
+      // every card dealt from then on (muck-out ends at opacity 0, and holds).
+      setSweeping(false);
     };
   }, [seats, snapshot.phase, busted, goalReached, newHand]);
 
