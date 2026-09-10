@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
@@ -207,7 +207,7 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
     expect(store.getState().snapshot.phase).toBe("Dealing");
     act(() => vi.advanceTimersByTime(600)); // AUTO_SETTLE_MS
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS));
     expect(store.getState().snapshot.phase).toBe("Betting");
   } finally {
     vi.useRealTimers();
@@ -257,7 +257,7 @@ test("single-player: a winning-bonus hand auto-advances after the delay, clearin
     const store = createGameStore(fakeSession(pairWinHand()));
     render(<App store={store} />);
     expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS));
     expect(store.getState().snapshot.phase).toBe("Betting");
     expect(screen.queryByText(/PLAYER PAIR JUST HIT/)).toBeNull();
   } finally {
@@ -270,13 +270,13 @@ test("single-player: the table sweeps the cards out before clearing to the next 
   try {
     const store = createGameStore(fakeSession(pairWinHand()));
     const { container } = render(<App store={store} />);
-    act(() => vi.advanceTimersByTime(4100)); // still holding — no sweep yet
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS - SWEEP_MS - 100)); // still holding — no sweep yet
     expect(container.querySelector(".card-stage.sweeping")).toBeNull();
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(200)); // 4300: the sweep-out is playing
+    act(() => vi.advanceTimersByTime(200)); // 100 ms into the sweep-out
     expect(container.querySelector(".card-stage.sweeping")).not.toBeNull();
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(300)); // 4600: cleared to the next hand
+    act(() => vi.advanceTimersByTime(SWEEP_MS - 100)); // AUTO_ADVANCE_MS: cleared to the next hand
     expect(store.getState().snapshot.phase).toBe("Betting");
     expect(container.querySelector(".card-stage.sweeping")).toBeNull();
   } finally {
