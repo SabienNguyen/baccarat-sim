@@ -1,4 +1,4 @@
-import { buildFaceOps, buildBackOps, buildStockOps, paintTexture, RED, BLACK, REF_W, REF_H } from "./facePainter";
+import { buildFaceOps, buildBackOps, buildStockOps, paintTexture, RED, BLACK, REF_W, REF_H, PIP_X0, PIP_W } from "./facePainter";
 
 type TextOp = Extract<ReturnType<typeof buildFaceOps>[number], { op: "text" }>;
 const textOps = (ops: ReturnType<typeof buildFaceOps>) => ops.filter((o) => o.op === "text") as TextOp[];
@@ -17,6 +17,21 @@ test("the five of hearts lays five red pips, lower ones flipped", () => {
   expect(pips).toHaveLength(5);
   expect(pips.every((o) => o.color === RED)).toBe(true);
   expect(pips.filter((o) => o.flip).length).toBe(2); // the y>50% pair
+});
+
+test("pip columns span a real deck's share of the face width", () => {
+  // outer columns at 25/75 of a 17..83 field: centers ~33.5 / ~66.5 of 100,
+  // wide enough to read as a real card yet clear of the corner indices
+  const ops = buildFaceOps("Ten", "Spades");
+  const xs = textOps(ops)
+    .filter((o) => o.text === "♠" && o.px === 17)
+    .map((o) => o.x);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  expect(left).toBeCloseTo(PIP_X0 + 0.25 * PIP_W, 5);
+  expect(right).toBeCloseTo(PIP_X0 + 0.75 * PIP_W, 5);
+  expect(right - left).toBeGreaterThanOrEqual(32);
+  expect(left).toBeGreaterThan(26); // past the index column / thumb (x ≤ 26)
 });
 
 test("covering the indices removes exactly the four corner glyphs", () => {
