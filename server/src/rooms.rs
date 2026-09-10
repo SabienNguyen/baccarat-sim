@@ -169,11 +169,10 @@ impl Room {
     /// to the dealer for this coup. A hand the house is already turning, or
     /// a finished coup, stalls nobody and nothing changes.
     pub fn squeeze_clock_expired(&mut self) -> Vec<(PlayerId, baccarat_engine::scoreboard::Side)> {
-        let stalled = self.table.stalled_squeezes();
         let mut out = Vec::new();
-        for (pid, _) in &stalled {
-            for side in self.surrender_to_the_house(*pid, "is taking too long") {
-                out.push((*pid, side));
+        if let Some((pid, _)) = self.table.stalled_squeeze() {
+            for side in self.surrender_to_the_house(pid, "is taking too long") {
+                out.push((pid, side));
             }
         }
         out
@@ -456,7 +455,7 @@ pub fn arm_squeeze_clock(room: Arc<Mutex<Room>>) {
                 tracing::info!(room = %guard.id, ?taken, "squeeze clock elapsed — house takes the hand");
             }
             let still_turning =
-                guard.table.dealer_flip_pending() || !guard.table.stalled_squeezes().is_empty();
+                guard.table.dealer_flip_pending() || guard.table.stalled_squeeze().is_some();
             (taken, still_turning)
         };
         if !taken.is_empty() {
