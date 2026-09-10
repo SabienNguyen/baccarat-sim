@@ -162,3 +162,17 @@ test("another player going broke doesn't mark me busted", () => {
   store.handle({ type: "state", view: v });
   expect(store.getState().busted).toBe(false);
 });
+
+
+test("asking the dealer for a flip goes over the wire; the server decides", () => {
+  const { store, sent } = setup();
+  store.getState().requestDealerFlip("One");
+  expect(sent.at(-1)).toEqual({ type: "dealer_flip", count: "One" });
+  store.getState().requestDealerFlip("Both");
+  expect(sent.at(-1)).toEqual({ type: "dealer_flip", count: "Both" });
+});
+
+test("the store knows which seat is mine", () => {
+  const { store } = setup();
+  expect(store.getState().me).toBe(1);
+});

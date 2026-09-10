@@ -301,3 +301,67 @@ test("a settle that keeps the roll at or above the minimum does not bust", () =>
   store.getState().settle();
   expect(store.getState().busted).toBe(false);
 });
+
+
+// --- the high-limit ask: "flip one" / "flip both" of the dealer's cards ---
+
+test("requestDealerFlip asks the table session and speaks a line that clears after a beat", () => {
+  vi.useFakeTimers();
+  try {
+    const turned = snapshotWith({
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: [{ FaceUp: { rank: "Five", suit: "Clubs" } }, "FaceDown"], total: null },
+    });
+    const requestDealerFlip = vi.fn((): CommandResult => ({ ok: true, snapshot: turned }));
+    const store = createGameStore({
+      ...fakeSession({ ok: true, snapshot: snapshotWith() }),
+      requestDealerFlip,
+    });
+    store.getState().requestDealerFlip("One");
+    expect(requestDealerFlip).toHaveBeenCalledWith("One");
+    expect(store.getState().snapshot).toBe(turned);
+    // the dealer calls the card he turned, and says why
+    expect(store.getState().lastFlip).toEqual({ side: "Banker", card: { rank: "Five", suit: "Clubs" } });
+    expect(store.getState().announcement).toMatch(/turns one/);
+    vi.advanceTimersByTime(1500);
+    expect(store.getState().announcement).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("requestDealerFlip 'Both' says both", () => {
+  const requestDealerFlip = vi.fn((): CommandResult => ({ ok: true, snapshot: snapshotWith() }));
+  const store = createGameStore({
+    ...fakeSession({ ok: true, snapshot: snapshotWith() }),
+    requestDealerFlip,
+  });
+  store.getState().requestDealerFlip("Both");
+  expect(requestDealerFlip).toHaveBeenCalledWith("Both");
+  expect(store.getState().announcement).toMatch(/turns both/);
+});
+
+test("a refused dealer flip surfaces the dealer's refusal and says nothing else", () => {
+  const requestDealerFlip = vi.fn(
+    (): CommandResult => ({ ok: false, error: { Message: "Nothing for the dealer to turn just now." } }),
+  );
+  const store = createGameStore({
+    ...fakeSession({ ok: true, snapshot: snapshotWith() }),
+    requestDealerFlip,
+  });
+  store.getState().requestDealerFlip("One");
+  expect(store.getState().lastError).toEqual({ Message: "Nothing for the dealer to turn just now." });
+  expect(store.getState().announcement).toBeNull();
+});
+
+test("a plain session (no house dealer) ignores the ask", () => {
+  const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
+  expect(() => store.getState().requestDealerFlip("One")).not.toThrow();
+  expect(store.getState().lastError).toBeNull();
+});
+
+test("a single-player table seats its player as 0", () => {
+  const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
+  expect(store.getState().me).toBe(0);
+});

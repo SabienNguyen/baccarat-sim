@@ -147,7 +147,7 @@ mod tests {
 // via dealer_flip_one so the front-end can pace him.
 // ---------------------------------------------------------------------------
 
-use baccarat_engine::table::{Table, TableConfig, TableError, TableView};
+use baccarat_engine::table::{FlipRequest, Table, TableConfig, TableError, TableView};
 
 fn table_err(err: TableError) -> JsValue {
     serde_wasm_bindgen::to_value(&err).unwrap_or(JsValue::NULL)
@@ -214,6 +214,13 @@ impl WasmTable {
 
     pub fn reveal(&mut self, hand: Side, index: usize) -> Result<TableView, JsValue> {
         self.inner.reveal(self.me, hand, index).map_err(table_err)?;
+        self.view()
+    }
+
+    /// Ask the dealer to turn one or both of the house hand's cards early,
+    /// while your own hand is still being squeezed (see Table::request_dealer_flip).
+    pub fn request_dealer_flip(&mut self, count: FlipRequest) -> Result<TableView, JsValue> {
+        self.inner.request_dealer_flip(self.me, count).map_err(table_err)?;
         self.view()
     }
 

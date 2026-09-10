@@ -11,6 +11,8 @@ import { urlParam } from "./urlParams";
 import { isFaceUp } from "./cards";
 import { visibleCardCount } from "./squeezeOrder";
 import { canSqueeze } from "./squeezeRights";
+import { dealerFlipOffer } from "./dealerFlip";
+import { DealerFlipRequest } from "./components/DealerFlipRequest";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
 import { BetRail, type BetView } from "./components/BetRail";
@@ -115,6 +117,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
   const squeezers = useStore(active, (s) => s.squeezers);
+  const me = useStore(active, (s) => s.me);
+  const requestDealerFlip = useStore(active, (s) => s.requestDealerFlip);
   const sitOut = useStore(active, (s) => s.sitOut);
   const watchHand = useStore(active, (s) => s.watchHand);
   const goal = useStore(active, (s) => s.goal);
@@ -180,6 +184,15 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
     !isFaceUp(snapshot.player.cards[0] ?? "FaceDown") ||
     !isFaceUp(snapshot.player.cards[1] ?? "FaceDown");
 
+  // The high-limit ask: while you squeeze your hand you may have the dealer
+  // turn one or both of HIS cards first. Offered only while it would be
+  // honoured (see dealerFlipOffer); the engine/server is the real gate.
+  const flipOffer = dealerFlipOffer(snapshot, squeezers, me);
+  const flipControls = (side: "Player" | "Banker") =>
+    flipOffer?.side === side ? (
+      <DealerFlipRequest offer={flipOffer} onRequest={requestDealerFlip} />
+    ) : undefined;
+
   // free to bet = the roll minus live wagers. In Settled the bets are
   // already resolved (the bankroll reflects them), so the whole roll is free.
   const staked = snapshot.bets.reduce((a, b) => a + b.amount, 0);
@@ -227,6 +240,11 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
     return () => {
       clearTimeout(sweep);
       clearTimeout(clear);
+      // The sweep belongs to THIS settled hand. If the hand ends early — a
+      // chip tapped mid-muck opens the next hand through `stake` — the `clear`
+      // timer above never fires, and a stranded `sweeping` would keep mucking
+      // every card dealt from then on (muck-out ends at opacity 0, and holds).
+      setSweeping(false);
     };
   }, [seats, snapshot.phase, busted, goalReached, newHand]);
 
@@ -255,9 +273,10 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             phase={snapshot.phase}
             visibleCount={playerVisible}
             winner={snapshot.outcome === "PlayerWin"}
-            squeezable={canSqueeze("Player", seats, squeezers)}
+            squeezable={canSqueeze("Player", squeezers, me)}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
+            actions={flipControls("Player")}
           />
           <Hand
             side="Banker"
@@ -265,11 +284,17 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             phase={snapshot.phase}
             visibleCount={bankerVisible}
             winner={snapshot.outcome === "BankerWin"}
-            squeezable={canSqueeze("Banker", seats, squeezers)}
-            onPeek={(i) => peek("Banker", i)}
+            squeezable={canSqueeze("Banker", squeezers, me)}
+            onPeek={(i) => {
+              // A shared table holds the peek to the ritual too (the server
+              // refuses it as out of order); hold it silently, like the flip.
+              // Solo keeps its peek-ahead while the dealer turns Player.
+              if (seats === null || !bankerLocked) peek("Banker", i);
+            }}
             onReveal={(i) => {
               if (!bankerLocked) reveal("Banker", i);
             }}
+            actions={flipControls("Banker")}
           />
         </div>
         <Controls

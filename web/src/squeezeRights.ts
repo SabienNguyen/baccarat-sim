@@ -3,21 +3,22 @@ import type { Side } from "./engine/types";
 /**
  * Whether the local player may squeeze (peek/reveal) a given hand.
  *
- * The house dealer turns the hands nobody bet — its pacer auto-flips them — so
- * those must NOT be grabbable, or the player races the pacer on cards that
- * aren't theirs. You squeeze only the side(s) you bet.
+ * A hand belongs to the seat that holds its squeeze — the biggest bettor on
+ * that side — and to nobody else. A `null` squeezer is the house dealer's
+ * hand: his pacer turns it, so it must NOT be grabbable, or the player races
+ * the pacer on cards that aren't theirs. Anyone else's hand gets a plain,
+ * non-interactive face-down card; the server would refuse the touch anyway,
+ * but offering a gesture that can only be scolded is worse than none.
  *
- * Single-player: the local player is id 0, so a hand is yours when its squeezer
- * is 0; a `null` squeezer means the dealer holds it.
- * Multiplayer: the server enforces squeeze rights (rejecting NotYourSqueeze) and
- * the client doesn't track its own seat id, so leave those cards interactive.
+ * `me` is this client's seat id: 0 at a single-player table, the id the
+ * server issued at a shared one (the same lens dealerFlipOffer uses). A plain
+ * session carries no squeeze info at all and stays interactive.
  */
 export function canSqueeze(
   side: Side,
-  seats: readonly unknown[] | null,
   squeezers: { player: number | null; banker: number | null } | null,
+  me: number,
 ): boolean {
-  if (seats !== null) return true; // multiplayer: server-authoritative
   if (squeezers === null) return true; // a plain session has no house dealer
-  return side === "Player" ? squeezers.player === 0 : squeezers.banker === 0;
+  return side === "Player" ? squeezers.player === me : squeezers.banker === me;
 }
