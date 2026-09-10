@@ -443,20 +443,21 @@ async fn handle_command(
             };
             // Commands that move the coup along wind the squeeze clock: from
             // here the holder of the next face-down card has SQUEEZE_CLOCK to
-            // act before the dealer turns it for them.
-            let advances_coup = matches!(
+            // act before the dealer turns it for them. A peek only counts
+            // when it actually lifts a card — re-sending the same peek must
+            // not buy the holder another SQUEEZE_CLOCK, over and over.
+            let mut advances_coup = matches!(
                 table_cmd,
-                ClientMsg::Deal
-                    | ClientMsg::Peek { .. }
-                    | ClientMsg::Reveal { .. }
-                    | ClientMsg::DealerFlip { .. }
+                ClientMsg::Deal | ClientMsg::Reveal { .. } | ClientMsg::DealerFlip { .. }
             );
             let result = match table_cmd {
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
                 ClientMsg::ClearBets => room.table.clear_bets(pid),
                 ClientMsg::Deal => room.table.deal(),
-                ClientMsg::Peek { hand, index } => room.table.peek(pid, hand, index),
+                ClientMsg::Peek { hand, index } => {
+                    room.table.peek(pid, hand, index).map(|lifted| advances_coup = lifted)
+                }
                 ClientMsg::Reveal { hand, index } => room.table.reveal(pid, hand, index),
                 ClientMsg::DealerFlip { count } => room.table.request_dealer_flip(pid, count),
                 ClientMsg::Settle => room.table.settle(),
@@ -565,6 +566,78 @@ fn is_format_char(c: char) -> bool {
         | '\u{FFF9}'..='\u{FFFB}' // interlinear annotation
         | '\u{E0000}'..='\u{E007F}' // Tags block — invisible "ASCII smuggling" payloads
     )
+}
+
+#[cfg(test)]
+mod squeeze_clock_tests {
+    //! The squeeze clock is wound by commands that actually move the coup
+    //! along — not by a peek that changes nothing.
+    use super::*;
+    use baccarat_engine::scoreboard::Side;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::settle::BetSpot;
+    use baccarat_engine::table::PlayerId;
+    use protocol::Tier;
+
+    /// a squeezes Player, b squeezes Banker; both connected, cards out.
+    /// Returns everything a handle_command call for `a` needs.
+    async fn dealt(
+        registry: &Registry,
+    ) -> (Arc<Mutex<Room>>, PlayerId, PlayerId, mpsc::Sender<ServerMsg>, mpsc::Receiver<ServerMsg>) {
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, _rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb);
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            g.table.deal().unwrap();
+            (a, b)
+        };
+        std::mem::forget(_rb); // keep bob's queue open without draining it
+        (room, a, b, ta, ra)
+    }
+
+    async fn settle_tasks() {
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_repeated_peek_does_not_rewind_the_squeeze_clock() {
+        let registry = Registry::new();
+        let (room, a, _b, ta, _ra) = dealt(&registry).await;
+        let mut seat = Some(Seat { room: room.clone(), pid: a });
+        let mut strikes = 0;
+        let gen0 = room.lock().await.squeeze_generation();
+
+        // a genuine first peek winds the clock
+        let peek = || ClientMsg::Peek { hand: Side::Player, index: 0 };
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        let gen1 = room.lock().await.squeeze_generation();
+        assert_eq!(gen1, gen0 + 1, "a first peek is activity");
+
+        // the same peek again changes nothing at the table: no rewind
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1, "a no-op peek is not activity");
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1);
+
+        // peeking the OTHER card is a real lift again
+        let other = ClientMsg::Peek { hand: Side::Player, index: 1 };
+        assert!(handle_command(other, &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1 + 1);
+    }
 }
 
 #[cfg(test)]

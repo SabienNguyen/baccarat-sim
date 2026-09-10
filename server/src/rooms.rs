@@ -204,6 +204,12 @@ impl Room {
         format!("{name} {why} — the dealer turns the {side:?} hand.")
     }
 
+    /// Which arming of the squeeze clock is current. Bumps on every arming;
+    /// a wake that sees a newer generation stands down.
+    pub fn squeeze_generation(&self) -> u64 {
+        self.squeeze_gen
+    }
+
     /// Trade a token back for its seat, if that seat is still being held.
     /// Fails closed: an unknown token, or one whose seat has already been
     /// evicted or is still actively connected, reclaims nothing.

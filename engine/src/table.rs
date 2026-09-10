@@ -548,7 +548,11 @@ impl Table {
     /// lone player may fiddle their Banker card while the dealer turns the
     /// Player hand (the solo client relies on this — "peeking is fine, no
     /// dealer scolding"), and only the flip itself is held to order.
-    pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
+    ///
+    /// Returns whether the card actually went from face-down to peeked. A
+    /// repeat peek (or one at a card already up) is accepted but changes
+    /// nothing — callers that treat a peek as activity should check.
+    pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<bool, TableError> {
         self.check_rights(pid, hand)?;
         if self.config.max_seats > 1 {
             self.check_order(hand, index)?;
@@ -605,7 +609,7 @@ impl Table {
     pub fn reveal(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
         self.check_rights(pid, hand)?;
         self.check_order(hand, index)?;
-        self.set_status(hand, index, CardStatus::FaceUp)
+        self.set_status(hand, index, CardStatus::FaceUp).map(|_| ())
     }
 
     /// The squeeze belongs to the biggest bettor on that side, when there is one.
@@ -663,7 +667,9 @@ impl Table {
         Ok(())
     }
 
-    fn set_status(&mut self, hand: Side, index: usize, to: CardStatus) -> Result<(), TableError> {
+    /// Returns whether the card's status actually changed (a peek at a card
+    /// already peeked or up, or a reveal of one already up, changes nothing).
+    fn set_status(&mut self, hand: Side, index: usize, to: CardStatus) -> Result<bool, TableError> {
         match &mut self.phase {
             Phase::Dealing { reveal, .. } => {
                 let statuses = match hand {
@@ -673,10 +679,11 @@ impl Table {
                 if index >= statuses.len() {
                     return Err(CommandError::BadCardIndex { hand, index }.into());
                 }
-                if !(to == CardStatus::Peeked && statuses[index] == CardStatus::FaceUp) {
+                let was = statuses[index];
+                if !(to == CardStatus::Peeked && was == CardStatus::FaceUp) {
                     statuses[index] = to;
                 }
-                Ok(())
+                Ok(statuses[index] != was)
             }
             Phase::Betting => Err(CommandError::WrongPhase {
                 expected: PhaseTag::Dealing,
@@ -2000,6 +2007,19 @@ mod squeeze_gap_tests {
         t.reveal(a, Side::Player, 1).unwrap();
         t.peek(b, Side::Banker, 0).unwrap();
         t.peek(b, Side::Banker, 1).unwrap();
+    }
+
+    #[test]
+    fn a_peek_says_whether_it_lifted_anything() {
+        // The server winds its squeeze clock on a peek; one that changes
+        // nothing must not count as activity, or a holder could keep the
+        // whole table waiting by re-sending the same peek forever.
+        let (mut t, a, _b) = two_squeezers();
+        assert_eq!(t.peek(a, Side::Player, 0), Ok(true), "first lift");
+        assert_eq!(t.peek(a, Side::Player, 0), Ok(false), "already peeked");
+        assert_eq!(t.peek(a, Side::Player, 1), Ok(true), "the other card");
+        t.reveal(a, Side::Player, 0).unwrap();
+        assert_eq!(t.peek(a, Side::Player, 0), Ok(false), "a face-up card can't be peeked");
     }
 
     #[test]
