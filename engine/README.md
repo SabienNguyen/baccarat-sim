@@ -92,7 +92,7 @@ MIT. You can ship it commercially without asking.
 
 Commercial support — bespoke rule variants, integration, a compliance audit report
 written for a certification reader, or a support window — is available:
-<https://sabiennguyen.github.io/baccarat-sim/license/>
+<https://baccarat-sim.com/license/>
 
 MIT means you never have to ask. It also means nobody else is going to answer your
 auditor's questions.

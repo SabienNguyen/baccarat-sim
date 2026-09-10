@@ -2,9 +2,9 @@
 
 How to get players to this game — a free, browser-based, no-real-money punto
 banco *simulator* with a teaching angle, a WebGL card-squeeze, scoreboard roads,
-and optional multiplayer. Deployed as a client-only SPA on GitHub Pages
-(`https://sabiennguyen.github.io/baccarat-sim/`, base `"./"`) plus a small Rust
-multiplayer server on Fly.
+and optional multiplayer. Deployed as a client-only SPA on GitHub Pages under a
+custom domain (`https://baccarat-sim.com/`, base `"./"`) plus a small Rust
+multiplayer server on Fly at `table.baccarat-sim.com`.
 
 Two halves: **where the audience is** (distribution channels) and **the code
 changes that support growth** (engineering roadmap). The engineering items are

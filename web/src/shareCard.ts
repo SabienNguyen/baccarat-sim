@@ -17,7 +17,7 @@ export interface RunShare {
 }
 
 function siteUrl(tier?: string): string {
-  if (typeof location === "undefined") return "https://sabiennguyen.github.io/baccarat-sim/";
+  if (typeof location === "undefined") return "https://baccarat-sim.com/";
   const base = `${location.origin}${location.pathname}`;
   return tier ? `${base}?tier=${tier}` : base;
 }
