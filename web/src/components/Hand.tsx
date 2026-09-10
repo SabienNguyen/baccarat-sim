@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Side, HandView, PhaseTag } from "../engine/types";
 import { Card } from "./Card";
 import { SqueezeCard } from "./SqueezeCard";
@@ -16,6 +17,9 @@ interface HandProps {
   squeezable?: boolean;
   onPeek?: (index: number) => void;
   onReveal?: (index: number) => void;
+  /** Controls that belong beside this hand (e.g. the dealer-flip request
+   *  under the house's cards). Rendered between the cards and the total. */
+  actions?: ReactNode;
 }
 
 export function Hand({
@@ -27,6 +31,7 @@ export function Hand({
   squeezable = true,
   onPeek,
   onReveal,
+  actions,
 }: HandProps) {
   const dealing = phase === "Dealing";
   const shown = hand.cards.slice(0, visibleCount ?? hand.cards.length);
@@ -73,6 +78,7 @@ export function Hand({
           ))
         )}
       </ul>
+      {actions}
       {total !== null && (
         // keyed by the value so the slam-in replays whenever the total changes
         <p className="hand-total-badge" key={total}>

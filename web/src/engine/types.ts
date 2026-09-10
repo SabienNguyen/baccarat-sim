@@ -27,4 +27,5 @@ export type {
   Mark,
   GlossaryEntry,
   Event,
+  FlipRequest,
 } from "engine-wasm";

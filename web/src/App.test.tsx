@@ -311,3 +311,55 @@ test("busting offers a re-buy and a way out", async () => {
   expect(onReset).toHaveBeenCalledTimes(2);
   expect(onLeave).toHaveBeenCalledOnce();
 });
+
+
+// --- the high-limit ask: flip one / flip both of the dealer's cards ---
+
+/** A table snapshot mid-squeeze: I hold Player (seat 0), the house holds Banker. */
+function houseHoldsBanker(banker: RoundSnapshot["banker"]["cards"]): RoundSnapshot {
+  return {
+    ...bettingSnapshot({
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: banker, total: null },
+      bets: [{ kind: { Main: "Player" }, amount: 500 }],
+    }),
+    // squeeze rights ride along on a table snapshot
+    ...({ player_squeezer: 0, banker_squeezer: null } as object),
+  };
+}
+
+test("while I squeeze Player, I can ask the dealer to flip one of his cards", async () => {
+  const initial = houseHoldsBanker(["FaceDown", "FaceDown"]);
+  const afterOne = houseHoldsBanker([{ FaceUp: { rank: "Five", suit: "Clubs" } }, "FaceDown"]);
+  const requestDealerFlip = vi.fn((): CommandResult => okResult(afterOne));
+  const store = createGameStore(fakeSession(initial, { requestDealerFlip }));
+  render(<GameTable store={store} onLeave={() => {}} />);
+
+  const banker = screen.getByLabelText("Banker hand");
+  expect(banker).toContainElement(screen.getByRole("group", { name: "Ask the dealer" }));
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Flip one" }));
+  expect(requestDealerFlip).toHaveBeenCalledWith("One");
+
+  // one house card up: the ask narrows to the other card
+  expect(screen.getByRole("button", { name: "Flip the other" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Flip both" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Five of Clubs")).toBeInTheDocument();
+});
+
+test("once both of the dealer's cards are up, the ask is gone", () => {
+  const bothUp = houseHoldsBanker([
+    { FaceUp: { rank: "Five", suit: "Clubs" } },
+    { FaceUp: { rank: "Two", suit: "Hearts" } },
+  ]);
+  const store = createGameStore(fakeSession(bothUp, { requestDealerFlip: () => okResult(bothUp) }));
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).not.toBeInTheDocument();
+});
+
+test("no ask before the deal, nor at a plain session without a house dealer", () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).not.toBeInTheDocument();
+});
