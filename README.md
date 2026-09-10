@@ -80,7 +80,7 @@ The Big Road sits beside the table like a pit display — pair dots and pixel-ar
 bonus tokens included. **Full roads** opens a Macau-style scoreboard: a
 Chinatown bead plate with 庄 / 闲 / 和 pixel tiles, the Big Road with a six-row
 dragon tail that bends long runs along the bottom row, and the three derived
-roads drawn the way the floor names them — donuts (Big Eye Boy), hamburgers
+roads drawn as food — donuts (Big Eye Boy), hamburgers
 (Small Road), french fries (Cockroach Pig) — beside a tally, a key that
 forecasts each derived road's mark for the next hand, and the table limits. The
 board sizes itself to the viewport with no scrolling, and every road has an
