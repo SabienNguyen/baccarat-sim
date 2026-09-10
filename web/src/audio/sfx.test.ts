@@ -1,4 +1,18 @@
-import { playSfx, setVolume, setMuted, startAmbience, stopAmbience, SFX_NAMES } from "./sfx";
+import {
+  playSfx,
+  setVolume,
+  setMuted,
+  startAmbience,
+  stopAmbience,
+  pauseAudio,
+  SFX_NAMES,
+} from "./sfx";
+
+test("an ad-break pause hands back a resume, both safe without audio", () => {
+  let resume: () => void = () => {};
+  expect(() => (resume = pauseAudio())).not.toThrow();
+  expect(() => resume()).not.toThrow();
+});
 
 test("every sound is a silent no-op without an AudioContext", () => {
   // jsdom: typeof AudioContext === "undefined"
