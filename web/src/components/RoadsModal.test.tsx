@@ -108,7 +108,9 @@ test("the next-hand key shows an empty cell where a road has not started", () =>
   expect(row(key, "French fries").querySelectorAll("svg[data-glyph]")).toHaveLength(0);
 });
 
-test("the board carries its welcome strip", () => {
-  render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
-  expect(screen.getByText(/welcome · good luck/i)).toBeInTheDocument();
+test("the board locks page scroll while it is open and releases it on close", () => {
+  const { unmount } = render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
+  expect(document.body.style.overflow).toBe("hidden");
+  unmount();
+  expect(document.body.style.overflow).toBe("");
 });

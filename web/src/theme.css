@@ -30,7 +30,7 @@
   /* roads — the pit display's cream paper, its faint rule lines, tie green */
   --road-paper: #f4efe0;
   --road-grid-line: rgba(21, 17, 15, 0.14);
-  --road-cell: #fff;
+  --road-cell-bg: #fff;
   --road-tie: #1d7a3a;
   /* Chinatown bead plate — red lacquer frame, warm parchment, red rule lines */
   --lacquer: #9e1a20;

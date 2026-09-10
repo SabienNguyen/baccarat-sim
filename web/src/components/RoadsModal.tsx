@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { BigRoad, ScoreboardSnapshot } from "../engine/types";
 import { formatCents } from "../format";
 import { nextMarks } from "../roadForecast";
 import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
 import { FoodMark, HanGlyph, type FoodGlyph } from "./roadGlyphs";
+import { useFitCells } from "./useFitCells";
 
 interface RoadsModalProps {
   scoreboard: ScoreboardSnapshot;
@@ -142,6 +143,19 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // the board fits the viewport, so the page behind it has no reason to scroll
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const boardRef = useRef<HTMLDivElement>(null);
+  const fitRef = useRef<HTMLDivElement>(null);
+  const { cell, scale } = useFitCells(boardRef, fitRef);
+
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
 
   return (
@@ -150,6 +164,7 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
         role="dialog"
         aria-label="All roads"
         className="roads-modal panel"
+        style={{ "--road-cell": `${cell}px` } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="roads-modal-head">
@@ -158,21 +173,26 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
             ✕
           </button>
         </div>
-        <div className="roads-board">
-          <div className="roads-top">
-            <BeadPlateView plate={scoreboard.bead_plate} />
-            <TallyPanel scoreboard={scoreboard} />
-            <NextHandPanel big={scoreboard.big_road} />
-            {hasLimits && <LimitsPanel min={tableMin} max={tableMax} />}
+        <div className="roads-board" ref={boardRef}>
+          <div
+            className="roads-fit"
+            ref={fitRef}
+            style={scale < 1 ? { transform: `scale(${scale})` } : undefined}
+          >
+            <div className="roads-top">
+              <BeadPlateView plate={scoreboard.bead_plate} />
+              <TallyPanel scoreboard={scoreboard} />
+              <NextHandPanel big={scoreboard.big_road} />
+              {hasLimits && <LimitsPanel min={tableMin} max={tableMax} />}
+            </div>
+            <BigRoadView road={scoreboard.big_road} />
+            {/* the three derived roads, each stamped with its own food */}
+            <DerivedRoadView label="Big Eye Boy" glyph="donut" road={scoreboard.big_eye_boy} term="big-eye-boy" />
+            <div className="roads-bottom">
+              <DerivedRoadView label="Small Road" glyph="burger" road={scoreboard.small_road} term="small-road" />
+              <DerivedRoadView label="Cockroach Pig" glyph="fries" road={scoreboard.cockroach_pig} term="cockroach-pig" />
+            </div>
           </div>
-          <BigRoadView road={scoreboard.big_road} />
-          {/* the three derived roads, each stamped with its own food */}
-          <DerivedRoadView label="Big Eye Boy" glyph="donut" road={scoreboard.big_eye_boy} term="big-eye-boy" />
-          <div className="roads-bottom">
-            <DerivedRoadView label="Small Road" glyph="burger" road={scoreboard.small_road} term="small-road" />
-            <DerivedRoadView label="Cockroach Pig" glyph="fries" road={scoreboard.cockroach_pig} term="cockroach-pig" />
-          </div>
-          <div className="roads-footer">Welcome · Good luck</div>
         </div>
       </div>
     </div>
