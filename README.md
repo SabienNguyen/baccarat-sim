@@ -56,8 +56,6 @@ sampling.
 
 ### Ask the dealer
 
-![Mid-squeeze: the Player card bent up off the felt, and under the Banker hand the dealer's offer — Flip one / Flip both](docs/screenshots/dealer-flip.png)
-
 The ask is reveal-order only: it never touches a third card, and it only shows
 while it would be honoured — your hand still down, the house's still face down
 behind it. At a shared table the server validates the request and broadcasts
