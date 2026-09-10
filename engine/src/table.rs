@@ -495,7 +495,9 @@ impl Table {
     /// hand is exposed, or when the house hand comes first in ritual order,
     /// the pacer is at work and there is nothing to hurry along). Third
     /// cards are never part of the ask; they follow the ritual as usual.
-    pub fn request_dealer_flip(&mut self, pid: PlayerId, count: FlipRequest) -> Result<(), TableError> {
+    ///
+    /// Returns the house hand that was turned.
+    pub fn request_dealer_flip(&mut self, pid: PlayerId, count: FlipRequest) -> Result<Side, TableError> {
         let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &self.phase else {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Dealing,
@@ -539,7 +541,7 @@ impl Table {
         for s in down.take(turn) {
             *s = CardStatus::FaceUp;
         }
-        Ok(())
+        Ok(dealer_side)
     }
 
     /// Lift a corner. At a shared table a peek follows the ritual like a
@@ -1709,7 +1711,8 @@ mod dealer_flip_tests {
     #[test]
     fn flip_both_turns_both_dealer_cards_at_once() {
         let (mut t, a) = player_squeezer_dealt(42);
-        t.request_dealer_flip(a, FlipRequest::Both).unwrap();
+        // the table reports which hand it turned, so the dealer can say so
+        assert_eq!(t.request_dealer_flip(a, FlipRequest::Both), Ok(Side::Banker));
         let v = t.view_for(a).unwrap();
         assert!(up(&v, Side::Banker, 0) && up(&v, Side::Banker, 1));
         assert!(!up(&v, Side::Player, 0) && !up(&v, Side::Player, 1));

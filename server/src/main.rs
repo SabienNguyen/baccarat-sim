@@ -437,10 +437,7 @@ async fn handle_command(
             let mut room = room.lock().await;
             // A dealer-flip request is the one command the dealer speaks to:
             // the whole table should hear why a house card turned early.
-            let flip_ask = match &table_cmd {
-                ClientMsg::DealerFlip { count } => Some(*count),
-                _ => None,
-            };
+            let mut flip_line: Option<String> = None;
             // Commands that move the coup along wind the squeeze clock: from
             // here the holder of the next face-down card has SQUEEZE_CLOCK to
             // act before the dealer turns it for them. A peek only counts
@@ -459,7 +456,13 @@ async fn handle_command(
                     room.table.peek(pid, hand, index).map(|lifted| advances_coup = lifted)
                 }
                 ClientMsg::Reveal { hand, index } => room.table.reveal(pid, hand, index),
-                ClientMsg::DealerFlip { count } => room.table.request_dealer_flip(pid, count),
+                ClientMsg::DealerFlip { count } => match room.table.request_dealer_flip(pid, count) {
+                    Ok(house) => {
+                        flip_line = Some(rooms::flip_request_line(&room.table, pid, house, count));
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
                 ClientMsg::Settle => room.table.settle(),
                 ClientMsg::NewShoe => room.table.new_shoe(),
                 _ => unreachable!("non-table commands handled above"),
@@ -467,8 +470,8 @@ async fn handle_command(
             match result {
                 Ok(()) => {
                     room.broadcast();
-                    if let Some(count) = flip_ask {
-                        room.announce(rooms::flip_request_line(&room.table, pid, count));
+                    if let Some(line) = flip_line {
+                        room.announce(line);
                     }
                     drop(room);
                     if let Some(Seat { room, .. }) = seat.as_ref() {

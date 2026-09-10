@@ -513,23 +513,17 @@ async fn pace_loop(room: &Arc<Mutex<Room>>) {
 
 /// The dealer's line when a squeezer asks for a house card early, spoken to
 /// the whole table so everyone knows why that hand turned out of order.
-/// Called after the table accepted the request, so the house hand is the
-/// side no seat holds.
-pub fn flip_request_line(table: &Table, pid: PlayerId, count: FlipRequest) -> String {
-    let (name, house) = match table.view_for(pid) {
-        Ok(view) => (
-            view.seats
-                .iter()
-                .find(|s| s.id == pid)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| "The squeezer".into()),
-            if view.player_squeezer.is_none() { "Player" } else { "Banker" },
-        ),
-        Err(_) => ("The squeezer".into(), "house"),
-    };
+/// `house` is the side `request_dealer_flip` reported turning.
+pub fn flip_request_line(
+    table: &Table,
+    pid: PlayerId,
+    house: baccarat_engine::scoreboard::Side,
+    count: FlipRequest,
+) -> String {
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
     match count {
-        FlipRequest::One => format!("{name} asks for one — the dealer turns a {house} card."),
-        FlipRequest::Both => format!("{name} asks for both — the dealer turns the {house} hand."),
+        FlipRequest::One => format!("{name} asks for one — the dealer turns a {house:?} card."),
+        FlipRequest::Both => format!("{name} asks for both — the dealer turns the {house:?} hand."),
     }
 }
 
@@ -748,6 +742,7 @@ mod reconnect_tests {
 #[cfg(test)]
 mod flip_request_line_tests {
     use super::*;
+    use baccarat_engine::scoreboard::Side;
     use baccarat_engine::session::BetKind;
     use baccarat_engine::settle::BetSpot;
 
@@ -765,13 +760,20 @@ mod flip_request_line_tests {
     #[test]
     fn names_the_asker_and_the_house_hand() {
         let (mut table, pid) = seated_player_squeezer();
-        table.request_dealer_flip(pid, FlipRequest::One).unwrap();
-        let line = flip_request_line(&table, pid, FlipRequest::One);
-        assert!(line.contains("Sabien"), "{line}");
-        assert!(line.contains("Banker"), "{line}");
-        assert!(line.contains("one"), "{line}");
-        let both = flip_request_line(&table, pid, FlipRequest::Both);
-        assert!(both.contains("both"), "{both}");
+        let house = table.request_dealer_flip(pid, FlipRequest::One).unwrap();
+        assert_eq!(house, Side::Banker, "the table says which hand it turned");
+        let line = flip_request_line(&table, pid, house, FlipRequest::One);
+        assert_eq!(line, "Sabien asks for one — the dealer turns a Banker card.");
+        let both = flip_request_line(&table, pid, house, FlipRequest::Both);
+        assert_eq!(both, "Sabien asks for both — the dealer turns the Banker hand.");
+    }
+
+    #[test]
+    fn a_seat_with_no_name_gets_the_same_fallback_as_a_surrender() {
+        let (table, _pid) = seated_player_squeezer();
+        let stranger = PlayerId(999);
+        let line = flip_request_line(&table, stranger, Side::Banker, FlipRequest::One);
+        assert_eq!(line, "A player asks for one — the dealer turns a Banker card.");
     }
 
     #[test]
