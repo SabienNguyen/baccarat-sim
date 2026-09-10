@@ -238,7 +238,7 @@ A version of this, kept short, is what to send:
 > Nevada GCB and New Jersey regulator sources. It's MIT, so you can ship it
 > without talking to me.
 >
-> Playable here: <https://sabiennguyen.github.io/baccarat-sim/>
+> Playable here: <https://baccarat-sim.com/>
 > Source: <https://github.com/SabienNguyen/baccarat-sim>
 >
 > What I sell is the part MIT doesn't cover: rule variants and integration, a

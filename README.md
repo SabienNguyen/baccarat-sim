@@ -4,7 +4,7 @@
 
 **A Vegas-accurate Punto Banco table in the browser — with the part every other baccarat game skips: _the squeeze_.**
 
-[**▶ Play it free**](https://sabiennguyen.github.io/baccarat-sim/) · [How to play](https://sabiennguyen.github.io/baccarat-sim/how-to-play/) · [Odds & house edge](https://sabiennguyen.github.io/baccarat-sim/baccarat-odds/) · [Roads explained](https://sabiennguyen.github.io/baccarat-sim/baccarat-roads/) · [License the engine](https://sabiennguyen.github.io/baccarat-sim/license/)
+[**▶ Play it free**](https://baccarat-sim.com/) · [How to play](https://baccarat-sim.com/how-to-play/) · [Odds & house edge](https://baccarat-sim.com/baccarat-odds/) · [Roads explained](https://baccarat-sim.com/baccarat-roads/) · [License the engine](https://baccarat-sim.com/license/)
 
 [![Build & Deploy](https://github.com/SabienNguyen/baccarat-sim/actions/workflows/deploy.yml/badge.svg)](https://github.com/SabienNguyen/baccarat-sim/actions/workflows/deploy.yml)
 [![Tests](https://img.shields.io/badge/tests-525%20passing-2ea44f)](#tests)
@@ -160,7 +160,8 @@ repository. A `fly.toml` is also included if you prefer Fly.io.
 
 Then tell the site where the tables live: set a repository **variable** named
 `VITE_WS_URL` (Settings → Secrets and variables → Actions → Variables) to
-`wss://<your-host>/ws`. The Pages workflow passes it into the build, so
+`wss://<your-host>/ws` — for the production Fly app that is
+`wss://table.baccarat-sim.com/ws`. The Pages workflow passes it into the build, so
 multiplayer changes hosts without a source change.
 
 Rooms live in memory and one instance owns them, so keep the service pinned to a
@@ -196,4 +197,4 @@ both a browser and a server through the same code path.
 MIT licensed — ship it commercially without asking. Commercial support (rule
 variants, integration, a compliance audit report written for a certification
 reader) is available at
-[**/license/**](https://sabiennguyen.github.io/baccarat-sim/license/).
+[**/license/**](https://baccarat-sim.com/license/).
