@@ -273,7 +273,7 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             phase={snapshot.phase}
             visibleCount={playerVisible}
             winner={snapshot.outcome === "PlayerWin"}
-            squeezable={canSqueeze("Player", seats, squeezers)}
+            squeezable={canSqueeze("Player", squeezers, me)}
             onPeek={(i) => peek("Player", i)}
             onReveal={(i) => reveal("Player", i)}
             actions={flipControls("Player")}
@@ -284,8 +284,13 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             phase={snapshot.phase}
             visibleCount={bankerVisible}
             winner={snapshot.outcome === "BankerWin"}
-            squeezable={canSqueeze("Banker", seats, squeezers)}
-            onPeek={(i) => peek("Banker", i)}
+            squeezable={canSqueeze("Banker", squeezers, me)}
+            onPeek={(i) => {
+              // A shared table holds the peek to the ritual too (the server
+              // refuses it as out of order); hold it silently, like the flip.
+              // Solo keeps its peek-ahead while the dealer turns Player.
+              if (seats === null || !bankerLocked) peek("Banker", i);
+            }}
             onReveal={(i) => {
               if (!bankerLocked) reveal("Banker", i);
             }}

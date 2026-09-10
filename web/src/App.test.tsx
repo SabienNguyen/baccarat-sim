@@ -5,6 +5,7 @@ import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
 import { bettingSnapshot, dealingSnapshot } from "./test/fixtures";
+import { createRemoteStore } from "./multiplayer/remoteStore";
 
 function okResult(snap: RoundSnapshot): CommandResult {
   return { ok: true, snapshot: snap };
@@ -423,4 +424,46 @@ test("no ask before the deal, nor at a plain session without a house dealer", ()
   const store = createGameStore(fakeSession(bettingSnapshot()));
   render(<GameTable store={store} onLeave={() => {}} />);
   expect(screen.queryByRole("group", { name: "Ask the dealer" })).not.toBeInTheDocument();
+});
+
+// --- squeeze rights at a shared table: only the holder gets the gesture ---
+
+/** A shared table mid-squeeze: I'm seat 3 holding Banker; seat 5 holds Player. */
+function sharedTableStore(overrides: { player_squeezer: number | null; banker_squeezer: number | null }) {
+  const send = vi.fn();
+  const view = {
+    ...bettingSnapshot({
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: ["FaceDown", "FaceDown"], total: null },
+      bets: [{ kind: { Main: "Banker" }, amount: 500 }],
+    }),
+    seats: [
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
+    ],
+    ...overrides,
+  } as Parameters<typeof createRemoteStore>[0]["view"];
+  return { store: createRemoteStore({ tier: "mid", view, me: 3, send }), send };
+}
+
+test("at a shared table, another seat's hand is a plain face-down card, not a squeeze", async () => {
+  const { store, send } = sharedTableStore({ player_squeezer: 5, banker_squeezer: 3 });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  const player = screen.getByLabelText("Player hand");
+  const banker = screen.getByLabelText("Banker hand");
+  // my Banker cards are squeezable; seat 5's Player cards are not
+  expect(banker.querySelectorAll('[role="button"]').length).toBe(2);
+  expect(player.querySelectorAll('[role="button"]').length).toBe(0);
+  expect(player.querySelectorAll('[aria-label="face-down card"]').length).toBe(2);
+  // clicking their card sends nothing to the server
+  await userEvent.click(player.querySelectorAll('[aria-label="face-down card"]')[0]);
+  expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "peek", hand: "Player" }));
+});
+
+test("at a shared table, a house-held hand is the dealer's — no gesture for anyone", () => {
+  const { store } = sharedTableStore({ player_squeezer: null, banker_squeezer: 3 });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.getByLabelText("Player hand").querySelectorAll('[role="button"]').length).toBe(0);
+  expect(screen.getByLabelText("Banker hand").querySelectorAll('[role="button"]').length).toBe(2);
 });
