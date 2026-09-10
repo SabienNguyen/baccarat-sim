@@ -453,7 +453,11 @@ pub fn maybe_pace(room: Arc<Mutex<Room>>) {
         let mut guard = room.lock().await;
         guard.pacing = false;
         if result.is_err() {
-            tracing::error!(room = %guard.id, "dealer pacer panicked — pacing reset");
+            tracing::error!(room = %guard.id, "dealer pacer panicked — pacing reset, re-kicking");
+            drop(guard);
+            // Whatever the house still has to turn shouldn't wait for the
+            // next command (or the squeeze clock) to notice.
+            maybe_pace(room);
         }
     });
 }
@@ -494,7 +498,7 @@ pub fn arm_squeeze_clock(room: Arc<Mutex<Room>>) {
             guard.squeeze_gen
         };
         tokio::time::sleep(SQUEEZE_CLOCK).await;
-        let (taken, still_turning) = {
+        let (house_pending, still_turning) = {
             let mut guard = room.lock().await;
             if guard.squeeze_gen != mine {
                 return; // a later command re-armed the clock
@@ -504,11 +508,16 @@ pub fn arm_squeeze_clock(room: Arc<Mutex<Room>>) {
                 guard.broadcast_then_announce(&taken);
                 tracing::info!(room = %guard.id, ?taken, "squeeze clock elapsed — house takes the hand");
             }
-            let still_turning =
-                guard.table.dealer_flip_pending() || guard.table.stalled_squeeze().is_some();
-            (taken, still_turning)
+            let house_pending = guard.table.dealer_flip_pending();
+            let still_turning = house_pending || guard.table.stalled_squeeze().is_some();
+            (house_pending, still_turning)
         };
-        if !taken.is_empty() {
+        // Kick the pacer whenever the house has a card to turn — not only
+        // when the clock just took one. If the pacer died (see maybe_pace),
+        // nobody is stalling, `taken` is empty, and without this the clock
+        // would re-arm forever over face-down house cards. Idempotent when a
+        // pacer is already running.
+        if house_pending {
             maybe_pace(room.clone());
         }
         if still_turning {
@@ -1104,6 +1113,35 @@ mod squeeze_gap_tests {
         let g = room.lock().await;
         assert_eq!(g.table.view_for(a).unwrap().player_squeezer, None);
         assert!(g.pacing);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_clock_rekicks_a_dead_pacer_even_when_nobody_stalled() {
+        // alice holds Player and has turned it; Banker is the house's, so a
+        // card is pending for the dealer — but no pacer is running (it died,
+        // or was never kicked). Nobody is stalling, so the clock takes
+        // nothing; it must still start the pacer, or the house cards sit
+        // face-down forever while the clock re-arms itself in a loop.
+        let mut room = Room::new("TEST06".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let a = room.table.join("alice", buy_in).unwrap();
+        let (ta, _ra) = mpsc::channel(OUT_QUEUE);
+        room.seat(a, ta);
+        room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.deal().unwrap();
+        room.table.reveal(a, Side::Player, 0).unwrap();
+        room.table.reveal(a, Side::Player, 1).unwrap();
+        assert!(room.table.dealer_flip_pending(), "the Banker hand waits on the dealer");
+        assert!(room.table.stalled_squeeze().is_none(), "nobody is stalling");
+        assert!(!room.pacing, "no pacer is running");
+        let room = Arc::new(Mutex::new(room));
+        arm_squeeze_clock(room.clone());
+        tokio::task::yield_now().await;
+        tokio::time::advance(SQUEEZE_CLOCK + Duration::from_millis(1)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        assert!(room.lock().await.pacing, "the clock must (re)start the dealer's pacer");
     }
 
     // --- fix 2: the sweep tells the table and re-paces ---
