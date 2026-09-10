@@ -7,6 +7,47 @@ import type { RoundSnapshot } from "./engine/types";
 import { bettingSnapshot, dealingSnapshot } from "./test/fixtures";
 import { createRemoteStore } from "./multiplayer/remoteStore";
 
+// A recording portal in place of the real (null) one, to check the table's
+// gameplay signals and ad break are wired. Everything else is the real module.
+const portalSpy = vi.hoisted(() => ({
+  gameplayStart: vi.fn(),
+  gameplayStop: vi.fn(),
+  happyTime: vi.fn(),
+  requestMidgameAd: vi.fn(async () => {}),
+}));
+vi.mock("./portal", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./portal")>();
+  return {
+    ...real,
+    getPortal: () => ({
+      ...real.nullAdapter,
+      name: "fake",
+      ...portalSpy,
+    }),
+  };
+});
+
+test("the table sends the portal its gameplay signals and an ad break on a fresh shoe", async () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<App store={store} />);
+  expect(portalSpy.gameplayStart).not.toHaveBeenCalled();
+  act(() => store.setState({ snapshot: dealingSnapshot() })); // the first deal
+  expect(portalSpy.gameplayStart).toHaveBeenCalledOnce();
+  act(() => store.setState({ busted: true }));
+  expect(portalSpy.gameplayStop).toHaveBeenCalledOnce();
+  act(() => store.setState({ busted: false })); // re-bought: play resumes
+  expect(portalSpy.gameplayStart).toHaveBeenCalledTimes(2);
+  act(() => store.setState({ goalReached: true }));
+  expect(portalSpy.happyTime).toHaveBeenCalledOnce();
+  expect(portalSpy.gameplayStop).toHaveBeenCalledTimes(2);
+  act(() => store.setState({ goalReached: false, snapshot: bettingSnapshot() }));
+
+  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
+  fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
+  await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
+  expect(portalSpy.requestMidgameAd).toHaveBeenCalledOnce();
+});
+
 function okResult(snap: RoundSnapshot): CommandResult {
   return { ok: true, snapshot: snap };
 }

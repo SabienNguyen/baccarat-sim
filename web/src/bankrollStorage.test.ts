@@ -1,5 +1,47 @@
 import { loadBankroll, saveBankroll, clearBankroll } from "./bankrollStorage";
 
+// Storage that throws on every touch: blocked or partitioned inside a
+// cross-origin iframe (game portals), or private mode on some browsers.
+function throwingStorage(): Storage {
+  const boom = (): never => {
+    throw new DOMException("The operation is insecure.", "SecurityError");
+  };
+  return {
+    getItem: boom,
+    setItem: boom,
+    removeItem: boom,
+    clear: boom,
+    key: boom,
+    get length(): number {
+      return boom();
+    },
+  } as unknown as Storage;
+}
+
+test("load/save/clear survive a Storage whose methods throw", () => {
+  const s = throwingStorage();
+  expect(() => saveBankroll("mid", 5000, s)).not.toThrow();
+  expect(loadBankroll("mid", s)).toBeNull();
+  expect(() => clearBankroll("mid", s)).not.toThrow();
+});
+
+test("load/save/clear survive a window.localStorage getter that throws", () => {
+  const desc = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    get: () => {
+      throw new DOMException("Access is denied for this document.", "SecurityError");
+    },
+  });
+  try {
+    expect(() => saveBankroll("mid", 5000)).not.toThrow();
+    expect(loadBankroll("mid")).toBeNull();
+    expect(() => clearBankroll("mid")).not.toThrow();
+  } finally {
+    if (desc) Object.defineProperty(window, "localStorage", desc);
+  }
+});
+
 function fakeStorage(): Storage {
   const map = new Map<string, string>();
   return {

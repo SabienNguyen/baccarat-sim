@@ -78,6 +78,21 @@ export function setMuted(muted: boolean): void {
   applyLevel();
 }
 
+/**
+ * Silence the table without touching the player's settings (an ad break on a
+ * game portal). Returns the function that brings the sound back to where the
+ * volume/mute settings say it should be.
+ */
+export function pauseAudio(): () => void {
+  if (!ctx || !master) return () => {};
+  try {
+    master.gain.setTargetAtTime(0, ctx.currentTime, 0.01);
+  } catch {
+    /* no context to quiet */
+  }
+  return applyLevel;
+}
+
 /** One chiptune note: instant attack, exponential decay. */
 function tone(
   at: number,
