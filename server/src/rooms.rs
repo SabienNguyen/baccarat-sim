@@ -160,6 +160,26 @@ impl Room {
         since
     }
 
+    /// Squeezers of the current coup whose socket is already gone, with the
+    /// instant of their drop — each listed once. A drop during Betting arms
+    /// a grace that finds nothing to surrender; the deal that follows must
+    /// arm a fresh one for these, or the table waits the full SQUEEZE_CLOCK
+    /// on a dead socket.
+    pub fn held_squeezers(&self) -> Vec<(PlayerId, std::time::Instant)> {
+        use baccarat_engine::scoreboard::Side;
+        let mut out: Vec<(PlayerId, std::time::Instant)> = Vec::new();
+        for side in [Side::Player, Side::Banker] {
+            let Some(pid) = self.table.squeezer(side) else { continue };
+            if out.iter().any(|(p, _)| *p == pid) {
+                continue;
+            }
+            if let Some(since) = self.held.get(&pid) {
+                out.push((pid, *since));
+            }
+        }
+        out
+    }
+
     /// The squeeze grace ran out. If the seat is still held from THAT drop
     /// (not back, not re-dropped later), the house takes its squeeze(s) for
     /// this coup. Idempotent: a second call finds nothing left to surrender.
@@ -879,6 +899,35 @@ mod squeeze_gap_tests {
         room.broadcast_then_announce(&taken);
         let said = announcements(&drain(&mut rb));
         assert_eq!(said, vec!["alice stepped away — the dealer turns the Player hand.".to_string()]);
+    }
+
+    #[test]
+    fn a_deal_knows_which_squeezers_are_already_gone() {
+        let mut room = Room::new("TEST04".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let a = room.table.join("alice", buy_in).unwrap();
+        let b = room.table.join("bob", buy_in).unwrap();
+        let (ta, _ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, _rb) = mpsc::channel(OUT_QUEUE);
+        room.seat(a, ta);
+        room.seat(b, tb);
+        room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+        assert!(room.held_squeezers().is_empty(), "no coup out yet");
+        let since = room.hold_seat(a);
+        assert!(room.held_squeezers().is_empty(), "still no coup out");
+        room.table.deal().unwrap();
+        assert_eq!(room.held_squeezers(), vec![(a, since)], "alice squeezes Player from a dead socket");
+        // a holder of both hands is listed once
+        let mut solo = Room::new("TEST05".into(), Tier::Mid, false);
+        let c = solo.table.join("carol", buy_in).unwrap();
+        let (tc, _rc) = mpsc::channel(OUT_QUEUE);
+        solo.seat(c, tc);
+        solo.table.place_bet(c, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        solo.table.place_bet(c, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+        let since = solo.hold_seat(c);
+        solo.table.deal().unwrap();
+        assert_eq!(solo.held_squeezers(), vec![(c, since)]);
     }
 
     #[test]

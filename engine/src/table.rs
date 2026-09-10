@@ -562,6 +562,18 @@ impl Table {
         self.set_status(hand, index, CardStatus::Peeked)
     }
 
+    /// Who squeezes this hand in the current coup: `None` for the house, or
+    /// when no coup is out.
+    pub fn squeezer(&self, side: Side) -> Option<PlayerId> {
+        let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &self.phase else {
+            return None;
+        };
+        match side {
+            Side::Player => *player_squeezer,
+            Side::Banker => *banker_squeezer,
+        }
+    }
+
     /// The seat's display name, for the dealer to speak.
     pub fn name_of(&self, pid: PlayerId) -> Option<&str> {
         self.players.iter().find(|p| p.id == pid).map(|p| p.name.as_str())
