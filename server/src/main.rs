@@ -13,7 +13,9 @@ use axum::routing::get;
 use axum::{Json, Router};
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
-use rooms::{error_message, maybe_pace, Registry, Room, OUT_QUEUE};
+use rooms::{
+    arm_squeeze_clock, arm_squeeze_grace, error_message, maybe_pace, Registry, Room, OUT_QUEUE,
+};
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -41,6 +43,11 @@ const MAX_JOIN_FAILURES: u32 = 10;
 /// messages are well under this; a small headroom over the app-level check
 /// keeps JSON overhead from tripping legitimate traffic.
 const MAX_WS_MESSAGE: usize = 8 * 1024;
+
+/// How often the reaper runs the room sweep on its own. Held seats used to
+/// expire only when some connection event happened to trigger a sweep, so a
+/// quiet table could sit on a dead seat well past HOLD.
+const REAP_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
 
 static CONNS: AtomicUsize = AtomicUsize::new(0);
 
@@ -76,6 +83,21 @@ const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; \
 async fn main() {
     tracing_subscriber::fmt::init();
     let registry = Registry::new();
+
+    // The reaper: expire held seats and drop dead rooms on a clock, not only
+    // when a socket happens to open or close. `sweep` releases the registry
+    // lock before touching any room, so this never stalls joins.
+    tokio::spawn({
+        let registry = registry.clone();
+        async move {
+            let mut every = tokio::time::interval(REAP_EVERY);
+            every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                every.tick().await;
+                registry.sweep().await;
+            }
+        }
+    });
 
     let spa_dir = std::env::var("SPA_DIR").unwrap_or_else(|_| "web/dist".into());
     let spa = ServeDir::new(&spa_dir)
@@ -250,16 +272,21 @@ async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
 
     // Connection gone: stand up and tell the table.
     if let Some(Seat { room, pid }) = seat.take() {
-        {
+        let since = {
             let mut guard = room.lock().await;
             // Hold the seat rather than stand the player up: a dropped socket
             // used to forfeit their whole bankroll, and let a busted player
             // rejoin for a free full rebuy. The sweep evicts the seat once HOLD
             // elapses, so an abandoned chair still frees itself.
-            guard.hold_seat(pid);
+            let since = guard.hold_seat(pid);
             guard.broadcast();
             tracing::info!(room = %guard.id, "seat held for reconnect");
-        }
+            since
+        };
+        // The seat waits the full HOLD, but the table can't wait that long on
+        // face-down cards: if they aren't back within the grace, the house
+        // dealer turns their hand for this coup.
+        arm_squeeze_grace(room.clone(), pid, since);
         maybe_pace(room);
         registry.sweep().await;
     }
@@ -414,6 +441,16 @@ async fn handle_command(
                 ClientMsg::DealerFlip { count } => Some(*count),
                 _ => None,
             };
+            // Commands that move the coup along wind the squeeze clock: from
+            // here the holder of the next face-down card has SQUEEZE_CLOCK to
+            // act before the dealer turns it for them.
+            let advances_coup = matches!(
+                table_cmd,
+                ClientMsg::Deal
+                    | ClientMsg::Peek { .. }
+                    | ClientMsg::Reveal { .. }
+                    | ClientMsg::DealerFlip { .. }
+            );
             let result = match table_cmd {
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
@@ -435,6 +472,9 @@ async fn handle_command(
                     drop(room);
                     if let Some(Seat { room, .. }) = seat.as_ref() {
                         maybe_pace(room.clone());
+                        if advances_coup {
+                            arm_squeeze_clock(room.clone());
+                        }
                     }
                 }
                 Err(e) => {

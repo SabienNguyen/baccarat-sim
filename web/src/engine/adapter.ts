@@ -116,7 +116,12 @@ function tableErrorToSpeech(error: TableError): SessionError {
     return { Message: "You're not seated at this table." };
   }
   if (typeof error === "object" && error !== null && "NotYourSqueeze" in error) {
-    return { Message: `The ${error.NotYourSqueeze.side} hand's cards are in the dealer's hands.` };
+    const { side, house } = error.NotYourSqueeze;
+    return {
+      Message: house
+        ? `The dealer holds the ${side} hand.`
+        : `The ${side} hand's cards are in another player's hands.`,
+    };
   }
   if (error === "NothingToTurn") {
     return { Message: "Nothing for the dealer to turn just now." };
