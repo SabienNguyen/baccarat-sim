@@ -38,8 +38,9 @@ pub enum TableError {
     NoSuchPlayer,
     /// Deal is gated until every seat has bet or sat out.
     WaitingOnPlayers,
-    /// Those cards are in another player's hands.
-    NotYourSqueeze { side: Side },
+    /// Those cards are in someone else's hands: another seat's, or — when
+    /// `house` — the dealer's (a hand nobody bet, turned by the pacer).
+    NotYourSqueeze { side: Side, house: bool },
     /// The ritual exposes cards in order: Player hand, Banker hand, thirds.
     OutOfOrder,
     /// A dealer-flip request with nothing behind it: the asker holds no
@@ -500,7 +501,7 @@ impl Table {
             Side::Banker => *banker_squeezer,
         };
         if holder.is_some() {
-            return Err(TableError::NotYourSqueeze { side: dealer_side });
+            return Err(TableError::NotYourSqueeze { side: dealer_side, house: false });
         }
         if self.next_dealer_card().is_some() {
             return Err(TableError::NothingToTurn); // the dealer is already turning
@@ -528,9 +529,76 @@ impl Table {
         Ok(())
     }
 
+    /// Lift a corner. At a shared table a peek follows the ritual like a
+    /// reveal does — the Banker squeezer waits for the Player hand to be up
+    /// before touching their cards. A solo table keeps its peek-ahead: the
+    /// lone player may fiddle their Banker card while the dealer turns the
+    /// Player hand (the solo client relies on this — "peeking is fine, no
+    /// dealer scolding"), and only the flip itself is held to order.
     pub fn peek(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
         self.check_rights(pid, hand)?;
+        if self.config.max_seats > 1 {
+            self.check_order(hand, index)?;
+        }
         self.set_status(hand, index, CardStatus::Peeked)
+    }
+
+    /// The seat's display name, for the dealer to speak.
+    pub fn name_of(&self, pid: PlayerId) -> Option<&str> {
+        self.players.iter().find(|p| p.id == pid).map(|p| p.name.as_str())
+    }
+
+    /// The house takes over this seat's squeeze(s) for the current coup —
+    /// the holder dropped or stalled. Seat, bets and bankroll are untouched;
+    /// only the right to turn the cards moves to the dealer, whose pacer
+    /// then turns them. Returns the sides surrendered (empty when the seat
+    /// held nothing, or no coup is out), so it is safe to call twice.
+    pub fn surrender_squeeze(&mut self, pid: PlayerId) -> Vec<Side> {
+        let mut gone = Vec::new();
+        if let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &mut self.phase {
+            if *player_squeezer == Some(pid) {
+                *player_squeezer = None;
+                gone.push(Side::Player);
+            }
+            if *banker_squeezer == Some(pid) {
+                *banker_squeezer = None;
+                gone.push(Side::Banker);
+            }
+        }
+        gone
+    }
+
+    /// Who the table is waiting on: the human holder of the next face-down
+    /// card in ritual order. Empty when the coup is over, or when that card
+    /// is the house's (the pacer is at work, nobody is stalling). At most
+    /// one entry today; a Vec so a caller can treat it uniformly.
+    pub fn stalled_squeezes(&self) -> Vec<(PlayerId, Side)> {
+        let Phase::Dealing { reveal, player_squeezer, banker_squeezer, .. } = &self.phase else {
+            return Vec::new();
+        };
+        let sequence: [(Side, usize); 6] = [
+            (Side::Player, 0),
+            (Side::Player, 1),
+            (Side::Banker, 0),
+            (Side::Banker, 1),
+            (Side::Player, 2),
+            (Side::Banker, 2),
+        ];
+        for (h, i) in sequence {
+            let statuses = match h {
+                Side::Player => &reveal.player,
+                Side::Banker => &reveal.banker,
+            };
+            if i >= statuses.len() || statuses[i] == CardStatus::FaceUp {
+                continue;
+            }
+            let owner = match h {
+                Side::Player => *player_squeezer,
+                Side::Banker => *banker_squeezer,
+            };
+            return owner.map(|pid| (pid, h)).into_iter().collect();
+        }
+        Vec::new()
     }
 
     pub fn reveal(&mut self, pid: PlayerId, hand: Side, index: usize) -> Result<(), TableError> {
@@ -552,10 +620,10 @@ impl Table {
             };
             match holder {
                 Some(holder) if *holder != pid => {
-                    return Err(TableError::NotYourSqueeze { side: hand });
+                    return Err(TableError::NotYourSqueeze { side: hand, house: false });
                 }
                 None if self.config.max_seats > 1 => {
-                    return Err(TableError::NotYourSqueeze { side: hand });
+                    return Err(TableError::NotYourSqueeze { side: hand, house: true });
                 }
                 _ => {}
             }
@@ -1181,8 +1249,10 @@ mod tests {
         // b cannot touch the Player hand, a cannot touch the Banker hand
         assert!(matches!(t.peek(b, Side::Player, 0), Err(TableError::NotYourSqueeze { .. })));
         assert!(matches!(t.peek(a, Side::Banker, 0), Err(TableError::NotYourSqueeze { .. })));
-        // each may peek their own
+        // each may peek their own, when the ritual reaches their hand
         t.peek(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 1).unwrap();
         t.peek(b, Side::Banker, 0).unwrap();
     }
 
@@ -1212,8 +1282,8 @@ mod tests {
         t.reveal(a, Side::Player, 1).unwrap();
         t.reveal(b, Side::Banker, 0).unwrap();
         t.reveal(b, Side::Banker, 1).unwrap();
-        // but peeking ahead is allowed — squeezers fiddle their cards early
-        // (only rights gate peeks, not order)
+        // (peeking ahead is held to the same order at a shared table — see
+        // squeeze_gap_tests; only a solo table keeps the peek-ahead)
     }
 
     #[test]
@@ -1690,11 +1760,11 @@ mod dealer_flip_tests {
         t.deal().unwrap();
         assert_eq!(
             t.request_dealer_flip(a, FlipRequest::One),
-            Err(TableError::NotYourSqueeze { side: Side::Banker })
+            Err(TableError::NotYourSqueeze { side: Side::Banker, house: false })
         );
         assert_eq!(
             t.request_dealer_flip(b, FlipRequest::One),
-            Err(TableError::NotYourSqueeze { side: Side::Player })
+            Err(TableError::NotYourSqueeze { side: Side::Player, house: false })
         );
     }
 
@@ -1792,5 +1862,167 @@ mod dealer_flip_tests {
         assert_eq!(va.outcome, vp.outcome);
         assert_eq!(va.bankroll, vp.bankroll);
         assert_eq!(va.payouts, vp.payouts);
+    }
+}
+
+#[cfg(test)]
+mod squeeze_gap_tests {
+    //! Multiplayer squeeze gaps: a holder who drops or stalls hands their
+    //! squeeze to the house, peeks follow the ritual at a shared table, and a
+    //! refusal says whether the dealer or another seat holds the hand.
+    use super::*;
+    use crate::settle::BetSpot;
+
+    fn shared() -> Table {
+        Table::new(
+            TableConfig { table_min: 100, table_max: 1_000_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            11,
+        )
+    }
+
+    fn solo() -> Table {
+        Table::new(
+            TableConfig { table_min: 100, table_max: 1_000_000, ruleset: Ruleset::Commission, max_seats: 1 },
+            11,
+        )
+    }
+
+    /// a squeezes Player, b squeezes Banker.
+    fn two_squeezers() -> (Table, PlayerId, PlayerId) {
+        let mut t = shared();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.deal().unwrap();
+        (t, a, b)
+    }
+
+    // --- surrender_squeeze: the house takes over without touching the seat ---
+
+    #[test]
+    fn surrendering_hands_the_squeeze_to_the_house_and_keeps_the_seat_and_bets() {
+        let (mut t, a, b) = two_squeezers();
+        let before = t.view_for(a).unwrap();
+        assert_eq!(t.surrender_squeeze(a), vec![Side::Player]);
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.player_squeezer, None, "the house holds Player now");
+        assert_eq!(v.banker_squeezer, Some(b), "b's squeeze is untouched");
+        assert_eq!(v.bets, before.bets, "bets ride");
+        assert_eq!(v.bankroll, before.bankroll);
+        assert_eq!(t.seats(), 2, "still seated");
+        // the dealer now turns the Player hand
+        assert_eq!(t.dealer_next_side(), Some(Side::Player));
+        assert!(t.dealer_flip_one());
+    }
+
+    #[test]
+    fn surrendering_is_idempotent_and_a_no_op_for_non_holders() {
+        let (mut t, a, b) = two_squeezers();
+        assert_eq!(t.surrender_squeeze(a), vec![Side::Player]);
+        assert_eq!(t.surrender_squeeze(a), Vec::<Side>::new());
+        let c = t.join("c", 100_000).unwrap();
+        assert_eq!(t.surrender_squeeze(c), Vec::<Side>::new());
+        assert_eq!(t.view_for(b).unwrap().banker_squeezer, Some(b));
+        // outside a deal there's nothing to surrender
+        let mut fresh = shared();
+        let p = fresh.join("p", 100_000).unwrap();
+        assert_eq!(fresh.surrender_squeeze(p), Vec::<Side>::new());
+    }
+
+    #[test]
+    fn surrendering_both_hands_reports_both() {
+        let mut t = shared();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.deal().unwrap();
+        assert_eq!(t.surrender_squeeze(a), vec![Side::Player, Side::Banker]);
+    }
+
+    // --- stalled_squeezes: which human holder is the table waiting on ---
+
+    #[test]
+    fn the_table_waits_on_the_holder_of_the_next_card_in_ritual_order() {
+        let (mut t, a, b) = two_squeezers();
+        assert_eq!(t.stalled_squeezes(), vec![(a, Side::Player)]);
+        t.reveal(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 1).unwrap();
+        assert_eq!(t.stalled_squeezes(), vec![(b, Side::Banker)]);
+        t.reveal(b, Side::Banker, 0).unwrap();
+        t.reveal(b, Side::Banker, 1).unwrap();
+        // thirds (if any) follow the same rule; a finished coup waits on nobody
+        for (pid, side) in t.stalled_squeezes() {
+            t.reveal(pid, side, 2).unwrap();
+        }
+        assert!(t.stalled_squeezes().is_empty());
+    }
+
+    #[test]
+    fn the_house_turning_its_own_hand_stalls_nobody() {
+        let mut t = shared();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.deal().unwrap();
+        // Player hand is the house's and comes first: the pacer is at work
+        assert!(t.stalled_squeezes().is_empty());
+        while t.dealer_flip_one() {}
+        assert_eq!(t.stalled_squeezes(), vec![(b, Side::Banker)]);
+    }
+
+    #[test]
+    fn names_are_available_for_the_dealer_to_speak() {
+        let (t, a, _) = two_squeezers();
+        assert_eq!(t.name_of(a), Some("a"));
+        assert_eq!(t.name_of(PlayerId(99)), None);
+    }
+
+    // --- peek follows the ritual at a shared table ---
+
+    #[test]
+    fn at_a_shared_table_a_peek_ahead_of_the_ritual_is_refused() {
+        let (mut t, a, b) = two_squeezers();
+        assert_eq!(t.peek(b, Side::Banker, 0), Err(TableError::OutOfOrder));
+        t.peek(a, Side::Player, 0).unwrap();
+        t.reveal(a, Side::Player, 0).unwrap();
+        assert_eq!(t.peek(b, Side::Banker, 0), Err(TableError::OutOfOrder));
+        t.reveal(a, Side::Player, 1).unwrap();
+        t.peek(b, Side::Banker, 0).unwrap();
+        t.peek(b, Side::Banker, 1).unwrap();
+    }
+
+    #[test]
+    fn solo_keeps_its_peek_ahead() {
+        // The solo client lets you fiddle your Banker card while the dealer
+        // turns the Player hand ("peeking is fine, no dealer scolding").
+        let mut t = solo();
+        let p = t.join("me", 100_000).unwrap();
+        t.place_bet(p, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.deal().unwrap();
+        t.peek(p, Side::Banker, 0).unwrap();
+        assert_eq!(t.reveal(p, Side::Banker, 0), Err(TableError::OutOfOrder));
+    }
+
+    // --- the refusal says who holds the hand ---
+
+    #[test]
+    fn a_refusal_distinguishes_the_dealer_from_another_seat() {
+        let (mut t, a, b) = two_squeezers();
+        assert_eq!(
+            t.peek(a, Side::Banker, 0),
+            Err(TableError::NotYourSqueeze { side: Side::Banker, house: false })
+        );
+        assert_eq!(
+            t.peek(b, Side::Player, 0),
+            Err(TableError::NotYourSqueeze { side: Side::Player, house: false })
+        );
+        let mut t = shared();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        assert_eq!(
+            t.reveal(a, Side::Banker, 0),
+            Err(TableError::NotYourSqueeze { side: Side::Banker, house: true })
+        );
     }
 }
