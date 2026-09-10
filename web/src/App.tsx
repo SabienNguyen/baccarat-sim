@@ -30,11 +30,13 @@ import { playSfx } from "./audio/sfx";
 /** Beat after the final card flips before the round resolves itself. */
 const AUTO_SETTLE_MS = 600;
 /** How long the settled cards + win/loss popup linger before the next hand.
- *  Long enough to read both hands and the result — they stay on the felt now. */
-const AUTO_ADVANCE_MS = 4600;
+ *  Three seconds: enough to read both hands and the result without the table
+ *  feeling like it's waiting on you. The win popup's float (2400 ms) finishes
+ *  before the sweep starts. */
+export const AUTO_ADVANCE_MS = 3000;
 /** The dealer's sweep: the cards muck away over this window at the end of the
  *  linger, so the felt clears with a gesture instead of the cards blinking out. */
-const SWEEP_MS = 400;
+export const SWEEP_MS = 400;
 
 interface AppProps {
   store?: StoreApi<GameState>;
