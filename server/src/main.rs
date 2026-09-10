@@ -437,28 +437,33 @@ async fn handle_command(
             let mut room = room.lock().await;
             // A dealer-flip request is the one command the dealer speaks to:
             // the whole table should hear why a house card turned early.
-            let flip_ask = match &table_cmd {
-                ClientMsg::DealerFlip { count } => Some(*count),
-                _ => None,
-            };
+            let mut flip_line: Option<String> = None;
             // Commands that move the coup along wind the squeeze clock: from
             // here the holder of the next face-down card has SQUEEZE_CLOCK to
-            // act before the dealer turns it for them.
-            let advances_coup = matches!(
+            // act before the dealer turns it for them. A peek only counts
+            // when it actually lifts a card — re-sending the same peek must
+            // not buy the holder another SQUEEZE_CLOCK, over and over.
+            let mut advances_coup = matches!(
                 table_cmd,
-                ClientMsg::Deal
-                    | ClientMsg::Peek { .. }
-                    | ClientMsg::Reveal { .. }
-                    | ClientMsg::DealerFlip { .. }
+                ClientMsg::Deal | ClientMsg::Reveal { .. } | ClientMsg::DealerFlip { .. }
             );
+            let dealt = matches!(table_cmd, ClientMsg::Deal);
             let result = match table_cmd {
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
                 ClientMsg::ClearBets => room.table.clear_bets(pid),
                 ClientMsg::Deal => room.table.deal(),
-                ClientMsg::Peek { hand, index } => room.table.peek(pid, hand, index),
+                ClientMsg::Peek { hand, index } => {
+                    room.table.peek(pid, hand, index).map(|lifted| advances_coup = lifted)
+                }
                 ClientMsg::Reveal { hand, index } => room.table.reveal(pid, hand, index),
-                ClientMsg::DealerFlip { count } => room.table.request_dealer_flip(pid, count),
+                ClientMsg::DealerFlip { count } => match room.table.request_dealer_flip(pid, count) {
+                    Ok(house) => {
+                        flip_line = Some(rooms::flip_request_line(&room.table, pid, house, count));
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
                 ClientMsg::Settle => room.table.settle(),
                 ClientMsg::NewShoe => room.table.new_shoe(),
                 _ => unreachable!("non-table commands handled above"),
@@ -466,12 +471,20 @@ async fn handle_command(
             match result {
                 Ok(()) => {
                     room.broadcast();
-                    if let Some(count) = flip_ask {
-                        room.announce(rooms::flip_request_line(&room.table, pid, count));
+                    if let Some(line) = flip_line {
+                        room.announce(line);
                     }
+                    // A squeezer whose socket dropped BEFORE this deal got a
+                    // grace that found nothing to surrender (see
+                    // held_squeezers): give the dead seat the short grace
+                    // now, not the long clock.
+                    let gone_squeezers = if dealt { room.held_squeezers() } else { Vec::new() };
                     drop(room);
                     if let Some(Seat { room, .. }) = seat.as_ref() {
                         maybe_pace(room.clone());
+                        for (pid, since) in gone_squeezers {
+                            arm_squeeze_grace(room.clone(), pid, since);
+                        }
                         if advances_coup {
                             arm_squeeze_clock(room.clone());
                         }
@@ -565,6 +578,133 @@ fn is_format_char(c: char) -> bool {
         | '\u{FFF9}'..='\u{FFFB}' // interlinear annotation
         | '\u{E0000}'..='\u{E007F}' // Tags block — invisible "ASCII smuggling" payloads
     )
+}
+
+#[cfg(test)]
+mod squeeze_clock_tests {
+    //! The squeeze clock is wound by commands that actually move the coup
+    //! along — not by a peek that changes nothing.
+    use super::*;
+    use baccarat_engine::scoreboard::Side;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::settle::BetSpot;
+    use baccarat_engine::table::PlayerId;
+    use protocol::Tier;
+
+    /// a squeezes Player, b squeezes Banker; both connected, cards out.
+    /// Returns everything a handle_command call for `a` needs.
+    async fn dealt(
+        registry: &Registry,
+    ) -> (Arc<Mutex<Room>>, PlayerId, PlayerId, mpsc::Sender<ServerMsg>, mpsc::Receiver<ServerMsg>) {
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, _rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb);
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            g.table.deal().unwrap();
+            (a, b)
+        };
+        std::mem::forget(_rb); // keep bob's queue open without draining it
+        (room, a, b, ta, ra)
+    }
+
+    async fn settle_tasks() {
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_squeezer_who_dropped_before_the_deal_gets_the_short_grace_not_the_long_clock() {
+        // alice drops during Betting; bob deals 30 s later. The disconnect
+        // grace armed at the drop was a no-op (nothing to surrender in
+        // Betting), so the deal itself must arm one — otherwise the table
+        // waits the full SQUEEZE_CLOCK on a dead socket.
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, _ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta);
+            g.seat(b, tb.clone());
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            let since = g.hold_seat(a);
+            arm_squeeze_grace(room.clone(), a, since); // what handle_socket does at the drop
+            (a, b)
+        };
+        settle_tasks().await; // the drop-time grace registers its sleep NOW, at the drop
+        tokio::time::advance(rooms::SQUEEZE_GRACE * 4).await; // ...and fires on Betting: no-op
+        settle_tasks().await;
+
+        let mut seat = Some(Seat { room: room.clone(), pid: b });
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Deal, &registry, &tb, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.table.view_for(b).unwrap().player_squeezer, Some(a));
+        while rb.try_recv().is_ok() {}
+
+        tokio::time::advance(rooms::SQUEEZE_GRACE + std::time::Duration::from_millis(1)).await;
+        settle_tasks().await;
+        let g = room.lock().await;
+        assert_eq!(g.table.view_for(b).unwrap().player_squeezer, None, "the house took alice's hand after the GRACE");
+        assert!(g.pacing, "and the dealer is turning it");
+        drop(g);
+        let mut msgs = Vec::new();
+        while let Ok(m) = rb.try_recv() {
+            msgs.push(m);
+        }
+        let state = msgs
+            .iter()
+            .position(|m| matches!(m, ServerMsg::State { view } if view.player_squeezer.is_none()))
+            .expect("bob sees the house holding Player");
+        let line = msgs
+            .iter()
+            .position(|m| matches!(m, ServerMsg::Announce { message } if message.contains("stepped away")))
+            .expect("bob hears why");
+        assert!(state < line, "{msgs:?}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_repeated_peek_does_not_rewind_the_squeeze_clock() {
+        let registry = Registry::new();
+        let (room, a, _b, ta, _ra) = dealt(&registry).await;
+        let mut seat = Some(Seat { room: room.clone(), pid: a });
+        let mut strikes = 0;
+        let gen0 = room.lock().await.squeeze_generation();
+
+        // a genuine first peek winds the clock
+        let peek = || ClientMsg::Peek { hand: Side::Player, index: 0 };
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        let gen1 = room.lock().await.squeeze_generation();
+        assert_eq!(gen1, gen0 + 1, "a first peek is activity");
+
+        // the same peek again changes nothing at the table: no rewind
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1, "a no-op peek is not activity");
+        assert!(handle_command(peek(), &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1);
+
+        // peeking the OTHER card is a real lift again
+        let other = ClientMsg::Peek { hand: Side::Player, index: 1 };
+        assert!(handle_command(other, &registry, &ta, &mut seat, &mut strikes).await);
+        settle_tasks().await;
+        assert_eq!(room.lock().await.squeeze_generation(), gen1 + 1);
+    }
 }
 
 #[cfg(test)]
