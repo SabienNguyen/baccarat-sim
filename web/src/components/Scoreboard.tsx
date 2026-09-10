@@ -1,21 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import "./scoreboard.css";
 import type { ScoreboardSnapshot } from "../engine/types";
+import { boardTally } from "../roadTally";
 import { BigRoadView } from "./roads";
 import { RoadsModal } from "./RoadsModal";
-
-/** Win counters for the pit-display footer, read off the bead plate. */
-function tally(scoreboard: ScoreboardSnapshot): { p: number; b: number; t: number } {
-  let p = 0;
-  let b = 0;
-  let t = 0;
-  for (const cell of scoreboard.bead_plate.cells) {
-    if (cell.outcome === "PlayerWin") p += 1;
-    else if (cell.outcome === "BankerWin") b += 1;
-    else t += 1;
-  }
-  return { p, b, t };
-}
 
 interface ScoreboardProps {
   scoreboard: ScoreboardSnapshot;
@@ -26,15 +14,16 @@ interface ScoreboardProps {
 
 export function Scoreboard({ scoreboard, tableMin, tableMax }: ScoreboardProps) {
   const [showAll, setShowAll] = useState(false);
-  const counts = tally(scoreboard);
+  // one pass over the bead plate feeds both the footer and the full board
+  const counts = useMemo(() => boardTally(scoreboard), [scoreboard]);
   return (
     <section aria-label="Scoreboard" className="board panel">
       <BigRoadView road={scoreboard.big_road} />
 
       <div className="road-tally" aria-label="Win counts">
-        <span className="tally tally--p">P {counts.p}</span>
-        <span className="tally tally--b">B {counts.b}</span>
-        <span className="tally tally--t">T {counts.t}</span>
+        <span className="tally tally--p">P {counts.player}</span>
+        <span className="tally tally--b">B {counts.banker}</span>
+        <span className="tally tally--t">T {counts.tie}</span>
       </div>
 
       <button type="button" className="full-roads-btn" onClick={() => setShowAll(true)}>
@@ -43,6 +32,7 @@ export function Scoreboard({ scoreboard, tableMin, tableMax }: ScoreboardProps) 
       {showAll && (
         <RoadsModal
           scoreboard={scoreboard}
+          tally={counts}
           tableMin={tableMin}
           tableMax={tableMax}
           onClose={() => setShowAll(false)}

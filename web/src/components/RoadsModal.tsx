@@ -2,30 +2,19 @@ import { useEffect, useRef } from "react";
 import type { BigRoad, Mark, ScoreboardSnapshot, Side } from "../engine/types";
 import { formatCents } from "../format";
 import { nextMarks } from "../roadForecast";
+import { boardTally, type BoardTally } from "../roadTally";
 import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
 import { FoodMark, HanGlyph, type FoodGlyph } from "./roadGlyphs";
 import { useFitCells } from "./useFitCells";
 
 interface RoadsModalProps {
   scoreboard: ScoreboardSnapshot;
+  /** Bead-plate counts, if the caller already has them (Scoreboard memoises one). */
+  tally?: BoardTally;
   /** Posted table limits in cents; the limits panel is left off without them. */
   tableMin?: number;
   tableMax?: number;
   onClose: () => void;
-}
-
-/** Running counts for the board's tally panel, read off the bead plate. */
-export function boardTally(scoreboard: ScoreboardSnapshot) {
-  const t = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, games: 0 };
-  for (const cell of scoreboard.bead_plate.cells) {
-    t.games += 1;
-    if (cell.outcome === "BankerWin") t.banker += 1;
-    else if (cell.outcome === "PlayerWin") t.player += 1;
-    else t.tie += 1;
-    if (cell.banker_pair) t.bankerPair += 1;
-    if (cell.player_pair) t.playerPair += 1;
-  }
-  return t;
 }
 
 /** A labelled two-column card (mark / label / value) shared by the side panels. */
@@ -38,8 +27,7 @@ function BoardCard({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function TallyPanel({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
-  const t = boardTally(scoreboard);
+function TallyPanel({ tally: t }: { tally: BoardTally }) {
   const rows: [string, React.ReactNode, number][] = [
     ["Banker", <HanGlyph kind="banker" size={18} />, t.banker],
     ["Player", <HanGlyph kind="player" size={18} />, t.player],
@@ -75,29 +63,30 @@ const SIDE_MARK: Record<Side, Mark> = { Banker: "Red", Player: "Blue" };
 const MARK_NAME: Record<Mark, string> = { Red: "red", Blue: "blue" };
 
 /**
- * One key cell: always shows this road's food in the column's colour (red
- * under 庄, blue under 闲) so the panel reads as a legend on an empty shoe.
- * The forecast sits on top: once the roads have started, a colour neither
- * side would produce next is dimmed, and the cell says what its side would
- * stamp.
+ * One key cell. Once the road has started it shows what its side would stamp
+ * next — the forecast colour at full strength, red or blue regardless of the
+ * column it sits in. Before that it is a legend: the column's own colour (red
+ * under 庄, blue under 闲), dimmed only if the other side already has a
+ * forecast and this one does not.
  */
 function KeyCell({
   glyph,
   road,
   side,
   forecast,
-  predicted,
+  otherForecast,
 }: {
   glyph: FoodGlyph;
   road: string;
   side: Side;
   /** what this side would stamp next, if the road has started */
   forecast: Mark | null;
-  /** the colours some side would stamp next (empty before the road starts) */
-  predicted: Set<Mark>;
+  /** the other side's forecast, to know whether the road has started at all */
+  otherForecast: Mark | null;
 }) {
   const colour = SIDE_MARK[side];
-  const dim = predicted.size > 0 && !predicted.has(colour);
+  const shown = forecast ?? colour;
+  const dim = !forecast && otherForecast !== null;
   const title = forecast
     ? `${road}: ${side} next → ${MARK_NAME[forecast]} ${glyph}`
     : `${road}: ${MARK_NAME[colour]} ${glyph}`;
@@ -107,7 +96,7 @@ function KeyCell({
       data-forecast={forecast ? MARK_NAME[forecast] : "none"}
       title={title}
     >
-      <FoodMark glyph={glyph} mark={colour} size={16} />
+      <FoodMark glyph={glyph} mark={shown} size={16} />
     </td>
   );
 }
@@ -131,21 +120,16 @@ function NextHandPanel({ big }: { big: BigRoad }) {
         </tr>
       </thead>
       <tbody>
-        {KEY_ROWS.map(([glyph, label, road], i) => {
-          const predicted = new Set<Mark>();
-          if (ifBanker[i]) predicted.add(ifBanker[i]);
-          if (ifPlayer[i]) predicted.add(ifPlayer[i]);
-          return (
-            <tr key={glyph} aria-label={label}>
-              <th scope="row" className="board-key-label">
-                <span className="board-key-fun">{label}</span>
-                <span className="board-key-trad">{road}</span>
-              </th>
-              <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} predicted={predicted} />
-              <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} predicted={predicted} />
-            </tr>
-          );
-        })}
+        {KEY_ROWS.map(([glyph, label, road], i) => (
+          <tr key={glyph} aria-label={label}>
+            <th scope="row" className="board-key-label">
+              <span className="board-key-fun">{label}</span>
+              <span className="board-key-trad">{road}</span>
+            </th>
+            <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} otherForecast={ifPlayer[i]} />
+            <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} otherForecast={ifBanker[i]} />
+          </tr>
+        ))}
       </tbody>
     </table>
   );
@@ -179,7 +163,7 @@ function LimitsPanel({ min, max }: { min: number; max: number }) {
  * plate, tallies, next-hand key and limits across the top, then the Big Road,
  * Big Eye Boy, and the Small Road / Cockroach Pig pair, with a welcome strip.
  */
-export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsModalProps) {
+export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: RoadsModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -197,18 +181,21 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
     };
   }, []);
 
+  const backdropRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
-  const { cell, scale } = useFitCells(boardRef, fitRef);
+  // the backdrop is the viewport: the dialog inside it is content-sized
+  const { cell, scale, scroll } = useFitCells(boardRef, fitRef, backdropRef);
 
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
+  const counts = tally ?? boardTally(scoreboard);
 
   return (
-    <div className="roads-backdrop" onClick={onClose}>
+    <div className="roads-backdrop" ref={backdropRef} onClick={onClose}>
       <div
         role="dialog"
         aria-label="All roads"
-        className="roads-modal panel"
+        className={`roads-modal panel${scroll ? " roads-modal--scroll" : ""}`}
         style={{ "--road-cell": `${cell}px` } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >
@@ -226,7 +213,7 @@ export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsMod
           >
             <div className="roads-top">
               <BeadPlateView plate={scoreboard.bead_plate} />
-              <TallyPanel scoreboard={scoreboard} />
+              <TallyPanel tally={counts} />
               <NextHandPanel big={scoreboard.big_road} />
               {hasLimits && <LimitsPanel min={tableMin} max={tableMax} />}
             </div>

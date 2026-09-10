@@ -4,6 +4,7 @@
 // string grid of chunky rects — so they sit with the game's pixel look. The
 // app fonts are Latin-only, which is why 庄/闲/和 are drawn rather than typed.
 
+import { memo } from "react";
 import type { Mark } from "../engine/types";
 
 /** Shared palette keys. Per-glyph maps below use a subset. */
@@ -23,6 +24,22 @@ function rectsOf(rows: Pixels, colors: Record<string, string>) {
       rects.push(<rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={fill} />);
     });
   });
+  return rects;
+}
+
+/**
+ * The rect arrays never change for a given variant, so they are built once
+ * and shared: a full board draws a few hundred glyphs, and the fit loop
+ * re-renders it several times per resize. The elements are plain React
+ * elements, so the same array is safe to hand to every <svg>.
+ */
+const RECT_CACHE = new Map<string, React.ReactElement[]>();
+function cachedRects(key: string, build: () => React.ReactElement[]) {
+  let rects = RECT_CACHE.get(key);
+  if (!rects) {
+    rects = build();
+    RECT_CACHE.set(key, rects);
+  }
   return rects;
 }
 
@@ -95,7 +112,7 @@ interface HanGlyphProps {
 }
 
 /** One bead-plate character in Chinatown gold, sized to sit on a lacquer bead. */
-export function HanGlyph({ kind, size = 24 }: HanGlyphProps) {
+export const HanGlyph = memo(function HanGlyph({ kind, size = 24 }: HanGlyphProps) {
   return (
     <svg
       className={`han-glyph han-glyph--${kind}`}
@@ -106,10 +123,10 @@ export function HanGlyph({ kind, size = 24 }: HanGlyphProps) {
       aria-label={HAN_LABEL[kind]}
     >
       <title>{HAN_LABEL[kind]}</title>
-      {rectsOf(HAN[kind], { "#": GOLD })}
+      {cachedRects(`han:${kind}`, () => rectsOf(HAN[kind], { "#": GOLD }))}
     </svg>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Food marks for the derived roads. 8x8; 'm' is the mark colour (chip red or
@@ -174,7 +191,7 @@ interface FoodMarkProps {
 }
 
 /** One derived-road mark drawn as food, coloured red or blue like the mark it replaces. */
-export function FoodMark({ glyph, mark, size = 24 }: FoodMarkProps) {
+export const FoodMark = memo(function FoodMark({ glyph, mark, size = 24 }: FoodMarkProps) {
   return (
     <svg
       className={`food-mark food-mark--${glyph}`}
@@ -186,10 +203,10 @@ export function FoodMark({ glyph, mark, size = 24 }: FoodMarkProps) {
       aria-label={MARK_LABEL[mark]}
     >
       <title>{MARK_LABEL[mark]}</title>
-      {rectsOf(FOOD[glyph], { ...FOOD_COLORS, m: MARK_COLOR[mark] })}
+      {cachedRects(`food:${glyph}:${mark}`, () => rectsOf(FOOD[glyph], { ...FOOD_COLORS, m: MARK_COLOR[mark] }))}
     </svg>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Chinatown chrome: a paper lantern for either end of the title.
@@ -213,10 +230,10 @@ const LANTERN_COLORS: Record<string, string> = {
 };
 
 /** A decorative pixel lantern; purely ornamental, hidden from assistive tech. */
-export function Lantern({ size = 16 }: { size?: number }) {
+export const Lantern = memo(function Lantern({ size = 16 }: { size?: number }) {
   return (
     <svg className="lantern" width={size} height={size} viewBox="0 0 8 8" aria-hidden="true">
-      {rectsOf(LANTERN, LANTERN_COLORS)}
+      {cachedRects("lantern", () => rectsOf(LANTERN, LANTERN_COLORS))}
     </svg>
   );
-}
+});
