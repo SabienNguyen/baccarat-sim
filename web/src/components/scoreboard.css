@@ -6,6 +6,12 @@
   width: 100%;
   min-height: 460px;
   justify-content: center;
+  /* Road geometry. Every cell, glyph, ring, dot and board heading derives
+     from --road-cell so the full board can shrink as one piece; the full
+     roads window sets it from useFitCells(), the right rail keeps 27px. */
+  --road-cell: 27px;
+  --road-gap: 3px;
+  --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
 .board h4 {
   font-family: var(--font-display);
@@ -17,32 +23,112 @@
   text-shadow: 2px 2px 0 var(--ink);
 }
 
-/* --- bead plate (full-roads modal) --- */
+/* --- reskinned road headings: fun name on top, traditional name under it --- */
+.road-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.road-title-fun {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.road-title-trad {
+  font-family: var(--font-text);
+  font-size: 15px;
+  letter-spacing: 0;
+  color: var(--accent-2);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+.lantern {
+  width: calc(var(--road-cell) * 16 / 27);
+  height: calc(var(--road-cell) * 16 / 27);
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 var(--ink));
+}
+
+/* --- bead plate, dressed as Chinatown (full-roads modal) ---
+   Red lacquer frame with a gold inner trim; the pagoda eave rides the top
+   edge and the lanterns hang either side of the title. Accents, not a mural. */
+.road.chinatown {
+  position: relative;
+  margin-top: 14px; /* room for the eave, which rises off the frame */
+  padding: 8px 10px 10px;
+  border: 3px solid var(--lacquer);
+  border-radius: 4px;
+  outline: 2px solid var(--ink);
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    inset 0 0 0 3px var(--ink),
+    4px 4px 0 var(--shadow);
+}
+.pagoda-roof {
+  position: absolute;
+  /* sits flush on the ink outline: 3 tiers of 3px plus a 1px ink line each */
+  top: -17px;
+  left: -2px;
+  right: -2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+/* three stepped tiers, each a crisp 3px course with an ink line under it:
+   gold ridge, red roof, gold eave — the same lacquer-and-gold as the frame */
+.pagoda-roof span {
+  display: block;
+  height: 3px;
+  border-bottom: 1px solid var(--ink);
+  box-sizing: content-box;
+}
+.pagoda-roof span:nth-child(1) {
+  width: 30%;
+  background: var(--gold);
+}
+.pagoda-roof span:nth-child(2) {
+  width: 60%;
+  background: var(--lacquer-hi);
+}
+.pagoda-roof span:nth-child(3) {
+  width: 100%;
+  background: var(--gold);
+}
+/* six rows deep, filled top to bottom then on to the next column, like the
+   real bead plate; one tile per slot so a bead is a bead and not a slab */
 .bead-grid {
   list-style: none;
   margin: 0;
   padding: 6px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 3px;
-  background-color: #f4efe0;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, var(--road-cell));
+  grid-auto-columns: var(--road-cell);
+  gap: var(--road-gap);
+  overflow-x: auto;
+  background-color: var(--parchment);
   background-image:
-    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
-  background-size: 27px 27px;
+    linear-gradient(var(--parchment-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--parchment-line) 1px, transparent 1px);
+  background-size: var(--road-pitch) var(--road-pitch);
   background-position: 5px 5px;
   border: 2px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 4px;
 }
+/* a lacquer tile per bead: square with a soft corner, bevelled like a seal */
 .bead-grid li {
-  border-radius: 50%;
-  font-family: var(--font-display);
-  font-size: 11px;
-  text-align: center;
-  min-height: 24px;
-  line-height: 24px;
-  color: #fff;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+  position: relative; /* anchor for the pair dots */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--road-cell);
+  height: var(--road-cell);
+  border-radius: 3px;
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.35);
 }
 .bead-grid li[data-outcome="PlayerWin"] {
   background: var(--chip-blue);
@@ -51,61 +137,74 @@
   background: var(--chip-red);
 }
 .bead-grid li[data-outcome="Tie"] {
-  background: #1d7a3a;
+  background: var(--road-tie);
+}
+.han-glyph {
+  display: block;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+.bead-grid .han-glyph {
+  width: calc(var(--road-cell) * 24 / 27);
+  height: calc(var(--road-cell) * 24 / 27);
 }
 
 /* --- the pit display: cream board, red/blue circles --- */
 .road-grid {
-  display: flex;
-  gap: 3px;
+  /* a fixed six-row grid: cells are placed by the dragon-tail layout
+     (roadLayout.ts) with explicit grid-column / grid-row, one slot per cell */
+  display: grid;
+  grid-template-rows: repeat(6, var(--road-cell));
+  grid-auto-columns: var(--road-cell);
+  grid-auto-flow: column;
+  justify-content: start;
+  align-content: start;
+  gap: var(--road-gap);
   overflow-x: auto;
-  /* always hold six rows so the road reads like the pit display */
-  min-height: 192px;
-  align-items: flex-start;
-  background-color: #f4efe0;
+  background-color: var(--road-paper);
   /* faint cell grid so an empty board still reads as a pit display */
   background-image:
-    linear-gradient(rgba(21, 17, 15, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 17, 15, 0.14) 1px, transparent 1px);
-  background-size: 30px 30px;
+    linear-gradient(var(--road-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--road-grid-line) 1px, transparent 1px);
+  background-size: var(--road-pitch) var(--road-pitch);
   background-position: 5px 5px;
   border: 2px solid var(--ink);
   border-radius: 6px;
   padding: 6px;
 }
+/* one list per logical column, but its cells take part in the grid directly */
 .road-grid ul {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: contents;
 }
 .road-grid li {
   /* anchor for the pair dots and the bonus token */
   position: relative;
-  width: 27px;
-  height: 27px;
+  width: var(--road-cell);
+  height: var(--road-cell);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 11px;
+  /* the P/B letter: 11px at 27, never under 9px — that still fits a 14px ring */
+  font-size: max(9px, calc(var(--road-cell) * 11 / 27));
   border-radius: 50%;
   color: #fff;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
   background: rgba(0, 0, 0, 0.07);
 }
-/* big road: hollow-circle look in real display colors */
+/* big road: hollow-circle look in real display colors (4px ring at 27px) */
 .road-grid li[data-side="Player"] {
-  background: #fff;
-  border: 4px solid var(--chip-blue);
+  background: var(--road-cell-bg);
+  border: calc(var(--road-cell) * 4 / 27) solid var(--chip-blue);
   color: var(--chip-blue);
   text-shadow: none;
 }
 .road-grid li[data-side="Banker"] {
-  background: #fff;
-  border: 4px solid var(--chip-red);
+  background: var(--road-cell-bg);
+  border: calc(var(--road-cell) * 4 / 27) solid var(--chip-red);
   color: var(--chip-red);
   text-shadow: none;
 }
@@ -115,26 +214,28 @@
    pixel look. The animal token takes the free bottom-left corner. */
 .pair-dot {
   position: absolute;
-  width: 6px;
-  height: 6px;
+  width: calc(var(--road-cell) * 6 / 27);
+  height: calc(var(--road-cell) * 6 / 27);
   border: 1px solid var(--ink);
   pointer-events: none;
 }
 .pair-dot--player {
-  top: -3px;
-  left: -3px;
+  top: calc(var(--road-cell) * -3 / 27);
+  left: calc(var(--road-cell) * -3 / 27);
   background: var(--chip-blue);
 }
 .pair-dot--banker {
-  right: -3px;
-  bottom: -3px;
+  right: calc(var(--road-cell) * -3 / 27);
+  bottom: calc(var(--road-cell) * -3 / 27);
   background: var(--chip-red);
 }
 .bonus-token {
   position: absolute;
   /* hung off the ring's bottom-left so it never sits over the P/B letter */
-  left: -6px;
-  bottom: -6px;
+  left: calc(var(--road-cell) * -6 / 27);
+  bottom: calc(var(--road-cell) * -6 / 27);
+  width: calc(var(--road-cell) * 11 / 27);
+  height: calc(var(--road-cell) * 11 / 27);
   /* crisp pixel edges, never smoothed */
   image-rendering: pixelated;
   shape-rendering: crispEdges;
@@ -142,16 +243,22 @@
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.35));
 }
 
-/* derived roads keep their red/blue marks */
-.road-grid li[data-mark="Red"] {
-  color: var(--chip-red);
-  background: #fff;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+/* derived roads: the red/blue mark is now a food icon sitting straight on the
+   paper — no ring, no disc — but the cell keeps its footprint so the columns
+   line up and the follow-latest scroll is unchanged */
+.road-grid li[data-mark] {
+  background: transparent;
+  border-radius: 0;
 }
-.road-grid li[data-mark="Blue"] {
-  color: var(--chip-blue);
-  background: #fff;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+.food-mark {
+  display: block;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.3));
+}
+.road-grid .food-mark {
+  width: calc(var(--road-cell) * 24 / 27);
+  height: calc(var(--road-cell) * 24 / 27);
 }
 
 /* win counters, like the pit display footer */
@@ -177,7 +284,7 @@
   background: var(--chip-red);
 }
 .tally--t {
-  background: #1d7a3a;
+  background: var(--road-tie);
 }
 
 .full-roads-btn {
@@ -193,7 +300,11 @@
   box-shadow: 2px 2px 0 var(--shadow);
 }
 
-/* Full-roads modal */
+/* --- Full-roads window: fills the viewport, never scrolls ---
+   The dialog is a flex column: fixed head, then .roads-board taking the
+   rest. useFitCells() measures that slot and sets --road-cell so the four
+   six-row bands plus their chrome fit exactly; if even 14px cells overflow
+   it scales .roads-fit down instead. Only the road grids scroll (sideways). */
 .roads-backdrop {
   position: fixed;
   inset: 0;
@@ -202,19 +313,44 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 8px;
 }
 .roads-modal {
-  max-width: min(900px, 92vw);
-  max-height: 88vh;
+  width: min(1220px, 96vw);
+  /* sized by its content and centred by the backdrop, like the game's own
+     layout: at the 27px cap the dialog hugs the board instead of leaving a
+     dead band under the last row; when the cells have to shrink, the board
+     is clamped to the viewport and the fit hook solves for that height */
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px;
+  /* useFitCells sets --road-cell inline on this element, so the pitch has to
+     be resolved here too: a custom property computed on .board would be
+     inherited as a fixed 30px and the rule lines and card rows would never
+     shrink with the cells */
+  --road-pitch: calc(var(--road-cell) + var(--road-gap));
+}
+/* Too short to fit legibly (useFitCells gave up scaling, or the viewport is
+   under 480px tall): the board slot itself scrolls at the 14px floor. The
+   slot keeps its flex height so the fit measurement stays stable. */
+.roads-modal--scroll .roads-board {
   overflow: auto;
 }
+@media (max-height: 480px) {
+  .roads-modal .roads-board {
+    overflow: auto;
+  }
+}
 .roads-modal-head {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .roads-modal-head h3 {
   font-family: var(--font-display);
@@ -229,14 +365,228 @@
   background: var(--chip-red);
   border: 3px solid var(--ink);
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 4px 10px;
   cursor: pointer;
 }
-.roads-grid {
+/* --- the board: laid out like a Macau electronic scoreboard ---
+   Top row: bead plate | tally | next-hand key | limits. Then the Big Road and
+   Big Eye Boy full width, and the Small Road / Cockroach Pig pair. */
+.roads-board {
+  /* content-sized until the dialog hits its max-height, then it gives way */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.roads-fit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform-origin: top center;
+}
+/* headings scale with the cell so the chrome shrinks along with the grids,
+   but no type on the board goes under 9px: below that it is not legible */
+.roads-board h4 {
+  font-size: max(9px, calc(var(--road-cell) * 11 / 27));
+  margin-bottom: 3px;
+}
+.roads-board .road-title-trad {
+  font-size: max(9px, calc(var(--road-cell) * 15 / 27));
+}
+.roads-board .road-grid {
+  padding: 5px;
+  width: 100%; /* fill the slot so the whole board reads as one display */
+}
+.roads-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: stretch;
+}
+.roads-bottom {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 10px;
 }
-.roads-grid .road.bead {
-  grid-column: 1 / -1;
+/* compact one-line headings on the board: fun name, then the traditional one */
+.roads-board .road-title {
+  flex-direction: row;
+  justify-content: center;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.roads-board .road.chinatown .road-title {
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.roads-board .road.chinatown {
+  margin-top: 6px;
+  padding: 6px 8px 6px;
+  /* the cards beside it set the row height; let the parchment fill the
+     frame rather than leaving a dark band under the beads */
+  display: flex;
+  flex-direction: column;
+}
+.roads-board .bead-grid {
+  padding: 5px;
+  flex: 1 1 auto;
+  align-content: start;
+}
+
+/* side cards: lacquer face, gold figures, an ink frame like the road paper.
+   Row heights follow the cell pitch so the cards stay level with the bead
+   plate as the board shrinks. */
+.board-card {
+  border-collapse: collapse;
+  background: var(--lacquer);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(240, 213, 138, 0.35);
+  font-family: var(--font-display);
+  font-size: max(9px, calc(var(--road-cell) * 9 / 27));
+  color: #f4ecd8;
+  min-width: calc(var(--road-cell) * 150 / 27);
+  align-self: stretch;
+}
+.board-card-title {
+  caption-side: top;
+  padding: 5px 8px 3px;
+  font-size: max(9px, calc(var(--road-cell) * 9 / 27));
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 1px 1px 0 var(--ink);
+  border-bottom: 2px solid var(--ink);
+  background: rgba(0, 0, 0, 0.25);
+}
+.board-card th,
+.board-card td {
+  height: var(--road-pitch);
+  padding: 0 8px;
+  text-align: left;
+  font-weight: normal;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.board-card tbody tr:last-child th,
+.board-card tbody tr:last-child td {
+  border-bottom: none;
+}
+.board-card .board-mark {
+  width: calc(var(--road-cell) * 18 / 27);
+  padding-right: 0;
+}
+.board-card .han-glyph {
+  width: calc(var(--road-cell) * 18 / 27);
+  height: calc(var(--road-cell) * 18 / 27);
+  border-radius: 2px;
+}
+.board-card .board-mark .han-glyph {
+  display: block;
+}
+.board-card .han-glyph--banker {
+  background: var(--chip-red);
+}
+.board-card .han-glyph--player {
+  background: var(--chip-blue);
+}
+.board-card .han-glyph--tie {
+  background: var(--road-tie);
+}
+/* a pair dot sitting in a table cell instead of a road corner */
+.pair-dot--inline {
+  position: static;
+  display: block;
+  width: calc(var(--road-cell) * 8 / 27);
+  height: calc(var(--road-cell) * 8 / 27);
+  margin: 0 auto;
+}
+.board-card .board-value {
+  text-align: right;
+  color: var(--gold);
+  font-size: max(9px, calc(var(--road-cell) * 12 / 27));
+  text-shadow: 1px 1px 0 var(--ink);
+}
+/* the game-number and limits rows have no mark: let the label take its column */
+.board-row--plain th {
+  padding-left: 8px;
+}
+.board-card--key thead th {
+  text-align: center;
+  padding: 3px 6px 1px;
+}
+.board-card--key thead .han-glyph {
+  display: inline-block;
+}
+.board-card--key .board-key-cell {
+  text-align: center;
+  width: calc(var(--road-cell) * 32 / 27);
+  padding: 0 6px;
+  /* a swatch of road paper behind each forecast mark */
+  background: var(--road-paper);
+  border: 1px solid var(--ink);
+}
+.board-card--key .board-key-cell .food-mark {
+  width: calc(var(--road-cell) * 16 / 27);
+  height: calc(var(--road-cell) * 16 / 27);
+  margin: 0 auto;
+}
+/* row label: the food name over the traditional road name */
+.board-card--key .board-key-label {
+  font-size: max(9px, calc(var(--road-cell) * 8 / 27));
+  line-height: 1.1;
+}
+.board-card--key .board-key-fun {
+  display: block;
+}
+.board-card--key .board-key-trad {
+  display: block;
+  font-family: var(--font-text);
+  font-size: max(9px, calc(var(--road-cell) * 12 / 27));
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-2);
+}
+/* forecast overlay: a colour neither side would stamp next fades back */
+.board-card--key .board-key-cell--dim .food-mark {
+  opacity: 0.35;
+  filter: none;
+}
+
+/* phones: the board stacks and scrolls instead of fitting (useFitCells
+   stands down under 700px), the three cards share a row where they fit */
+@media (max-width: 700px) {
+  .roads-backdrop {
+    padding: 8px;
+  }
+  .roads-modal {
+    width: 100%;
+    height: auto;
+    max-height: 96vh;
+    overflow: auto;
+    display: block;
+  }
+  .roads-board {
+    overflow: visible;
+  }
+  .roads-top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .roads-top > .road.chinatown {
+    grid-column: 1 / -1;
+  }
+  .roads-top > .board-card {
+    min-width: 0;
+    width: 100%;
+  }
+  /* the limits card is the odd one out: give it the whole row */
+  .roads-top > .board-card:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+  .roads-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
