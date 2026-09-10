@@ -28,6 +28,9 @@ import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
 import { playSfx } from "./audio/sfx";
+import { getPortal } from "./portal";
+import { createPortalTracker, type PortalView } from "./portal/signals";
+import { adBreak } from "./portal/adBreak";
 
 /** Beat after the final card flips before the round resolves itself. */
 const AUTO_SETTLE_MS = 600;
@@ -128,6 +131,19 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
 
   // every table noise rides the store: works for local and remote play alike
   useGameSounds(active);
+
+  // Game-portal gameplay signals (start on the first deal, stop under a
+  // modal, resume when it closes) ride the store the same way. Without a
+  // portal every call is a no-op.
+  useEffect(() => {
+    const step = createPortalTracker(getPortal());
+    const view = (s: GameState): PortalView => ({
+      phase: s.snapshot.phase,
+      busted: s.busted,
+      goalReached: s.goalReached,
+    });
+    return active.subscribe((state, prev) => step(view(prev), view(state)));
+  }, [active]);
 
   // Turn YOUR cards for you, one per beat, in ritual order. Hands you didn't
   // bet belong to the house dealer — his own pacer turns those, so this just
@@ -340,6 +356,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             playSfx("shuffle");
             newShoe();
             setCutting(false);
+            // between shoes is the natural break for a portal's midgame ad
+            void adBreak(getPortal());
           }}
           onCancel={() => setCutting(false)}
         />
