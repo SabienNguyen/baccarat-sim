@@ -372,6 +372,7 @@ test("single-player: a chip tapped during the sweep leaves the felt clean for th
   } finally {
     vi.useRealTimers();
   }
+});
 
 // --- the high-limit ask: flip one / flip both of the dealer's cards ---
 
