@@ -567,18 +567,29 @@ impl Table {
     /// then turns them. Returns the sides surrendered (empty when the seat
     /// held nothing, or no coup is out), so it is safe to call twice.
     pub fn surrender_squeeze(&mut self, pid: PlayerId) -> Vec<Side> {
-        let mut gone = Vec::new();
-        if let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &mut self.phase {
-            if *player_squeezer == Some(pid) {
-                *player_squeezer = None;
-                gone.push(Side::Player);
-            }
-            if *banker_squeezer == Some(pid) {
-                *banker_squeezer = None;
-                gone.push(Side::Banker);
-            }
+        [Side::Player, Side::Banker]
+            .into_iter()
+            .filter(|side| self.surrender_squeeze_side(pid, *side))
+            .collect()
+    }
+
+    /// The house takes over ONE of this seat's squeezes for the current coup
+    /// — the hand the table is actually waiting on. A holder of both hands
+    /// who stalls on Player keeps Banker. Returns whether anything moved.
+    pub fn surrender_squeeze_side(&mut self, pid: PlayerId, side: Side) -> bool {
+        let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &mut self.phase else {
+            return false;
+        };
+        let holder = match side {
+            Side::Player => player_squeezer,
+            Side::Banker => banker_squeezer,
+        };
+        if *holder == Some(pid) {
+            *holder = None;
+            true
+        } else {
+            false
         }
-        gone
     }
 
     /// Who the table is waiting on: the human holder of the next face-down
@@ -1920,6 +1931,24 @@ mod squeeze_gap_tests {
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.deal().unwrap();
         assert_eq!(t.surrender_squeeze(a), vec![Side::Player, Side::Banker]);
+    }
+
+    #[test]
+    fn surrendering_one_side_leaves_the_holders_other_hand_alone() {
+        let mut t = shared();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.deal().unwrap();
+        assert!(t.surrender_squeeze_side(a, Side::Player));
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.player_squeezer, None, "the house holds Player now");
+        assert_eq!(v.banker_squeezer, Some(a), "a still squeezes Banker");
+        // again is a no-op; a side a doesn't hold is a no-op; a stranger is a no-op
+        assert!(!t.surrender_squeeze_side(a, Side::Player));
+        let c = t.join("c", 100_000).unwrap();
+        assert!(!t.surrender_squeeze_side(c, Side::Banker));
+        assert_eq!(t.view_for(a).unwrap().banker_squeezer, Some(a));
     }
 
     // --- stalled_squeeze: which human holder is the table waiting on ---

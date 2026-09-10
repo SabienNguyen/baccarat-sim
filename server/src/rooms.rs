@@ -48,6 +48,9 @@ pub const SQUEEZE_GRACE_MS: u64 = 8_000;
 pub const SQUEEZE_CLOCK: std::time::Duration = std::time::Duration::from_millis(SQUEEZE_CLOCK_MS);
 pub const SQUEEZE_CLOCK_MS: u64 = 45_000;
 
+/// What the dealer calls a seat whose name he can't find (it left mid-line).
+const NAMELESS: &str = "A player";
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -169,28 +172,36 @@ impl Room {
     /// to the dealer for this coup. A hand the house is already turning, or
     /// a finished coup, stalls nobody and nothing changes.
     pub fn squeeze_clock_expired(&mut self) -> Vec<(PlayerId, baccarat_engine::scoreboard::Side)> {
-        let mut out = Vec::new();
-        if let Some((pid, _)) = self.table.stalled_squeeze() {
-            for side in self.surrender_to_the_house(pid, "is taking too long") {
-                out.push((pid, side));
-            }
+        let Some((pid, side)) = self.table.stalled_squeeze() else {
+            return Vec::new();
+        };
+        // Only the hand the table is waiting on: a holder of both who stalls
+        // on Player is still connected and can turn Banker when its turn comes.
+        if !self.table.surrender_squeeze_side(pid, side) {
+            return Vec::new();
         }
-        out
+        self.announce(self.surrender_line(pid, side, "is taking too long"));
+        vec![(pid, side)]
     }
 
-    /// Hand a seat's squeeze(s) to the dealer and announce it. `why` is the
-    /// clause after the name: "{name} {why} — the dealer turns the X hand."
+    /// Hand every squeeze a seat holds to the dealer and announce each. For a
+    /// dead socket: nothing that seat holds can be turned by anyone else.
     fn surrender_to_the_house(
         &mut self,
         pid: PlayerId,
         why: &str,
     ) -> Vec<baccarat_engine::scoreboard::Side> {
-        let name = self.table.name_of(pid).unwrap_or("A player").to_string();
         let gone = self.table.surrender_squeeze(pid);
         for side in &gone {
-            self.announce(format!("{name} {why} — the dealer turns the {side:?} hand."));
+            self.announce(self.surrender_line(pid, *side, why));
         }
         gone
+    }
+
+    /// "{name} {why} — the dealer turns the X hand."
+    fn surrender_line(&self, pid: PlayerId, side: baccarat_engine::scoreboard::Side, why: &str) -> String {
+        let name = self.table.name_of(pid).unwrap_or(NAMELESS);
+        format!("{name} {why} — the dealer turns the {side:?} hand.")
     }
 
     /// Trade a token back for its seat, if that seat is still being held.
@@ -912,6 +923,25 @@ mod squeeze_gap_tests {
         assert!(room.squeeze_clock_expired().is_empty());
         while room.table.dealer_flip_one() {}
         assert_eq!(room.squeeze_clock_expired(), vec![(b, Side::Banker)]);
+    }
+
+    #[test]
+    fn a_two_hand_holder_who_stalls_loses_only_the_hand_the_table_waits_on() {
+        let mut room = Room::new("TEST03".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let a = room.table.join("alice", buy_in).unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        room.seat(a, ta);
+        room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.place_bet(a, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+        room.table.deal().unwrap();
+        drain(&mut ra);
+        assert_eq!(room.squeeze_clock_expired(), vec![(a, Side::Player)]);
+        let v = room.table.view_for(a).unwrap();
+        assert_eq!(v.player_squeezer, None, "Player goes to the house");
+        assert_eq!(v.banker_squeezer, Some(a), "alice keeps the Banker squeeze");
+        let said = announcements(&drain(&mut ra));
+        assert_eq!(said, vec!["alice is taking too long — the dealer turns the Player hand.".to_string()]);
     }
 
     #[tokio::test(start_paused = true)]
