@@ -117,19 +117,46 @@ test("the key is a legend even on an empty shoe: every road shows red and blue m
   }
 });
 
-test("the forecast lays over the legend: the colour nobody would stamp next is dimmed", () => {
+test("once a road has started, each cell is painted the colour its side would stamp next", () => {
   render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
   const key = screen.getByRole("table", { name: "Key · Next hand" });
   // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth
   const donut = row(key, "Donuts"); // Banker -> Blue, Player -> Blue
   expect(forecasts(donut)).toEqual(["blue", "blue"]);
-  expect(dimmed(donut)).toEqual([true, false]); // red donut fades, blue stays full
-  expect(colours(donut)).toEqual(["Banker", "Player"]); // the legend marks themselves stay put
+  expect(colours(donut)).toEqual(["Player", "Player"]); // both cells show a blue donut
+  expect(dimmed(donut)).toEqual([false, false]); // a forecast is never faded
   const fries = row(key, "French fries"); // Banker -> Red, Player -> Blue
   expect(forecasts(fries)).toEqual(["red", "blue"]);
+  expect(colours(fries)).toEqual(["Banker", "Player"]);
   expect(dimmed(fries)).toEqual([false, false]);
   expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
   expect(cells(fries)[1].title).toBe("Cockroach Pig: Player next → blue fries");
+});
+
+test("crossed forecasts paint the forecast, not the column: 庄 shows blue and 闲 shows red", () => {
+  // B B P: heights [2,1]. Banker opens a third column and Big Eye Boy compares
+  // heights 1 vs 2 -> Blue; Player extends the second column and finds a cell
+  // beside it at row 1 -> Red. The Banker column therefore holds a blue donut.
+  const crossed: ScoreboardSnapshot = {
+    bead_plate: { cells: [bead("BankerWin"), bead("BankerWin"), bead("PlayerWin")] },
+    big_road: { columns: [[win("Banker"), win("Banker")], [win("Player")]] },
+    big_eye_boy: { columns: [] },
+    small_road: { columns: [] },
+    cockroach_pig: { columns: [] },
+  };
+  render(<RoadsModal scoreboard={crossed} onClose={() => {}} />);
+  const key = screen.getByRole("table", { name: "Key · Next hand" });
+  const donut = row(key, "Donuts");
+  expect(forecasts(donut)).toEqual(["blue", "red"]);
+  expect(colours(donut)).toEqual(["Player", "Banker"]); // blue under 庄, red under 闲
+  expect(dimmed(donut)).toEqual([false, false]);
+  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
+  expect(cells(donut)[1].title).toBe("Big Eye Boy: Player next → red donut");
+  // the other two roads have not started: plain legend, nothing dimmed
+  const fries = row(key, "French fries");
+  expect(forecasts(fries)).toEqual(["none", "none"]);
+  expect(colours(fries)).toEqual(["Banker", "Player"]);
+  expect(dimmed(fries)).toEqual([false, false]);
 });
 
 test("a road that has not started is shown as plain legend, not blank", () => {

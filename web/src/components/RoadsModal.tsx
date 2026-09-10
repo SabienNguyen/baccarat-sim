@@ -63,29 +63,30 @@ const SIDE_MARK: Record<Side, Mark> = { Banker: "Red", Player: "Blue" };
 const MARK_NAME: Record<Mark, string> = { Red: "red", Blue: "blue" };
 
 /**
- * One key cell: always shows this road's food in the column's colour (red
- * under 庄, blue under 闲) so the panel reads as a legend on an empty shoe.
- * The forecast sits on top: once the roads have started, a colour neither
- * side would produce next is dimmed, and the cell says what its side would
- * stamp.
+ * One key cell. Once the road has started it shows what its side would stamp
+ * next — the forecast colour at full strength, red or blue regardless of the
+ * column it sits in. Before that it is a legend: the column's own colour (red
+ * under 庄, blue under 闲), dimmed only if the other side already has a
+ * forecast and this one does not.
  */
 function KeyCell({
   glyph,
   road,
   side,
   forecast,
-  predicted,
+  otherForecast,
 }: {
   glyph: FoodGlyph;
   road: string;
   side: Side;
   /** what this side would stamp next, if the road has started */
   forecast: Mark | null;
-  /** the colours some side would stamp next (empty before the road starts) */
-  predicted: Set<Mark>;
+  /** the other side's forecast, to know whether the road has started at all */
+  otherForecast: Mark | null;
 }) {
   const colour = SIDE_MARK[side];
-  const dim = predicted.size > 0 && !predicted.has(colour);
+  const shown = forecast ?? colour;
+  const dim = !forecast && otherForecast !== null;
   const title = forecast
     ? `${road}: ${side} next → ${MARK_NAME[forecast]} ${glyph}`
     : `${road}: ${MARK_NAME[colour]} ${glyph}`;
@@ -95,7 +96,7 @@ function KeyCell({
       data-forecast={forecast ? MARK_NAME[forecast] : "none"}
       title={title}
     >
-      <FoodMark glyph={glyph} mark={colour} size={16} />
+      <FoodMark glyph={glyph} mark={shown} size={16} />
     </td>
   );
 }
@@ -119,21 +120,16 @@ function NextHandPanel({ big }: { big: BigRoad }) {
         </tr>
       </thead>
       <tbody>
-        {KEY_ROWS.map(([glyph, label, road], i) => {
-          const predicted = new Set<Mark>();
-          if (ifBanker[i]) predicted.add(ifBanker[i]);
-          if (ifPlayer[i]) predicted.add(ifPlayer[i]);
-          return (
-            <tr key={glyph} aria-label={label}>
-              <th scope="row" className="board-key-label">
-                <span className="board-key-fun">{label}</span>
-                <span className="board-key-trad">{road}</span>
-              </th>
-              <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} predicted={predicted} />
-              <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} predicted={predicted} />
-            </tr>
-          );
-        })}
+        {KEY_ROWS.map(([glyph, label, road], i) => (
+          <tr key={glyph} aria-label={label}>
+            <th scope="row" className="board-key-label">
+              <span className="board-key-fun">{label}</span>
+              <span className="board-key-trad">{road}</span>
+            </th>
+            <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} otherForecast={ifPlayer[i]} />
+            <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} otherForecast={ifBanker[i]} />
+          </tr>
+        ))}
       </tbody>
     </table>
   );
