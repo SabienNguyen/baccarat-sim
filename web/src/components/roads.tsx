@@ -12,6 +12,7 @@ import type {
 import { glossaryEntry } from "../glossaryData";
 import { BonusToken, type BonusKind } from "./roadTokens";
 import { FoodMark, HanGlyph, Lantern, type BeadKind, type FoodGlyph } from "./roadGlyphs";
+import { layoutRoad, type PlacedCell } from "../roadLayout";
 import "./glossary.css";
 
 /**
@@ -69,6 +70,26 @@ function useFollowLatest<T extends HTMLElement = HTMLDivElement>(columnCount: nu
     if (el) el.scrollLeft = el.scrollWidth;
   }, [columnCount]);
   return ref;
+}
+
+/**
+ * Fold a road's logical columns onto the 6-row display grid (dragon-tail
+ * bend), grouped back per logical column so each still renders as one list.
+ */
+function foldRoad<T>(columns: T[][]): { runs: PlacedCell<T>[][]; width: number } {
+  const { cells, width } = layoutRoad(columns);
+  const runs: PlacedCell<T>[][] = [];
+  let at = 0;
+  for (const col of columns) {
+    runs.push(cells.slice(at, at + col.length));
+    at += col.length;
+  }
+  return { runs, width };
+}
+
+/** Inline placement of one cell on the CSS grid (1-based lines). */
+function slot({ col, row }: PlacedCell<unknown>) {
+  return { gridColumn: col + 1, gridRow: row + 1 };
 }
 
 function beadKind(cell: BeadCell): BeadKind {
@@ -156,17 +177,18 @@ export function BeadPlateView({ plate }: { plate: BeadPlate }) {
 }
 
 export function BigRoadView({ road }: { road: BigRoad }) {
-  const gridRef = useFollowLatest(road.columns.length);
+  const { runs, width } = foldRoad(road.columns);
+  const gridRef = useFollowLatest(width);
   return (
     <div aria-label="Big Road" className="road big">
       <h4>Big Road <RoadInfo term="big-road" /></h4>
       <div className="road-grid" ref={gridRef}>
-        {road.columns.map((col, ci) => (
+        {runs.map((run, ci) => (
           <ul key={ci}>
-            {col.map((cell, ri) => (
-              <li key={ri} data-side={cell.side}>
-                {bigRoadLabel(cell)}
-                <CellMarks cell={cell} />
+            {run.map((placed, ri) => (
+              <li key={ri} data-side={placed.cell.side} style={slot(placed)}>
+                {bigRoadLabel(placed.cell)}
+                <CellMarks cell={placed.cell} />
               </li>
             ))}
           </ul>
@@ -198,16 +220,17 @@ export function DerivedRoadView({
   term?: string;
   glyph: FoodGlyph;
 }) {
-  const gridRef = useFollowLatest(road.columns.length);
+  const { runs, width } = foldRoad<Mark>(road.columns);
+  const gridRef = useFollowLatest(width);
   return (
     <div aria-label={label} className={`road derived derived--${glyph}`}>
       <RoadTitle fun={FOOD_TITLE[glyph]} trad={label} term={term} />
       <div className="road-grid" ref={gridRef}>
-        {road.columns.map((col, ci) => (
+        {runs.map((run, ci) => (
           <ul key={ci}>
-            {col.map((mark: Mark, ri) => (
-              <li key={ri} data-mark={mark}>
-                <FoodMark glyph={glyph} mark={mark} />
+            {run.map((placed, ri) => (
+              <li key={ri} data-mark={placed.cell} style={slot(placed)}>
+                <FoodMark glyph={glyph} mark={placed.cell} />
               </li>
             ))}
           </ul>
