@@ -72,12 +72,15 @@ impl Drop for ConnSlot {
 }
 
 /// Kept permissive enough for the app's real needs (inlined wasm, Google
-/// Fonts, same-origin websockets) while shutting the usual injection doors.
-const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; \
+/// Fonts, same-origin websockets, GoatCounter analytics — script from
+/// gc.zgo.at, counts to the site host, with its image-pixel fallback) while
+/// shutting the usual injection doors.
+const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://gc.zgo.at; \
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-    font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; \
-    connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; \
-    frame-ancestors 'none'";
+    font-src 'self' https://fonts.gstatic.com; \
+    img-src 'self' data: https://baccarat-sim.goatcounter.com; \
+    connect-src 'self' ws: wss: https://baccarat-sim.goatcounter.com; \
+    object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
 
 #[tokio::main]
 async fn main() {

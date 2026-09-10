@@ -2,6 +2,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { RoundSnapshot, BetKind, CommandError, Side, FlipRequest } from "../engine/types";
 import type { SeatView } from "../multiplayer/protocol";
 import { lastFlipBetween, type Flip } from "../cards";
+import { trackFirstHand } from "../analytics";
 
 /** What the dealer can refuse with: an engine error or server speech. */
 export type DealerError = CommandError | { Message: string };
@@ -172,6 +173,7 @@ export function createGameStore(
 
       deal: () => {
         set({ lastDelta: null, lastFlip: null });
+        trackFirstHand();
         apply(session.deal());
       },
 
@@ -185,6 +187,7 @@ export function createGameStore(
           apply(skipped);
           return;
         }
+        trackFirstHand();
         apply(session.deal());
       },
 

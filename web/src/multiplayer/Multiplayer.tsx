@@ -10,6 +10,7 @@ import type { ClientMsg, RoomInfo, ServerMsg } from "./protocol";
 import { clearSeatToken, loadSeat, saveSeatToken } from "./protocol";
 import { socketUrl } from "./protocol";
 import { urlParam } from "../urlParams";
+import { track } from "../analytics";
 import { createRemoteStore, type RemoteStore } from "./remoteStore";
 import "./multiplayer.css";
 
@@ -87,6 +88,10 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
     connect ? null : (urlParam("room")?.trim().toUpperCase().slice(0, 6) || null),
   );
   const [code, setCode] = useState(autoRoom.current ?? "");
+  // How the pending join was started, reported once the server seats us:
+  // an invite link vs. the lobby (typed code or the room list). Creating a
+  // table or reclaiming a held seat is neither.
+  const joinPath = useRef<"join-room-link" | "join-lobby" | null>(null);
   const [tier, setTier] = useState<TableTier>("mid");
   const [isPrivate, setIsPrivate] = useState(false);
 
@@ -118,6 +123,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       if (autoRoom.current) {
         const n = name.trim() || "guest";
         saveName(n);
+        joinPath.current = "join-room-link";
         socket.send(JSON.stringify({ type: "join_room", room: autoRoom.current, name: n }));
       }
     };
@@ -146,6 +152,8 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           return;
         }
         if (msg.token) saveSeatToken(msg.room, msg.token);
+        if (joinPath.current) track(joinPath.current);
+        joinPath.current = null;
         const store = createRemoteStore({
           tier: msg.tier,
           view: msg.view,
@@ -358,7 +366,10 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
               type="button"
               className="mp-cta"
               disabled={code.trim().length < 6}
-              onClick={() => send({ type: "join_room", room: code.trim(), name: rememberName() })}
+              onClick={() => {
+                joinPath.current = "join-lobby";
+                send({ type: "join_room", room: code.trim(), name: rememberName() });
+              }}
             >
               Join
             </button>
@@ -415,7 +426,10 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
                   type="button"
                   className="mp-cta"
                   disabled={r.seats >= r.max_seats}
-                  onClick={() => send({ type: "join_room", room: r.id, name: rememberName() })}
+                  onClick={() => {
+                    joinPath.current = "join-lobby";
+                    send({ type: "join_room", room: r.id, name: rememberName() });
+                  }}
                 >
                   Sit
                 </button>

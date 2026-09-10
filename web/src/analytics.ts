@@ -1,13 +1,11 @@
-// Privacy-friendly analytics, wired but DISABLED until a backend exists.
+// Privacy-friendly analytics via GoatCounter, ENABLED since 2026-09-10.
 //
-// To turn it on later (GoatCounter is the recommended fit — see docs/GROWTH.md
-// G4): add its script to index.html
-//   <script data-goatcounter="https://<you>.goatcounter.com/count"
-//           async src="//gc.zgo.at/count.js"></script>
-// and, for the Fly-served copy, add gc.zgo.at to the CSP script-src/connect-src
-// in server/src/main.rs. Until `window.goatcounter` exists, every call here is
-// a safe no-op, so these hooks can live in the code with zero runtime cost or
-// third-party requests.
+// Site code: `baccarat-sim` (https://baccarat-sim.goatcounter.com). The script
+// tag lives in index.html and the Fly-served copy allows gc.zgo.at /
+// baccarat-sim.goatcounter.com in the CSP (server/src/main.rs). The pageview is
+// GoatCounter's own onload count; the helpers here only add named events.
+// Whenever `window.goatcounter` is absent (tests, blocked script, a local dev
+// build) every call is a safe no-op, so the hooks cost nothing and never throw.
 
 type Goatcounter = {
   count: (opts: { path: string; title?: string; event?: boolean }) => void;
@@ -37,4 +35,18 @@ export function trackVisit(): void {
     /* private mode / no storage — treat as new */
   }
   track(returning ? "returning-visit" : "first-visit");
+}
+
+let firstHandTracked = false;
+
+/** Fires `first-hand` once per page load: the first coup dealt, solo or live. */
+export function trackFirstHand(): void {
+  if (firstHandTracked) return;
+  firstHandTracked = true;
+  track("first-hand");
+}
+
+/** Test hook: forget that a hand was dealt. */
+export function resetAnalyticsForTests(): void {
+  firstHandTracked = false;
 }
