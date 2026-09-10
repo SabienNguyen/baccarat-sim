@@ -51,6 +51,14 @@ pub const SQUEEZE_CLOCK_MS: u64 = 45_000;
 /// What the dealer calls a seat whose name he can't find (it left mid-line).
 const NAMELESS: &str = "A player";
 
+/// A squeeze the house just took over, and the dealer's line about it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Taken {
+    pub pid: PlayerId,
+    pub side: baccarat_engine::scoreboard::Side,
+    pub line: String,
+}
+
 pub struct Room {
     pub id: String,
     pub tier: Tier,
@@ -154,13 +162,13 @@ impl Room {
 
     /// The squeeze grace ran out. If the seat is still held from THAT drop
     /// (not back, not re-dropped later), the house takes its squeeze(s) for
-    /// this coup and the table hears why. Idempotent: a second call finds
-    /// nothing left to surrender.
-    pub fn squeeze_grace_expired(
-        &mut self,
-        pid: PlayerId,
-        since: std::time::Instant,
-    ) -> Vec<baccarat_engine::scoreboard::Side> {
+    /// this coup. Idempotent: a second call finds nothing left to surrender.
+    ///
+    /// Nothing is announced here: the caller must `broadcast()` the new view
+    /// FIRST and only then `announce` each returned line (the client clears
+    /// its announcement on every State, so a line sent before the view is
+    /// wiped the instant it lands).
+    pub fn squeeze_grace_expired(&mut self, pid: PlayerId, since: std::time::Instant) -> Vec<Taken> {
         if self.held.get(&pid) != Some(&since) {
             return Vec::new();
         }
@@ -170,8 +178,9 @@ impl Room {
     /// The squeeze clock ran out. Whoever the table is waiting on — the human
     /// holder of the next face-down card in ritual order — loses that hand
     /// to the dealer for this coup. A hand the house is already turning, or
-    /// a finished coup, stalls nobody and nothing changes.
-    pub fn squeeze_clock_expired(&mut self) -> Vec<(PlayerId, baccarat_engine::scoreboard::Side)> {
+    /// a finished coup, stalls nobody and nothing changes. Same announce
+    /// contract as `squeeze_grace_expired`: broadcast, then speak.
+    pub fn squeeze_clock_expired(&mut self) -> Vec<Taken> {
         let Some((pid, side)) = self.table.stalled_squeeze() else {
             return Vec::new();
         };
@@ -180,28 +189,32 @@ impl Room {
         if !self.table.surrender_squeeze_side(pid, side) {
             return Vec::new();
         }
-        self.announce(self.surrender_line(pid, side, "is taking too long"));
-        vec![(pid, side)]
+        vec![self.taken(pid, side, "is taking too long")]
     }
 
-    /// Hand every squeeze a seat holds to the dealer and announce each. For a
-    /// dead socket: nothing that seat holds can be turned by anyone else.
-    fn surrender_to_the_house(
-        &mut self,
-        pid: PlayerId,
-        why: &str,
-    ) -> Vec<baccarat_engine::scoreboard::Side> {
-        let gone = self.table.surrender_squeeze(pid);
-        for side in &gone {
-            self.announce(self.surrender_line(pid, *side, why));
-        }
-        gone
+    /// Hand every squeeze a seat holds to the dealer. For a dead socket:
+    /// nothing that seat holds can be turned by anyone else.
+    fn surrender_to_the_house(&mut self, pid: PlayerId, why: &str) -> Vec<Taken> {
+        self.table
+            .surrender_squeeze(pid)
+            .into_iter()
+            .map(|side| self.taken(pid, side, why))
+            .collect()
     }
 
     /// "{name} {why} — the dealer turns the X hand."
-    fn surrender_line(&self, pid: PlayerId, side: baccarat_engine::scoreboard::Side, why: &str) -> String {
+    fn taken(&self, pid: PlayerId, side: baccarat_engine::scoreboard::Side, why: &str) -> Taken {
         let name = self.table.name_of(pid).unwrap_or(NAMELESS);
-        format!("{name} {why} — the dealer turns the {side:?} hand.")
+        Taken { pid, side, line: format!("{name} {why} — the dealer turns the {side:?} hand.") }
+    }
+
+    /// Push everyone the new view, THEN say what the dealer just did about
+    /// it. Order matters — see `squeeze_grace_expired`.
+    pub fn broadcast_then_announce(&mut self, taken: &[Taken]) {
+        self.broadcast();
+        for t in taken {
+            self.announce(t.line.clone());
+        }
     }
 
     /// Which arming of the squeeze clock is current. Bumps on every arming;
@@ -437,7 +450,7 @@ pub fn arm_squeeze_grace(room: Arc<Mutex<Room>>, pid: PlayerId, since: std::time
             let mut guard = room.lock().await;
             let gone = guard.squeeze_grace_expired(pid, since);
             if !gone.is_empty() {
-                guard.broadcast();
+                guard.broadcast_then_announce(&gone);
                 tracing::info!(room = %guard.id, ?gone, "squeeze grace elapsed — house takes the hand");
             }
             gone
@@ -468,7 +481,7 @@ pub fn arm_squeeze_clock(room: Arc<Mutex<Room>>) {
             }
             let taken = guard.squeeze_clock_expired();
             if !taken.is_empty() {
-                guard.broadcast();
+                guard.broadcast_then_announce(&taken);
                 tracing::info!(room = %guard.id, ?taken, "squeeze clock elapsed — house takes the hand");
             }
             let still_turning =
@@ -830,6 +843,14 @@ mod squeeze_gap_tests {
         msgs.iter().filter(|m| matches!(m, ServerMsg::State { .. })).count()
     }
 
+    fn sides(taken: &[Taken]) -> Vec<Side> {
+        taken.iter().map(|t| t.side).collect()
+    }
+
+    fn who(taken: &[Taken]) -> Vec<(PlayerId, Side)> {
+        taken.iter().map(|t| (t.pid, t.side)).collect()
+    }
+
     // --- fix 5: the refusal names the real holder ---
 
     #[test]
@@ -847,12 +868,15 @@ mod squeeze_gap_tests {
         let (mut room, a, b, _ra, mut rb) = dealt_room();
         let since = room.hold_seat(a);
         drain(&mut rb);
-        assert_eq!(room.squeeze_grace_expired(a, since), vec![Side::Player]);
+        let taken = room.squeeze_grace_expired(a, since);
+        assert_eq!(sides(&taken), vec![Side::Player]);
         let v = room.table.view_for(b).unwrap();
         assert_eq!(v.player_squeezer, None);
         assert_eq!(v.banker_squeezer, Some(b));
         assert_eq!(room.table.seats(), 2, "the seat is still held, bets riding");
         assert!(room.held.contains_key(&a));
+        assert!(announcements(&drain(&mut rb)).is_empty(), "nothing is said until the view is out");
+        room.broadcast_then_announce(&taken);
         let said = announcements(&drain(&mut rb));
         assert_eq!(said, vec!["alice stepped away — the dealer turns the Player hand.".to_string()]);
     }
@@ -881,7 +905,7 @@ mod squeeze_gap_tests {
         let second = room.hold_seat(a);
         assert!(room.squeeze_grace_expired(a, first).is_empty(), "stale timer");
         assert_eq!(room.table.view_for(a).unwrap().player_squeezer, Some(a));
-        assert_eq!(room.squeeze_grace_expired(a, second), vec![Side::Player]);
+        assert_eq!(sides(&room.squeeze_grace_expired(a, second)), vec![Side::Player]);
         // and again is a no-op
         assert!(room.squeeze_grace_expired(a, second).is_empty());
     }
@@ -911,6 +935,57 @@ mod squeeze_gap_tests {
         assert!(announcements(&msgs).iter().any(|s| s.contains("stepped away")), "{msgs:?}");
     }
 
+    /// Index of the first State whose view shows the house holding Player,
+    /// and of the first Announce containing `phrase`. The client wipes its
+    /// announcement on every State, so the line must come AFTER the view.
+    fn state_then_line(msgs: &[ServerMsg], phrase: &str) -> (usize, usize) {
+        let state = msgs
+            .iter()
+            .position(|m| matches!(m, ServerMsg::State { view } if view.player_squeezer.is_none()))
+            .unwrap_or_else(|| panic!("no State with the house on Player in {msgs:?}"));
+        let line = msgs
+            .iter()
+            .position(|m| matches!(m, ServerMsg::Announce { message } if message.contains(phrase)))
+            .unwrap_or_else(|| panic!("no Announce containing {phrase:?} in {msgs:?}"));
+        (state, line)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_grace_path_sends_the_new_view_before_the_dealers_line() {
+        let (room, a, _b, _ra, mut rb) = dealt_room();
+        let room = Arc::new(Mutex::new(room));
+        let since = room.lock().await.hold_seat(a);
+        drain(&mut rb);
+        arm_squeeze_grace(room.clone(), a, since);
+        tokio::task::yield_now().await;
+        tokio::time::advance(SQUEEZE_GRACE + Duration::from_millis(1)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        let msgs = drain(&mut rb);
+        let (state, line) = state_then_line(&msgs, "stepped away");
+        assert!(state < line, "State must precede the Announce: {msgs:?}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_clock_path_sends_the_new_view_before_the_dealers_line() {
+        let (room, _a, _b, mut ra, mut rb) = dealt_room();
+        let room = Arc::new(Mutex::new(room));
+        drain(&mut ra);
+        drain(&mut rb);
+        arm_squeeze_clock(room.clone());
+        tokio::task::yield_now().await;
+        tokio::time::advance(SQUEEZE_CLOCK + Duration::from_millis(1)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+        for mut rx in [ra, rb] {
+            let msgs = drain(&mut rx);
+            let (state, line) = state_then_line(&msgs, "is taking too long");
+            assert!(state < line, "State must precede the Announce: {msgs:?}");
+        }
+    }
+
     // --- fix 1b: a connected squeezer who just sits there ---
 
     #[test]
@@ -918,10 +993,12 @@ mod squeeze_gap_tests {
         let (mut room, a, b, mut ra, mut rb) = dealt_room();
         drain(&mut ra);
         drain(&mut rb);
-        assert_eq!(room.squeeze_clock_expired(), vec![(a, Side::Player)]);
+        let taken = room.squeeze_clock_expired();
+        assert_eq!(who(&taken), vec![(a, Side::Player)]);
         let v = room.table.view_for(a).unwrap();
         assert_eq!(v.player_squeezer, None);
         assert_eq!(v.banker_squeezer, Some(b), "only the stalling hand moves");
+        room.broadcast_then_announce(&taken);
         assert_eq!(
             announcements(&drain(&mut ra)),
             vec!["alice is taking too long — the dealer turns the Player hand.".to_string()]
@@ -930,7 +1007,7 @@ mod squeeze_gap_tests {
         // the dealer now has the Player hand; nobody is stalling until it's up
         assert!(room.squeeze_clock_expired().is_empty());
         while room.table.dealer_flip_one() {}
-        assert_eq!(room.squeeze_clock_expired(), vec![(b, Side::Banker)]);
+        assert_eq!(who(&room.squeeze_clock_expired()), vec![(b, Side::Banker)]);
     }
 
     #[test]
@@ -944,10 +1021,12 @@ mod squeeze_gap_tests {
         room.table.place_bet(a, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
         room.table.deal().unwrap();
         drain(&mut ra);
-        assert_eq!(room.squeeze_clock_expired(), vec![(a, Side::Player)]);
+        let taken = room.squeeze_clock_expired();
+        assert_eq!(who(&taken), vec![(a, Side::Player)]);
         let v = room.table.view_for(a).unwrap();
         assert_eq!(v.player_squeezer, None, "Player goes to the house");
         assert_eq!(v.banker_squeezer, Some(a), "alice keeps the Banker squeeze");
+        room.broadcast_then_announce(&taken);
         let said = announcements(&drain(&mut ra));
         assert_eq!(said, vec!["alice is taking too long — the dealer turns the Player hand.".to_string()]);
     }
