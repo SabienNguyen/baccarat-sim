@@ -183,7 +183,7 @@ export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: R
 
   const boardRef = useRef<HTMLDivElement>(null);
   const fitRef = useRef<HTMLDivElement>(null);
-  const { cell, scale } = useFitCells(boardRef, fitRef);
+  const { cell, scale, scroll } = useFitCells(boardRef, fitRef);
 
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
   const counts = tally ?? boardTally(scoreboard);
@@ -193,7 +193,7 @@ export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: R
       <div
         role="dialog"
         aria-label="All roads"
-        className="roads-modal panel"
+        className={`roads-modal panel${scroll ? " roads-modal--scroll" : ""}`}
         style={{ "--road-cell": `${cell}px` } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
       >

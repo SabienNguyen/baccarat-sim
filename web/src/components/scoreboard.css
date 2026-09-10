@@ -188,7 +188,8 @@
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: calc(var(--road-cell) * 11 / 27);
+  /* the P/B letter: 11px at 27, never under 9px — that still fits a 14px ring */
+  font-size: max(9px, calc(var(--road-cell) * 11 / 27));
   border-radius: 50%;
   color: #fff;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
@@ -328,6 +329,17 @@
      shrink with the cells */
   --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
+/* Too short to fit legibly (useFitCells gave up scaling, or the viewport is
+   under 480px tall): the board slot itself scrolls at the 14px floor. The
+   slot keeps its flex height so the fit measurement stays stable. */
+.roads-modal--scroll .roads-board {
+  overflow: auto;
+}
+@media (max-height: 480px) {
+  .roads-modal .roads-board {
+    overflow: auto;
+  }
+}
 .roads-modal-head {
   flex: 0 0 auto;
   display: flex;
@@ -366,13 +378,14 @@
   gap: 6px;
   transform-origin: top center;
 }
-/* headings scale with the cell so the chrome shrinks along with the grids */
+/* headings scale with the cell so the chrome shrinks along with the grids,
+   but no type on the board goes under 9px: below that it is not legible */
 .roads-board h4 {
-  font-size: calc(var(--road-cell) * 11 / 27);
+  font-size: max(9px, calc(var(--road-cell) * 11 / 27));
   margin-bottom: 3px;
 }
 .roads-board .road-title-trad {
-  font-size: calc(var(--road-cell) * 15 / 27);
+  font-size: max(9px, calc(var(--road-cell) * 15 / 27));
 }
 .roads-board .road-grid {
   padding: 5px;
@@ -426,7 +439,7 @@
   border-radius: 4px;
   box-shadow: inset 0 0 0 1px rgba(240, 213, 138, 0.35);
   font-family: var(--font-display);
-  font-size: max(7px, calc(var(--road-cell) * 9 / 27));
+  font-size: max(9px, calc(var(--road-cell) * 9 / 27));
   color: #f4ecd8;
   min-width: calc(var(--road-cell) * 150 / 27);
   align-self: stretch;
@@ -434,7 +447,7 @@
 .board-card-title {
   caption-side: top;
   padding: 5px 8px 3px;
-  font-size: max(7px, calc(var(--road-cell) * 9 / 27));
+  font-size: max(9px, calc(var(--road-cell) * 9 / 27));
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--gold);
@@ -518,7 +531,7 @@
 }
 /* row label: the food name over the traditional road name */
 .board-card--key .board-key-label {
-  font-size: max(7px, calc(var(--road-cell) * 8 / 27));
+  font-size: max(9px, calc(var(--road-cell) * 8 / 27));
   line-height: 1.1;
 }
 .board-card--key .board-key-fun {
