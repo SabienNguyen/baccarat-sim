@@ -1,14 +1,139 @@
 import { useEffect } from "react";
-import type { ScoreboardSnapshot } from "../engine/types";
+import type { BigRoad, ScoreboardSnapshot } from "../engine/types";
+import { formatCents } from "../format";
+import { nextMarks } from "../roadForecast";
 import { BeadPlateView, BigRoadView, DerivedRoadView } from "./roads";
+import { FoodMark, HanGlyph, type FoodGlyph } from "./roadGlyphs";
 
 interface RoadsModalProps {
   scoreboard: ScoreboardSnapshot;
+  /** Posted table limits in cents; the limits panel is left off without them. */
+  tableMin?: number;
+  tableMax?: number;
   onClose: () => void;
 }
 
-/** A full-screen overlay showing every road, like the pit's scoreboard display. */
-export function RoadsModal({ scoreboard, onClose }: RoadsModalProps) {
+/** Running counts for the board's tally panel, read off the bead plate. */
+export function boardTally(scoreboard: ScoreboardSnapshot) {
+  const t = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, games: 0 };
+  for (const cell of scoreboard.bead_plate.cells) {
+    t.games += 1;
+    if (cell.outcome === "BankerWin") t.banker += 1;
+    else if (cell.outcome === "PlayerWin") t.player += 1;
+    else t.tie += 1;
+    if (cell.banker_pair) t.bankerPair += 1;
+    if (cell.player_pair) t.playerPair += 1;
+  }
+  return t;
+}
+
+/** A labelled two-column card (mark / label / value) shared by the side panels. */
+function BoardCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <table className="board-card" aria-label={title}>
+      <caption className="board-card-title">{title}</caption>
+      <tbody>{children}</tbody>
+    </table>
+  );
+}
+
+function TallyPanel({ scoreboard }: { scoreboard: ScoreboardSnapshot }) {
+  const t = boardTally(scoreboard);
+  const rows: [string, React.ReactNode, number][] = [
+    ["Banker", <HanGlyph kind="banker" size={18} />, t.banker],
+    ["Player", <HanGlyph kind="player" size={18} />, t.player],
+    ["Tie", <HanGlyph kind="tie" size={18} />, t.tie],
+    ["Banker pair", <span className="pair-dot pair-dot--banker pair-dot--inline" />, t.bankerPair],
+    ["Player pair", <span className="pair-dot pair-dot--player pair-dot--inline" />, t.playerPair],
+    ["Game number", null, t.games],
+  ];
+  return (
+    <BoardCard title="Tally">
+      {rows.map(([label, mark, count]) => (
+        <tr key={label} aria-label={label} className={mark ? undefined : "board-row--plain"}>
+          <td className="board-mark" aria-hidden="true">
+            {mark}
+          </td>
+          <th scope="row">{label}</th>
+          <td className="board-value">{count}</td>
+        </tr>
+      ))}
+    </BoardCard>
+  );
+}
+
+const FORECAST_ROWS: [FoodGlyph, string][] = [
+  ["donut", "Donuts"],
+  ["burger", "Hamburgers"],
+  ["fries", "French fries"],
+];
+
+/** What each derived road would stamp if the next hand went Banker / Player. */
+function NextHandPanel({ big }: { big: BigRoad }) {
+  const ifBanker = nextMarks(big, "Banker");
+  const ifPlayer = nextMarks(big, "Player");
+  return (
+    <table className="board-card board-card--key" aria-label="Next hand">
+      <caption className="board-card-title">Next hand</caption>
+      <thead>
+        <tr>
+          <td />
+          <th scope="col" aria-label="If Banker">
+            <HanGlyph kind="banker" size={18} />
+          </th>
+          <th scope="col" aria-label="If Player">
+            <HanGlyph kind="player" size={18} />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {FORECAST_ROWS.map(([glyph, label], i) => (
+          <tr key={glyph} aria-label={label}>
+            <th scope="row" className="board-key-label">
+              {label}
+            </th>
+            <td className="board-key-cell">
+              {ifBanker[i] && <FoodMark glyph={glyph} mark={ifBanker[i]} size={16} />}
+            </td>
+            <td className="board-key-cell">
+              {ifPlayer[i] && <FoodMark glyph={glyph} mark={ifPlayer[i]} size={16} />}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Posted limits. The engine holds every spot to the one table min/max, so
+ *  tie and pairs quote the same numbers a real board would list separately. */
+function LimitsPanel({ min, max }: { min: number; max: number }) {
+  const rows: [string, number][] = [
+    ["Min", min],
+    ["Max", max],
+    ["Tie min", min],
+    ["Tie max", max],
+    ["Pairs min", min],
+    ["Pairs max", max],
+  ];
+  return (
+    <BoardCard title="Table limits">
+      {rows.map(([label, cents]) => (
+        <tr key={label} aria-label={label} className="board-row--plain">
+          <th scope="row">{label}</th>
+          <td className="board-value">{formatCents(cents)}</td>
+        </tr>
+      ))}
+    </BoardCard>
+  );
+}
+
+/**
+ * A full-screen overlay laid out like a Macau electronic scoreboard: bead
+ * plate, tallies, next-hand key and limits across the top, then the Big Road,
+ * Big Eye Boy, and the Small Road / Cockroach Pig pair, with a welcome strip.
+ */
+export function RoadsModal({ scoreboard, tableMin, tableMax, onClose }: RoadsModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -16,6 +141,8 @@ export function RoadsModal({ scoreboard, onClose }: RoadsModalProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const hasLimits = tableMin !== undefined && tableMax !== undefined;
 
   return (
     <div className="roads-backdrop" onClick={onClose}>
@@ -31,12 +158,21 @@ export function RoadsModal({ scoreboard, onClose }: RoadsModalProps) {
             ✕
           </button>
         </div>
-        <div className="roads-grid">
-          <BeadPlateView plate={scoreboard.bead_plate} />
+        <div className="roads-board">
+          <div className="roads-top">
+            <BeadPlateView plate={scoreboard.bead_plate} />
+            <TallyPanel scoreboard={scoreboard} />
+            <NextHandPanel big={scoreboard.big_road} />
+            {hasLimits && <LimitsPanel min={tableMin} max={tableMax} />}
+          </div>
           <BigRoadView road={scoreboard.big_road} />
-          <DerivedRoadView label="Big Eye Boy" road={scoreboard.big_eye_boy} term="big-eye-boy" />
-          <DerivedRoadView label="Small Road" road={scoreboard.small_road} term="small-road" />
-          <DerivedRoadView label="Cockroach Pig" road={scoreboard.cockroach_pig} term="cockroach-pig" />
+          {/* the three derived roads, each stamped with its own food */}
+          <DerivedRoadView label="Big Eye Boy" glyph="donut" road={scoreboard.big_eye_boy} term="big-eye-boy" />
+          <div className="roads-bottom">
+            <DerivedRoadView label="Small Road" glyph="burger" road={scoreboard.small_road} term="small-road" />
+            <DerivedRoadView label="Cockroach Pig" glyph="fries" road={scoreboard.cockroach_pig} term="cockroach-pig" />
+          </div>
+          <div className="roads-footer">Welcome · Good luck</div>
         </div>
       </div>
     </div>
