@@ -47,6 +47,19 @@ test("mirrors the joined view: bankroll, seats, smallest chip armed, no win-con"
   expect(store.getState().goal).toBeNull();
 });
 
+test("the store knows its own seat and renames it over the wire", () => {
+  const { store, sent } = setup();
+  expect(store.getState().me).toBe(1);
+  store.getState().rename("  alice  ");
+  expect(sent).toEqual([{ type: "rename", name: "alice" }]);
+});
+
+test("a blank rename never reaches the wire", () => {
+  const { store, sent } = setup();
+  store.getState().rename("   ");
+  expect(sent).toEqual([]);
+});
+
 test("staking the armed chip sends a bet over the wire", () => {
   const { store, sent } = setup();
   store.getState().selectChip(10000);
@@ -175,4 +188,56 @@ test("asking the dealer for a flip goes over the wire; the server decides", () =
 test("the store knows which seat is mine", () => {
   const { store } = setup();
   expect(store.getState().me).toBe(1);
+});
+
+describe("at the rail", () => {
+  function rail() {
+    const sent: ClientMsg[] = [];
+    const store = createRemoteStore({
+      tier: "mid",
+      view: view({ bankroll: 0 }),
+      me: null,
+      watchers: 2,
+      send: (m) => sent.push(m),
+    });
+    return { store, sent };
+  }
+
+  test("knows it has no seat, and how many are standing with it", () => {
+    const { store } = rail();
+    expect(store.getState().me).toBeNull();
+    expect(store.getState().spectating).toBe(true);
+    expect(store.getState().watchers).toBe(2);
+    store.handle({ type: "state", view: view({ bankroll: 0 }), watchers: 5 });
+    expect(store.getState().watchers).toBe(5);
+    // a push without a count keeps the last one
+    store.handle({ type: "state", view: view({ bankroll: 0 }) });
+    expect(store.getState().watchers).toBe(5);
+  });
+
+  test("a settle at the rail is silent: no delta, no popup, no cha-ching", () => {
+    const { store } = rail();
+    store.handle({ type: "state", view: view({ phase: "Dealing", bankroll: 0 }), watchers: 2 });
+    store.handle({
+      type: "state",
+      view: view({ phase: "Settled", bankroll: 0, outcome: "PlayerWin" }),
+      watchers: 2,
+    });
+    expect(store.getState().snapshot.phase).toBe("Settled");
+    expect(store.getState().lastDelta).toBeNull();
+    expect(store.getState().settleSeq).toBe(0);
+  });
+
+  test("the `watching` push is read like a `joined` one", () => {
+    const { store } = rail();
+    store.handle({
+      type: "watching",
+      room: "AB12CD",
+      tier: "mid",
+      view: view({ bankroll: 0, player_squeezer: 0 }),
+      watchers: 3,
+    });
+    expect(store.getState().squeezers).toEqual({ player: 0, banker: null });
+    expect(store.getState().watchers).toBe(3);
+  });
 });

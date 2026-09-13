@@ -28,8 +28,11 @@ function squeezersOf(view: TableViewMsg): { player: number | null; banker: numbe
 export function createRemoteStore(opts: {
   tier: TableTier;
   view: TableViewMsg;
-  /** This client's own seat id, so pushes can be read from its point of view. */
-  me: number;
+  /** This client's own seat id, so pushes can be read from its point of view;
+   *  null at the rail, where the view is the public one and nothing is ours. */
+  me: number | null;
+  /** Spectators at the rail, if the server said. */
+  watchers?: number;
   send: (msg: ClientMsg) => void;
 }): RemoteStore {
   const { tier, send, me } = opts;
@@ -41,8 +44,17 @@ export function createRemoteStore(opts: {
     snapshot: initialSnapshot,
     lastError: null,
     seats: opts.view.seats,
-    squeezers: squeezersOf(opts.view),
     me,
+    spectating: me === null,
+    watchers: opts.watchers ?? null,
+    // The server scrubs and caps the name; the client only refuses to send
+    // an empty one so a slip of the finger can't turn a seat into "guest".
+    rename: (name) => {
+      const n = name.trim();
+      if (n.length === 0) return;
+      send({ type: "rename", name: n });
+    },
+    squeezers: squeezersOf(opts.view),
     lastFlip: null,
     announcement: null,
     sitOut: () => send({ type: "sit_out" }),
@@ -125,7 +137,7 @@ export function createRemoteStore(opts: {
       set({ lastError: { Message: msg.message } });
       return;
     }
-    if (msg.type !== "state" && msg.type !== "joined") return;
+    if (msg.type !== "state" && msg.type !== "joined" && msg.type !== "watching") return;
 
     const view = msg.view;
     const prev = get().snapshot;
@@ -137,8 +149,10 @@ export function createRemoteStore(opts: {
     // deal, so any other seat's action re-broadcasts that Settled view. Keying
     // off `prev !== "Settled"` would re-fire the pop-up (with a bogus $0 "push")
     // on every such re-broadcast; a real settle only ever follows Dealing.
+    // The rail has no money in the coup, so no popup and no settle sound
+    // either — the flips and the dealer's call are the show.
     let { lastDelta, settleSeq } = get();
-    if (next.phase === "Settled" && prev.phase === "Dealing") {
+    if (next.phase === "Settled" && prev.phase === "Dealing" && !get().spectating) {
       lastDelta = next.bankroll - prev.bankroll;
       settleSeq += 1;
     }
@@ -148,6 +162,8 @@ export function createRemoteStore(opts: {
     set({
       snapshot: next,
       seats: view.seats,
+      // `joined` carries no count; the broadcast right behind it does
+      watchers: msg.type === "joined" ? get().watchers : (msg.watchers ?? get().watchers),
       busted: mySeat?.broke ?? false,
       squeezers: squeezersOf(view),
       ...(flip ? { lastFlip: flip } : next.phase === "Betting" ? { lastFlip: null } : {}),

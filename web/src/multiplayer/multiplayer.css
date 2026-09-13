@@ -202,7 +202,7 @@
 .mp-rooms li {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--ink);
   border-radius: 8px;
@@ -246,11 +246,16 @@
 .mp-table {
   position: relative;
 }
-.mp-roomtag {
+/* the room's tags: the invite link, and the watch link beside it */
+.mp-tags {
   position: fixed;
   top: 8px;
   right: 12px;
   z-index: 60;
+  display: flex;
+  gap: 6px;
+}
+.mp-roomtag {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -341,6 +346,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Our own chip doubles as the rename control: the name is a button, and
+   turns into a text box in place so the seat box never jumps. */
+.seat-name--mine {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  border-bottom: 2px dotted rgba(240, 213, 138, 0.55);
+}
+.seat-name--mine:hover,
+.seat-name--mine:focus-visible {
+  border-bottom-style: solid;
+  outline: none;
+}
+.seat-name--mine:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+  border-radius: 3px;
+}
+/* the pen lives in CSS so the button's text is just the name */
+.seat-name--mine::after {
+  content: "✎";
+  margin-left: 5px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.seat-name--edit {
+  width: 12ch;
+  color: #f3eede;
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-overflow: clip;
+}
+.seat-name--edit:focus {
+  outline: none;
+}
 .seat-money {
   font-family: var(--font-text);
   font-size: 19px;
@@ -373,14 +416,40 @@
   .seat-status--wait { animation: none; }
 }
 
-/* in-between widths and phones: the room tag joins the flow, no overlap */
+/* in-between widths and phones: the room tags join the flow, no overlap */
 @media (max-width: 1180px) {
-  .mp-roomtag {
+  .mp-tags {
     position: static;
-    display: block;
-    width: fit-content;
+    justify-content: center;
+    flex-wrap: wrap;
     margin: 8px auto 0;
   }
+}
+/* the rail's own chip in the seat strip: who's standing behind the seats */
+.seat-chip--rail {
+  min-width: 90px;
+  min-height: 0;
+  padding: 8px 14px;
+  border-style: dashed;
+  box-shadow: none;
+}
+/* the lobby's second verb: watch a table, full or not */
+.mp-watch {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #f3eede;
+  background: var(--panel-bevel-hi);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.mp-watch:hover {
+  filter: brightness(1.15);
+}
+.mp-watch:disabled {
+  filter: brightness(0.6);
+  cursor: not-allowed;
 }
 
 /* phones: the lobby stacks comfortably */

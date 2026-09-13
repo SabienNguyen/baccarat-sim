@@ -98,9 +98,20 @@ or sit out, and the deal waits for the table.
 
 Nobody can freeze the table: a squeezer whose connection drops has 8 seconds to
 come back before the dealer turns that hand himself, and one who simply stops
-squeezing loses it after a 45-second squeeze clock. Drop your connection and
-your seat and bankroll are held for two minutes while the client reconnects on
-its own. Single player runs the **same table rules** with one seat.
+squeezing loses it after a 45-second squeeze clock. Click your own seat to
+change your name mid-session; the whole table sees it on the next push. Drop
+your connection and your seat and bankroll are held for two minutes while the
+client reconnects on its own. Single player runs the **same table rules** with
+one seat.
+
+**Spectator mode.** Any table can be watched from the rail — a full public
+table from the lobby, a private one by its code, or straight from a
+`?watch=CODE` link. A watcher sees exactly what the seats share (the felt, the
+squeeze as it happens, the dealer's calls, the roads, who's holding which hand)
+and nothing they don't: no peeked slivers, no chips, no bets. Watchers never
+block a deal and never keep an empty table open; when the last seat leaves, the
+rail is sent back to the lobby with a word. **Take a seat** sits a watcher down
+in place — and on a full table they simply keep watching.
 
 ### On a phone
 

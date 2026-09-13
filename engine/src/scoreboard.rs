@@ -195,11 +195,20 @@ fn derived_road(big: &BigRoad, offset: usize) -> DerivedRoad {
                     Mark::Blue
                 }
             } else {
-                // Continuation: is there a cell `offset` columns left at this row?
-                if heights[col - offset] > row {
+                // Continuation: look `offset` columns left at this row and at the
+                // row above it. Both cells present → Red; the one above present
+                // but this one missing → Blue (the reference column just ended);
+                // both missing → Red again (nothing changed, the reference
+                // column was already over). Checking only "is this row present"
+                // called every deep run Blue from its third cell on, when a
+                // real display shows one Blue at the break and then Red.
+                let reference = heights[col - offset];
+                if reference > row {
                     Mark::Red
-                } else {
+                } else if reference == row {
                     Mark::Blue
+                } else {
+                    Mark::Red
                 }
             };
             marks.push(mark);
@@ -263,6 +272,43 @@ mod derived_road_tests {
         let s = derive_scoreboard(&worked_example());
         use Mark::*;
         assert_eq!(s.cockroach_pig.columns, vec![vec![Blue], vec![Red]]);
+    }
+
+    #[test]
+    fn a_deep_run_beside_a_short_column_breaks_once_then_holds() {
+        // Big Road [B], [P,P,P,P]: Big Eye Boy reads column 0 (one cell) while
+        // column 1 grows. Row 1: the cell beside is missing but the one above
+        // it exists → Blue. Rows 2 and 3: both the cell beside and the one
+        // above are missing → nothing changed → Red. The old rule marked all
+        // three Blue.
+        use Outcome::*;
+        let s = derive_scoreboard(&[
+            win(BankerWin), win(PlayerWin), win(PlayerWin), win(PlayerWin), win(PlayerWin),
+        ]);
+        use Mark::*;
+        assert_eq!(s.big_eye_boy.columns, vec![vec![Blue], vec![Red, Red]]);
+    }
+
+    #[test]
+    fn small_road_and_cockroach_pig_hold_red_past_a_finished_reference_column() {
+        // Big Road [B,B], [P], [B,B,B,B]: heights [2,1,4].
+        // Small Road (offset 2) reads column 0 for column 2: row 1 Red (2 > 1),
+        // row 2 Blue (2 == 2, the reference just ended), row 3 Red (both gone).
+        use Outcome::*;
+        let s = derive_scoreboard(&[
+            win(BankerWin), win(BankerWin), win(PlayerWin),
+            win(BankerWin), win(BankerWin), win(BankerWin), win(BankerWin),
+        ]);
+        use Mark::*;
+        assert_eq!(s.small_road.columns, vec![vec![Red], vec![Blue], vec![Red]]);
+
+        // Big Road [B], [P], [B], [P,P,P,P]: heights [1,1,1,4]. Cockroach Pig
+        // (offset 3) reads column 0 for column 3: row 1 Blue, rows 2-3 Red.
+        let s = derive_scoreboard(&[
+            win(BankerWin), win(PlayerWin), win(BankerWin),
+            win(PlayerWin), win(PlayerWin), win(PlayerWin), win(PlayerWin),
+        ]);
+        assert_eq!(s.cockroach_pig.columns, vec![vec![Blue], vec![Red, Red]]);
     }
 
     #[test]

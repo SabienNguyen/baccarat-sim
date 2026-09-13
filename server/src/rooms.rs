@@ -14,6 +14,15 @@ use tokio::sync::{mpsc, Mutex};
 
 pub const MAX_SEATS: usize = 7;
 
+/// How many may stand at the rail of one table. Every accepted command fans
+/// out a full snapshot to each of them, so the rail is bounded like the
+/// seats are — generously, since a watcher costs a queue and nothing else.
+pub const MAX_WATCHERS: usize = 20;
+
+/// A spectator's handle at one room: only ever used to find their queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WatcherId(pub u64);
+
 /// The house dealer's rhythm: one card flip per beat.
 pub const DEALER_FLIP_MS: u64 = 1100;
 
@@ -66,6 +75,11 @@ pub struct Room {
     pub table: Table,
     /// Outbound channel per seated player.
     pub conns: HashMap<PlayerId, mpsc::Sender<ServerMsg>>,
+    /// Outbound channel per spectator at the rail. Watchers are not seats:
+    /// they hold no place in `table`, never block a deal, and don't keep a
+    /// room alive — when the last seat goes, the rail is cleared with a word.
+    watchers: HashMap<WatcherId, mpsc::Sender<ServerMsg>>,
+    next_watcher: u64,
     /// A dealer-flip pacer task is already running for this room.
     pub pacing: bool,
     /// When the room was created — gates the sweep during the create→seat gap.
@@ -86,19 +100,62 @@ pub struct Room {
 }
 
 impl Room {
-    /// The dealer speaks to the whole table.
+    /// Every queue in the room: the seats, then the rail.
+    fn everyone(&self) -> impl Iterator<Item = &mpsc::Sender<ServerMsg>> {
+        self.conns.values().chain(self.watchers.values())
+    }
+
+    /// The dealer speaks to the whole table — the rail hears him too.
     pub fn announce(&self, message: String) {
-        for tx in self.conns.values() {
+        for tx in self.everyone() {
             let _ = tx.try_send(ServerMsg::Announce { message: message.clone() });
         }
     }
 
-    /// Tell every seat the room is closing (e.g. the process is shutting
-    /// down), so clients see a reason instead of a bare socket reset.
+    /// Tell every seat and watcher the room is closing (e.g. the process is
+    /// shutting down), so clients see a reason instead of a bare socket reset.
     pub fn close_all(&self, reason: &str) {
-        for tx in self.conns.values() {
+        for tx in self.everyone() {
             let _ = tx.try_send(ServerMsg::Closed { reason: reason.to_string() });
         }
+    }
+
+    /// Stand at the rail. None when it's full.
+    pub fn watch(&mut self, tx: mpsc::Sender<ServerMsg>) -> Option<WatcherId> {
+        if self.watchers.len() >= MAX_WATCHERS {
+            return None;
+        }
+        let wid = WatcherId(self.next_watcher);
+        self.next_watcher += 1;
+        self.watchers.insert(wid, tx);
+        Some(wid)
+    }
+
+    /// Step away from the rail. Nothing at the table changes.
+    pub fn unwatch(&mut self, wid: WatcherId) {
+        self.watchers.remove(&wid);
+    }
+
+    /// Still at this room's rail? False once the rail was cleared under them
+    /// (the room emptied and closed), so a connection can tell a live watch
+    /// from a stale one.
+    pub fn is_watching(&self, wid: WatcherId) -> bool {
+        self.watchers.contains_key(&wid)
+    }
+
+    /// Spectators at the rail right now.
+    pub fn watchers(&self) -> usize {
+        self.watchers.len()
+    }
+
+    /// Clear the rail with a word: every watcher is stood up and told why,
+    /// as a `Left` (not a `Closed`) so their client lands back in the lobby
+    /// on a live socket rather than on the "connection lost" screen.
+    pub fn close_rail(&mut self, reason: &str) {
+        for tx in self.watchers.values() {
+            let _ = tx.try_send(ServerMsg::Left { reason: Some(reason.to_string()) });
+        }
+        self.watchers.clear();
     }
 
     pub fn new(id: String, tier: Tier, private: bool) -> Self {
@@ -113,6 +170,8 @@ impl Room {
                 seed,
             ),
             conns: HashMap::new(),
+            watchers: HashMap::new(),
+            next_watcher: 0,
             pacing: false,
             created: std::time::Instant::now(),
             tokens: HashMap::new(),
@@ -278,7 +337,9 @@ impl Room {
         !gone.is_empty()
     }
 
-    /// A room is only idle when nobody is connected *and* nobody is being held.
+    /// A room is only idle when nobody is connected *and* nobody is being
+    /// held. The rail doesn't count: watchers can't move the game along, so
+    /// a table with only watchers is a dead table.
     pub fn is_vacant(&self) -> bool {
         self.conns.is_empty() && self.held.is_empty()
     }
@@ -289,11 +350,14 @@ impl Room {
             tier: self.tier,
             seats: self.table.seats(),
             max_seats: MAX_SEATS,
+            watchers: self.watchers.len(),
         }
     }
 
-    /// Push each seated player their own fresh view.
+    /// Push each seated player their own fresh view, and the rail the
+    /// public one.
     pub fn broadcast(&mut self) {
+        let watchers = self.watchers.len();
         let views: Vec<(PlayerId, _)> = self
             .conns
             .keys()
@@ -301,7 +365,13 @@ impl Room {
             .collect();
         for (pid, view) in views {
             if let Some(tx) = self.conns.get(&pid) {
-                let _ = tx.try_send(ServerMsg::State { view });
+                let _ = tx.try_send(ServerMsg::State { view, watchers });
+            }
+        }
+        if !self.watchers.is_empty() {
+            let view = self.table.view_public();
+            for tx in self.watchers.values() {
+                let _ = tx.try_send(ServerMsg::State { view: view.clone(), watchers });
             }
         }
     }
@@ -426,7 +496,14 @@ impl Registry {
                 None => false,
             };
             if still_dead {
-                rooms.remove(&id);
+                if let Some(room) = rooms.remove(&id) {
+                    // Anyone still at the rail is watching an empty table
+                    // that is about to stop existing: send them to the lobby
+                    // with a reason, on a socket that stays open.
+                    if let Ok(mut room) = room.try_lock() {
+                        room.close_rail("The table closed — everyone left.");
+                    }
+                }
                 tracing::info!(room = %id, total = rooms.len(), "room swept");
             }
         }
@@ -999,7 +1076,7 @@ mod squeeze_gap_tests {
     fn state_then_line(msgs: &[ServerMsg], phrase: &str) -> (usize, usize) {
         let state = msgs
             .iter()
-            .position(|m| matches!(m, ServerMsg::State { view } if view.player_squeezer.is_none()))
+            .position(|m| matches!(m, ServerMsg::State { view, .. } if view.player_squeezer.is_none()))
             .unwrap_or_else(|| panic!("no State with the house on Player in {msgs:?}"));
         let line = msgs
             .iter()
@@ -1177,5 +1254,129 @@ mod squeeze_gap_tests {
         assert!(g.table.name_of(a).is_none());
         assert!(g.pacing, "the dealer must pick up alice's hand");
         assert!(states(&drain(&mut rb)) >= 1, "bob must see the seat go");
+    }
+}
+
+#[cfg(test)]
+mod rail_tests {
+    //! Spectators: every push, no chair, no chips; never a reason a table
+    //! waits or a room stays open.
+    use super::*;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::settle::BetSpot;
+
+    fn states(rx: &mut mpsc::Receiver<ServerMsg>) -> Vec<(baccarat_engine::table::TableView, usize)> {
+        let mut out = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            if let ServerMsg::State { view, watchers } = m {
+                out.push((view, watchers));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_watcher_gets_every_push_with_no_money_in_it() {
+        let mut room = Room::new("RAIL01".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let a = room.table.join("alice", buy_in).unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        room.seat(a, ta);
+        let (tw, mut rw) = mpsc::channel(OUT_QUEUE);
+        let wid = room.watch(tw).expect("room for one at the rail");
+        assert!(room.is_watching(wid));
+        assert_eq!(room.watchers(), 1);
+        assert_eq!(room.info().watchers, 1);
+
+        room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.deal().unwrap();
+        room.broadcast();
+
+        let (seat_view, seat_count) = states(&mut ra).pop().expect("the seat gets its view");
+        assert_eq!(seat_view.bankroll, buy_in);
+        assert_eq!(seat_count, 1, "the seat is told who's watching");
+        let (rail_view, rail_count) = states(&mut rw).pop().expect("the rail gets the public view");
+        assert_eq!(rail_view.bankroll, 0);
+        assert!(rail_view.bets.is_empty());
+        assert_eq!(rail_view.seats.len(), 1, "but sees the seats");
+        assert_eq!(rail_view.player_squeezer, Some(a));
+        assert_eq!(rail_count, 1);
+
+        // the dealer's voice reaches the rail too
+        room.announce("Turning the Banker hand…".into());
+        assert!(matches!(rw.try_recv(), Ok(ServerMsg::Announce { .. })));
+
+        room.unwatch(wid);
+        assert!(!room.is_watching(wid));
+        assert_eq!(room.watchers(), 0);
+    }
+
+    #[test]
+    fn the_rail_never_blocks_a_deal_or_keeps_a_room_open() {
+        let mut room = Room::new("RAIL02".into(), Tier::Mid, false);
+        let (.., buy_in) = room.tier.stakes();
+        let (tw, _rw) = mpsc::channel(OUT_QUEUE);
+        room.watch(tw).unwrap();
+        // a table of one seat plus a watcher deals as soon as the seat bets
+        let a = room.table.join("alice", buy_in).unwrap();
+        let (ta, _ra) = mpsc::channel(OUT_QUEUE);
+        room.seat(a, ta);
+        room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        assert!(room.table.deal().is_ok(), "a watcher is not a seat the deal waits on");
+        room.table.settle().unwrap();
+        // and when the seat stands up, the room is dead despite the watcher
+        room.release(a);
+        assert!(room.is_vacant());
+    }
+
+    #[test]
+    fn the_rail_has_a_cap() {
+        let mut room = Room::new("RAIL03".into(), Tier::Low, false);
+        let mut keep = Vec::new();
+        for _ in 0..MAX_WATCHERS {
+            let (tx, rx) = mpsc::channel(OUT_QUEUE);
+            assert!(room.watch(tx).is_some());
+            keep.push(rx);
+        }
+        let (tx, _rx) = mpsc::channel(OUT_QUEUE);
+        assert!(room.watch(tx).is_none(), "one over the cap is turned away");
+        assert_eq!(room.watchers(), MAX_WATCHERS);
+    }
+
+    #[test]
+    fn closing_the_rail_stands_everyone_up_with_a_reason() {
+        let mut room = Room::new("RAIL04".into(), Tier::Low, false);
+        let (t1, mut r1) = mpsc::channel(OUT_QUEUE);
+        let (t2, mut r2) = mpsc::channel(OUT_QUEUE);
+        let w1 = room.watch(t1).unwrap();
+        room.watch(t2).unwrap();
+        room.close_rail("The table closed — everyone left.");
+        assert_eq!(room.watchers(), 0);
+        assert!(!room.is_watching(w1), "a cleared watcher is stale, not live");
+        for rx in [&mut r1, &mut r2] {
+            match rx.try_recv() {
+                Ok(ServerMsg::Left { reason: Some(why) }) => assert!(why.contains("closed")),
+                other => panic!("expected Left with a reason, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn sweeping_a_dead_room_sends_its_watchers_to_the_lobby() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let id = room.lock().await.id.clone();
+        let (tw, mut rw) = mpsc::channel(OUT_QUEUE);
+        {
+            let mut g = room.lock().await;
+            let (ta, _ra) = mpsc::channel(OUT_QUEUE);
+            let pid = g.table.join("a", 1_000_000).unwrap();
+            g.seat(pid, ta);
+            g.watch(tw).unwrap();
+            g.release(pid); // the only seat stands up
+        }
+        registry.sweep().await;
+        assert!(registry.get(&id).await.is_none(), "watchers alone don't keep a room");
+        assert!(matches!(rw.try_recv(), Ok(ServerMsg::Left { reason: Some(_) })));
     }
 }

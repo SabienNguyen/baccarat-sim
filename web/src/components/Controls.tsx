@@ -15,6 +15,8 @@ interface ControlsProps {
   onSitOut?: () => void;
   /** Deal a coup with nothing staked, to watch the shoe (single player). */
   onWatch?: () => void;
+  /** At the rail: nothing here moves the game, so only Explain is offered. */
+  spectating?: boolean;
 }
 
 export function Controls({
@@ -28,11 +30,27 @@ export function Controls({
   onToggleExplain,
   onSitOut,
   onWatch,
+  spectating = false,
 }: ControlsProps) {
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
   const settled = snapshot.phase === "Settled";
   const hasBets = snapshot.bets.length > 0;
+
+  if (spectating) {
+    return (
+      <section aria-label="Controls" className="controls">
+        <button
+          type="button"
+          className="btn"
+          aria-pressed={!!explainOn}
+          onClick={onToggleExplain}
+        >
+          Explain
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section aria-label="Controls" className="controls">

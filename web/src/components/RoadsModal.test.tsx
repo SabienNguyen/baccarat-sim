@@ -87,11 +87,11 @@ test("the limits panel is left off when the board has no table to quote", () => 
 
 const cells = (r: HTMLElement) => [...r.querySelectorAll<HTMLElement>("td.board-key-cell")];
 const forecasts = (r: HTMLElement) => cells(r).map((c) => c.dataset.forecast);
-const dimmed = (r: HTMLElement) => cells(r).map((c) => c.classList.contains("board-key-cell--dim"));
+const blank = (r: HTMLElement) => cells(r).map((c) => c.classList.contains("board-key-cell--blank"));
 const colours = (r: HTMLElement) =>
   [...r.querySelectorAll("svg[data-glyph]")].map((s) => s.getAttribute("aria-label"));
 
-test("the key is a legend even on an empty shoe: every road shows red and blue marks", () => {
+test("on an empty shoe the key has its rows and headers but every cell is blank", () => {
   const empty: ScoreboardSnapshot = {
     bead_plate: { cells: [] },
     big_road: { columns: [] },
@@ -102,34 +102,36 @@ test("the key is a legend even on an empty shoe: every road shows red and blue m
   render(<RoadsModal scoreboard={empty} onClose={() => {}} />);
   const key = screen.getByRole("table", { name: "Key · Next hand" });
   expect(within(key).getByText(/key · next hand/i)).toBeInTheDocument();
-  expect(key.querySelectorAll("svg[data-glyph]")).toHaveLength(6);
-  for (const [label, glyph, road] of [
-    ["Donuts", "donut", "Big Eye Boy"],
-    ["Hamburgers", "burger", "Small Road"],
-    ["French fries", "fries", "Cockroach Pig"],
+  // no mark anywhere: a red donut under 庄 would say "red means Banker"
+  expect(key.querySelectorAll("svg[data-glyph]")).toHaveLength(0);
+  for (const [label, road] of [
+    ["Donuts", "Big Eye Boy"],
+    ["Hamburgers", "Small Road"],
+    ["French fries", "Cockroach Pig"],
   ] as const) {
     const r = row(key, label);
     expect(within(r).getByText(road)).toBeInTheDocument(); // traditional name subtitle
-    expect(r.querySelectorAll(`[data-glyph="${glyph}"]`)).toHaveLength(2);
-    expect(colours(r)).toEqual(["Banker", "Player"]); // red under 庄, blue under 闲
     expect(forecasts(r)).toEqual(["none", "none"]);
-    expect(dimmed(r)).toEqual([false, false]); // pure legend: nothing faded
+    expect(blank(r)).toEqual([true, true]);
+    expect(cells(r)[0].title).toBe(`${road}: not started yet`);
   }
 });
 
 test("once a road has started, each cell is painted the colour its side would stamp next", () => {
   render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
   const key = screen.getByRole("table", { name: "Key · Next hand" });
-  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth
-  const donut = row(key, "Donuts"); // Banker -> Blue, Player -> Blue
-  expect(forecasts(donut)).toEqual(["blue", "blue"]);
-  expect(colours(donut)).toEqual(["Player", "Player"]); // both cells show a blue donut
-  expect(dimmed(donut)).toEqual([false, false]); // a forecast is never faded
+  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth.
+  // Big Eye Boy for that Banker reads column 3 (one cell): the cell beside
+  // row 2 and the one above it are both missing → nothing changed → Red.
+  const donut = row(key, "Donuts"); // Banker -> Red, Player -> Blue
+  expect(forecasts(donut)).toEqual(["red", "blue"]);
+  expect(colours(donut)).toEqual(["Banker", "Player"]);
+  expect(blank(donut)).toEqual([false, false]);
   const fries = row(key, "French fries"); // Banker -> Red, Player -> Blue
   expect(forecasts(fries)).toEqual(["red", "blue"]);
   expect(colours(fries)).toEqual(["Banker", "Player"]);
-  expect(dimmed(fries)).toEqual([false, false]);
-  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
+  expect(blank(fries)).toEqual([false, false]);
+  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → red donut");
   expect(cells(fries)[1].title).toBe("Cockroach Pig: Player next → blue fries");
 });
 
@@ -149,24 +151,25 @@ test("crossed forecasts paint the forecast, not the column: 庄 shows blue and �
   const donut = row(key, "Donuts");
   expect(forecasts(donut)).toEqual(["blue", "red"]);
   expect(colours(donut)).toEqual(["Player", "Banker"]); // blue under 庄, red under 闲
-  expect(dimmed(donut)).toEqual([false, false]);
+  expect(blank(donut)).toEqual([false, false]);
   expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
   expect(cells(donut)[1].title).toBe("Big Eye Boy: Player next → red donut");
-  // the other two roads have not started: plain legend, nothing dimmed
+  // the other two roads have not started: blank cells, no mark at all
   const fries = row(key, "French fries");
   expect(forecasts(fries)).toEqual(["none", "none"]);
-  expect(colours(fries)).toEqual(["Banker", "Player"]);
-  expect(dimmed(fries)).toEqual([false, false]);
+  expect(colours(fries)).toEqual([]);
+  expect(blank(fries)).toEqual([true, true]);
 });
 
-test("a road that has not started is shown as plain legend, not blank", () => {
+test("a road that has not started shows blank cells, not a legend", () => {
   render(<RoadsModal scoreboard={scoredSnapshot().scoreboard} onClose={() => {}} />);
   const key = screen.getByRole("table", { name: "Key · Next hand" });
   // scoredSnapshot's big road is [P],[B]: no road can mark a third column yet
   const fries = row(key, "French fries");
-  expect(fries.querySelectorAll("svg[data-glyph]")).toHaveLength(2);
+  expect(fries.querySelectorAll("svg[data-glyph]")).toHaveLength(0);
   expect(forecasts(fries)).toEqual(["none", "none"]);
-  expect(cells(fries)[0].title).toBe("Cockroach Pig: red fries");
+  expect(blank(fries)).toEqual([true, true]);
+  expect(cells(fries)[0].title).toBe("Cockroach Pig: not started yet");
 });
 
 test("the board locks page scroll while it is open and releases it on close", () => {

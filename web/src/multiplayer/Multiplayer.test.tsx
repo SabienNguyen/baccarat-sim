@@ -1,6 +1,27 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Multiplayer } from "./Multiplayer";
+import { Multiplayer, PING_MS } from "./Multiplayer";
+
+/** jsdom on newer Node exposes a bare `localStorage` that is undefined (the
+ *  same quirk analytics.test.ts works around); a Map-backed stand-in keeps the
+ *  remembered-name checks portable. */
+function fakeStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, String(v)),
+    removeItem: (k) => void m.delete(k),
+    clear: () => m.clear(),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() {
+      return m.size;
+    },
+  } as Storage;
+}
+
+beforeAll(() => {
+  if (typeof localStorage === "undefined") vi.stubGlobal("localStorage", fakeStorage());
+});
 
 /** A hand-cranked WebSocket double. */
 class FakeSocket {
@@ -84,6 +105,48 @@ test("creating a table sends the choice and joining mounts the live table", asyn
   expect(screen.getByLabelText("Bet rail")).toBeInTheDocument();
   expect(screen.getByLabelText("Seats")).toBeInTheDocument();
   expect(screen.getByText("sabien")).toBeInTheDocument();
+});
+
+test("renaming at the table goes over the wire and sticks for next time", async () => {
+  const { socket } = mount();
+  socket.open();
+  socket.push({
+    type: "joined",
+    room: "ZZTOP2",
+    player: 0,
+    tier: "high",
+    view: {
+      phase: "Betting",
+      player: { cards: [], total: null },
+      banker: { cards: [], total: null },
+      bets: [],
+      bankroll: 25_000_000,
+      table_min: 50_000,
+      table_max: 10_000_000,
+      outcome: null,
+      payouts: null,
+      events: [],
+      scoreboard: {
+        bead_plate: { cells: [] },
+        big_road: { columns: [] },
+        big_eye_boy: { columns: [] },
+        small_road: { columns: [] },
+        cockroach_pig: { columns: [] },
+      },
+      explain: [],
+      seats: [
+        { id: 0, name: "guest", bankroll: 25_000_000, staked: 0, sitting_out: false, decided: false },
+      ],
+      player_squeezer: null,
+      banker_squeezer: null,
+    },
+  });
+  await userEvent.click(screen.getByRole("button", { name: /guest — change your name/ }));
+  const box = screen.getByRole("textbox", { name: "Your name" });
+  await userEvent.clear(box);
+  await userEvent.type(box, "sabien{Enter}");
+  expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "rename", name: "sabien" });
+  expect(localStorage.getItem("baccarat.name")).toBe("sabien");
 });
 
 test("an away-too-long close shows the server's reason, not a generic outage", () => {
@@ -405,5 +468,159 @@ describe("join-path analytics", () => {
     await userEvent.click(screen.getByRole("button", { name: "Create table" }));
     socket.push({ type: "joined", room: "NEWTBL", player: 0, tier: "mid", view: emptyView("guest") });
     expect(count).not.toHaveBeenCalled();
+  });
+});
+
+describe("the rail (spectator mode)", () => {
+  const scoreboard = {
+    bead_plate: { cells: [] },
+    big_road: { columns: [] },
+    big_eye_boy: { columns: [] },
+    small_road: { columns: [] },
+    cockroach_pig: { columns: [] },
+  };
+  /** The public view: the felt and the seats, no money of our own. */
+  const railView = (seats = 1) => ({
+    phase: "Betting",
+    player: { cards: [], total: null },
+    banker: { cards: [], total: null },
+    bets: [],
+    bankroll: 0,
+    table_min: 2500,
+    table_max: 500_000,
+    outcome: null,
+    payouts: null,
+    events: [],
+    scoreboard,
+    explain: [],
+    seats: Array.from({ length: seats }, (_, i) => ({
+      id: i,
+      name: `p${i}`,
+      bankroll: 1_000_000,
+      staked: 2500,
+      sitting_out: false,
+      decided: true,
+    })),
+    player_squeezer: null,
+    banker_squeezer: null,
+  });
+  const watching = (over: Record<string, unknown> = {}) => ({
+    type: "watching",
+    room: "AB12CD",
+    tier: "mid",
+    view: railView(),
+    proto: 1,
+    watchers: 3,
+    ...over,
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
+    vi.useRealTimers();
+  });
+
+  test("a full table can be watched from the lobby, and a seat taken from the rail", async () => {
+    localStorage.removeItem("baccarat.name"); // a name saved by an earlier test would ride along
+    const { socket } = mount();
+    socket.open();
+    socket.push({
+      type: "rooms",
+      rooms: [{ id: "AB12CD", tier: "mid", seats: 7, max_seats: 7, watchers: 2 }],
+    });
+    expect(screen.getByRole("button", { name: "Sit" })).toBeDisabled();
+    expect(screen.getByText(/2 watching/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Watch AB12CD" }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "watch", room: "AB12CD" });
+
+    socket.push(watching());
+    // the table, minus everything that needs chips
+    expect(screen.getByLabelText("Seats")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Bet rail")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Deal" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Explain" })).toBeInTheDocument();
+    expect(screen.getByText("Watching")).toBeInTheDocument(); // the HUD's box
+    expect(screen.getByLabelText("Watching")).toHaveTextContent("3"); // the strip's chip
+    expect(sessionStorage.getItem("baccarat.watch")).toBe("AB12CD");
+
+    // the offer: the same join as from the lobby, for this table
+    await userEvent.click(screen.getByRole("button", { name: "Take a seat" }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({
+      type: "join_room",
+      room: "AB12CD",
+      name: "guest",
+    });
+    socket.push({
+      type: "joined",
+      room: "AB12CD",
+      player: 1,
+      tier: "mid",
+      view: { ...railView(2), bankroll: 1_000_000 },
+    });
+    expect(screen.getByLabelText("Bet rail")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Take a seat" })).not.toBeInTheDocument();
+    expect(sessionStorage.getItem("baccarat.watch")).toBeNull();
+  });
+
+  test("with every chair taken the offer is there but greyed", () => {
+    const { socket } = mount();
+    socket.open();
+    socket.push(watching({ view: railView(7) }));
+    expect(screen.getByRole("button", { name: "Table full" })).toBeDisabled();
+  });
+
+  test("watch by code", async () => {
+    const { socket } = mount();
+    socket.open();
+    await userEvent.type(screen.getByPlaceholderText("ABC123"), "zztop2");
+    await userEvent.click(screen.getByRole("button", { name: "Watch" }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "watch", room: "ZZTOP2" });
+  });
+
+  test("the table closing under the rail lands in the lobby with the reason", () => {
+    const { socket } = mount();
+    socket.open();
+    socket.push(watching());
+    socket.push({ type: "left", reason: "The table closed — everyone left." });
+    expect(screen.getByText("Live Tables")).toBeInTheDocument();
+    expect(screen.getByText("The table closed — everyone left.")).toBeInTheDocument();
+    expect(sessionStorage.getItem("baccarat.watch")).toBeNull();
+  });
+
+  test("the rail keeps a heartbeat so silence isn't read as away", () => {
+    vi.useFakeTimers();
+    const { socket } = mount();
+    socket.open();
+    socket.push(watching());
+    const before = socket.sent.length;
+    act(() => {
+      vi.advanceTimersByTime(PING_MS * 2 + 10);
+    });
+    const pings = socket.sent.slice(before).map((s) => JSON.parse(s));
+    expect(pings).toEqual([{ type: "ping" }, { type: "ping" }]);
+  });
+
+  test("a rail from this tab is taken up again on reconnect — unless a held seat comes first", () => {
+    sessionStorage.setItem("baccarat.watch", "AB12CD");
+    const { socket } = mount();
+    socket.open();
+    expect(socket.sent.map((s) => JSON.parse(s))).toContainEqual({ type: "watch", room: "AB12CD" });
+
+    sessionStorage.setItem("baccarat.seat", JSON.stringify({ room: "ZZTOP2", token: "tok" }));
+    const { socket: again } = mount();
+    again.open();
+    const kinds = again.sent.map((s) => JSON.parse(s).type);
+    expect(kinds).toContain("rejoin");
+    expect(kinds).not.toContain("watch");
+  });
+
+  test("the watch link copies a ?watch= deep link", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { socket } = mount();
+    socket.open();
+    socket.push(watching({ room: "COPYME" }));
+    await userEvent.click(screen.getByRole("button", { name: /Watch link/ }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("?watch=COPYME"));
+    expect(await screen.findByText("✓ copied")).toBeInTheDocument();
   });
 });
