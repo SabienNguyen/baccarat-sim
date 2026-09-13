@@ -120,16 +120,18 @@ test("the key is a legend even on an empty shoe: every road shows red and blue m
 test("once a road has started, each cell is painted the colour its side would stamp next", () => {
   render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
   const key = screen.getByRole("table", { name: "Key · Next hand" });
-  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth
-  const donut = row(key, "Donuts"); // Banker -> Blue, Player -> Blue
-  expect(forecasts(donut)).toEqual(["blue", "blue"]);
-  expect(colours(donut)).toEqual(["Player", "Player"]); // both cells show a blue donut
+  // heights [2,3,1,1,2]: Banker extends the last column (row 2), Player opens a sixth.
+  // Big Eye Boy for that Banker reads column 3 (one cell): the cell beside
+  // row 2 and the one above it are both missing → nothing changed → Red.
+  const donut = row(key, "Donuts"); // Banker -> Red, Player -> Blue
+  expect(forecasts(donut)).toEqual(["red", "blue"]);
+  expect(colours(donut)).toEqual(["Banker", "Player"]);
   expect(dimmed(donut)).toEqual([false, false]); // a forecast is never faded
   const fries = row(key, "French fries"); // Banker -> Red, Player -> Blue
   expect(forecasts(fries)).toEqual(["red", "blue"]);
   expect(colours(fries)).toEqual(["Banker", "Player"]);
   expect(dimmed(fries)).toEqual([false, false]);
-  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → blue donut");
+  expect(cells(donut)[0].title).toBe("Big Eye Boy: Banker next → red donut");
   expect(cells(fries)[1].title).toBe("Cockroach Pig: Player next → blue fries");
 });
 

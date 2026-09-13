@@ -18,8 +18,11 @@ function markAt(heights: number[], col: number, row: number, offset: number): Ma
     // turn: compare the previous column's depth with the one `offset` further left
     return heights[col - 1] === heights[col - 1 - offset] ? "Red" : "Blue";
   }
-  // continuation: is there a cell `offset` columns left at this row?
-  return heights[col - offset] > row ? "Red" : "Blue";
+  // continuation: the cell `offset` columns left at this row, and the one
+  // above it. Both present → Red; only the upper one → Blue (the reference
+  // column just ended); neither → Red (nothing changed). Mirrors the engine.
+  const reference = heights[col - offset];
+  return reference > row ? "Red" : reference === row ? "Blue" : "Red";
 }
 
 /** Group a flat mark sequence into run-based columns (new column on colour change). */

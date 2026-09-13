@@ -31,6 +31,11 @@ describe("derivedRoad mirrors the engine", () => {
   test("cockroach pig", () => {
     expect(derivedRoad(bigRoad(WORKED), 3)).toEqual([["Blue"], ["Red"]]);
   });
+  test("a deep run beside a short column breaks once, then holds red", () => {
+    // [B],[P,P,P,P]: row 1 Blue (reference column just ended), rows 2-3 Red
+    expect(derivedRoad(bigRoad("BPPPP"), 1)).toEqual([["Blue"], ["Red", "Red"]]);
+    expect(derivedRoad(bigRoad("BBPBBBB"), 2)).toEqual([["Red"], ["Blue"], ["Red"]]);
+  });
   test("nothing before the start cell", () => {
     expect(derivedRoad(bigRoad("BP"), 1)).toEqual([]);
     expect(derivedRoad(bigRoad(""), 1)).toEqual([]);
@@ -39,7 +44,7 @@ describe("derivedRoad mirrors the engine", () => {
 
 describe("nextMarks forecasts what each road would add", () => {
   test("agrees with recomputing the road after the hypothetical win", () => {
-    for (const seq of [WORKED, "BBBBPPBPPPBBPB", "PBPBPBPB", "BBBBBBB", "B", "BP", "BBP"]) {
+    for (const seq of [WORKED, "BBBBPPBPPPBBPB", "PBPBPBPB", "BBBBBBB", "B", "BP", "BBP", "BPPP", "BPPPP", "BBPBBB"]) {
       for (const side of ["Banker", "Player"] as const) {
         const forecast = nextMarks(bigRoad(seq), side);
         const after = bigRoad(seq + (side === "Banker" ? "B" : "P"));

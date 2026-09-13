@@ -556,11 +556,18 @@ fn derived_road(big: &BigRoad, offset: usize) -> DerivedRoad {
                     Mark::Blue
                 }
             } else {
-                // Continuation: is there a cell `offset` columns left at this row?
-                if heights[col - offset] > row {
+                // Continuation: the cell `offset` columns left at this row and the
+                // one above it. Both present → Red; only the upper one → Blue;
+                // neither → Red. (Corrected 2026-09-13: the original plan only
+                // asked "is this row present", which marked every deep run Blue
+                // from its third cell on.)
+                let reference = heights[col - offset];
+                if reference > row {
                     Mark::Red
-                } else {
+                } else if reference == row {
                     Mark::Blue
+                } else {
+                    Mark::Red
                 }
             };
             marks.push(mark);
