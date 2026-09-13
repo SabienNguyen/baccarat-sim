@@ -58,50 +58,42 @@ const KEY_ROWS: [FoodGlyph, string, string][] = [
   ["fries", "French fries", "Cockroach Pig"],
 ];
 
-/** The colour a side's column stands for in the key, and its plain name. */
-const SIDE_MARK: Record<Side, Mark> = { Banker: "Red", Player: "Blue" };
 const MARK_NAME: Record<Mark, string> = { Red: "red", Blue: "blue" };
 
 /**
- * One key cell. Once the road has started it shows what its side would stamp
- * next — the forecast colour at full strength, red or blue regardless of the
- * column it sits in. Before that it is a legend: the column's own colour (red
- * under 庄, blue under 闲), dimmed only if the other side already has a
- * forecast and this one does not.
+ * One key cell: what this side would stamp on this road next, painted the
+ * forecast colour at full strength, red or blue regardless of the column it
+ * sits in. Until the road has started there is nothing to forecast, and the
+ * cell stays blank — a red mark under 庄 would read as "red means Banker",
+ * which is exactly what a derived road's colours do not mean.
  */
 function KeyCell({
   glyph,
   road,
   side,
   forecast,
-  otherForecast,
 }: {
   glyph: FoodGlyph;
   road: string;
   side: Side;
   /** what this side would stamp next, if the road has started */
   forecast: Mark | null;
-  /** the other side's forecast, to know whether the road has started at all */
-  otherForecast: Mark | null;
 }) {
-  const colour = SIDE_MARK[side];
-  const shown = forecast ?? colour;
-  const dim = !forecast && otherForecast !== null;
   const title = forecast
     ? `${road}: ${side} next → ${MARK_NAME[forecast]} ${glyph}`
-    : `${road}: ${MARK_NAME[colour]} ${glyph}`;
+    : `${road}: not started yet`;
   return (
     <td
-      className={`board-key-cell${dim ? " board-key-cell--dim" : ""}`}
+      className={`board-key-cell${forecast ? "" : " board-key-cell--blank"}`}
       data-forecast={forecast ? MARK_NAME[forecast] : "none"}
       title={title}
     >
-      <FoodMark glyph={glyph} mark={shown} size={16} />
+      {forecast && <FoodMark glyph={glyph} mark={forecast} size={16} />}
     </td>
   );
 }
 
-/** Legend for the three food roads, with the next-hand forecast laid over it. */
+/** The next-hand forecast for the three food roads, one cell per side. */
 function NextHandPanel({ big }: { big: BigRoad }) {
   const ifBanker = nextMarks(big, "Banker");
   const ifPlayer = nextMarks(big, "Player");
@@ -126,8 +118,8 @@ function NextHandPanel({ big }: { big: BigRoad }) {
               <span className="board-key-fun">{label}</span>
               <span className="board-key-trad">{road}</span>
             </th>
-            <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} otherForecast={ifPlayer[i]} />
-            <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} otherForecast={ifBanker[i]} />
+            <KeyCell glyph={glyph} road={road} side="Banker" forecast={ifBanker[i]} />
+            <KeyCell glyph={glyph} road={road} side="Player" forecast={ifPlayer[i]} />
           </tr>
         ))}
       </tbody>

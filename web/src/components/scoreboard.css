@@ -551,9 +551,9 @@
   color: var(--accent-2);
 }
 /* forecast overlay: a colour neither side would stamp next fades back */
-.board-card--key .board-key-cell--dim .food-mark {
-  opacity: 0.35;
-  filter: none;
+/* a road that has not started: bare road paper, so no colour is implied */
+.board-card--key .board-key-cell--blank {
+  background: var(--road-paper);
 }
 
 /* phones: the board stacks and scrolls instead of fitting (useFitCells
