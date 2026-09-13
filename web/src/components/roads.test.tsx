@@ -5,7 +5,7 @@ import { scoredSnapshot } from "../test/fixtures";
 import type { BeadCell, BigRoad, BigRoadCell, DerivedRoad } from "../engine/types";
 
 function cell(): BigRoadCell {
-  return { side: "Banker", ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false };
+  return { side: "Banker", ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false };
 }
 
 function road(columns: number): BigRoad {
@@ -34,7 +34,18 @@ test("a win cell carries its pair dots and animal bonus token", () => {
 
   // the plain cell (last column) is unmarked
   const plain = container.querySelectorAll(".road-grid ul")[4];
-  expect(plain.querySelectorAll(".pair-dot, .bonus-token")).toHaveLength(0);
+  expect(plain.querySelectorAll(".pair-dot, .bonus-token, .natural-dot")).toHaveLength(0);
+});
+
+test("a natural cell gets the gold dot; a non-natural cell does not", () => {
+  const columns: BigRoadCell[][] = [
+    [{ ...cell(), side: "Player", natural: true }],
+    [cell()], // not a natural: no dot
+  ];
+  const { container } = render(<BigRoadView road={{ columns }} />);
+  const lists = container.querySelectorAll(".road-grid ul");
+  expect(lists[0].querySelectorAll(".natural-dot")).toHaveLength(1);
+  expect(lists[1].querySelectorAll(".natural-dot")).toHaveLength(0);
 });
 
 test("the big road follows the latest column when it outgrows the window", () => {

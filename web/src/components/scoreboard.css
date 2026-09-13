@@ -211,7 +211,8 @@
 /* --- marks a real pit display stamps on a Big Road cell ---
    Pair dots keep the traditional positions (Player top-left in blue, Banker
    bottom-right in red); square rather than round so they sit with the game's
-   pixel look. The animal token takes the free bottom-left corner. */
+   pixel look. The animal token takes the free bottom-left corner, which
+   leaves the top-right corner free for the natural's gold dot. */
 .pair-dot {
   position: absolute;
   width: calc(var(--road-cell) * 6 / 27);
@@ -241,6 +242,18 @@
   shape-rendering: crispEdges;
   pointer-events: none;
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.35));
+}
+/* natural: the Macau-board convention is a gold dot. Same square pip as the
+   pair dots, in the one corner they and the bonus token leave free. */
+.natural-dot {
+  position: absolute;
+  top: calc(var(--road-cell) * -3 / 27);
+  right: calc(var(--road-cell) * -3 / 27);
+  width: calc(var(--road-cell) * 6 / 27);
+  height: calc(var(--road-cell) * 6 / 27);
+  border: 1px solid var(--ink);
+  background: var(--gold);
+  pointer-events: none;
 }
 
 /* derived roads: the red/blue mark is now a food icon sitting straight on the
@@ -498,6 +511,14 @@
 }
 /* a pair dot sitting in a table cell instead of a road corner */
 .pair-dot--inline {
+  position: static;
+  display: block;
+  width: calc(var(--road-cell) * 8 / 27);
+  height: calc(var(--road-cell) * 8 / 27);
+  margin: 0 auto;
+}
+/* same treatment for the natural's gold dot, in the tally panel */
+.natural-dot--inline {
   position: static;
   display: block;
   width: calc(var(--road-cell) * 8 / 27);
