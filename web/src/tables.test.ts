@@ -1,4 +1,4 @@
-import { TABLES, tableSpec, configFor } from "./tables";
+import { TABLES, tableSpec, configFor, defaultChip } from "./tables";
 
 test("three tiers, each coherent: min < max, buy-in covers many minimum bets", () => {
   expect(TABLES).toHaveLength(3);
@@ -53,4 +53,23 @@ test("only the low 'learn the ropes' table is a coaching table", () => {
   expect(tableSpec("low").coach).toBe(true);
   expect(tableSpec("mid").coach).toBeFalsy();
   expect(tableSpec("high").coach).toBeFalsy();
+});
+
+test("defaultChip arms the smallest chip that clears each table's minimum", () => {
+  // the rack stocks a top-up chip below the min; that one must not be armed first
+  expect(defaultChip(tableSpec("low").denoms, tableSpec("low").table_min)).toBe(100); // $1
+  expect(defaultChip(tableSpec("mid").denoms, tableSpec("mid").table_min)).toBe(2500); // $25
+  expect(defaultChip(tableSpec("high").denoms, tableSpec("high").table_min)).toBe(50000); // $500
+  for (const t of TABLES) {
+    expect(defaultChip(t.denoms, t.table_min)).toBeGreaterThanOrEqual(t.table_min);
+    expect(t.denoms).toContain(defaultChip(t.denoms, t.table_min));
+  }
+});
+
+test("defaultChip falls back to the smallest chip when nothing clears the minimum", () => {
+  expect(defaultChip([500, 100, 2500], 10000)).toBe(100);
+});
+
+test("defaultChip ignores denoms ordering", () => {
+  expect(defaultChip([500000, 2500, 500, 10000], 2500)).toBe(2500);
 });

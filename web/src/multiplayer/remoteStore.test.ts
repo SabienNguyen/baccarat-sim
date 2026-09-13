@@ -39,11 +39,12 @@ function setup() {
   return { store, sent };
 }
 
-test("mirrors the joined view: bankroll, seats, smallest chip armed, no win-con", () => {
+test("mirrors the joined view: bankroll, seats, smallest playable chip armed, no win-con", () => {
   const { store } = setup();
   expect(store.getState().snapshot.bankroll).toBe(1_000_000);
   expect(store.getState().seats).toHaveLength(1);
-  expect(store.getState().selectedChip).toBe(store.getState().denoms[0]); // smallest denom armed
+  // mid stocks a $5 top-up chip below its $25 minimum; the armed chip must clear the min (F18)
+  expect(store.getState().selectedChip).toBe(2500);
   expect(store.getState().goal).toBeNull();
 });
 

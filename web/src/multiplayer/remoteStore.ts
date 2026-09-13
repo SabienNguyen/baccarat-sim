@@ -6,7 +6,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { RoundSnapshot } from "../engine/types";
 import type { GameState } from "../store/gameStore";
-import { tableSpec, type TableTier } from "../tables";
+import { tableSpec, defaultChip, type TableTier } from "../tables";
 import { lastFlipBetween } from "../cards";
 import { trackFirstHand } from "../analytics";
 import type { ClientMsg, ServerMsg, TableViewMsg } from "./protocol";
@@ -69,7 +69,8 @@ export function createRemoteStore(opts: {
     // than waiting (F6). The UI uses this to offer a rebuy or a way out.
     busted: false,
     denoms,
-    selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
+    // smallest chip that clears the table minimum — the rack's top-up chip below it would be refused (F18)
+    selectedChip: defaultChip(denoms, tableSpec(tier).table_min),
 
     toggleExplain: () => set({ explainOn: !get().explainOn }),
 
