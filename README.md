@@ -181,6 +181,10 @@ For multiplayer, run the table server alongside the dev server (Vite proxies
 cargo run -p baccarat-server   # listens on PORT (default 8788)
 ```
 
+`npm run phones` opens several phone-emulated browser windows against your
+local server for manual multiplayer testing — see
+[`docs/TESTING.md`](docs/TESTING.md).
+
 <details>
 <summary><b>Deploying the table service</b></summary>
 
