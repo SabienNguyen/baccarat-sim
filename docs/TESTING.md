@@ -25,8 +25,10 @@ It will:
    left to right with a 20px gap.
 4. Print a banner with the manual script below, then wait for Ctrl-C, which
    closes every window it opened and stops anything it spawned (a table
-   service or Vite dev server it started itself is stopped; one that was
-   already running is left alone).
+   service or Vite dev server it started itself is stopped — including the
+   server binary `cargo run` forks, by signalling the whole process group,
+   not just the `cargo` process — and it polls each port until it's released
+   before exiting; one that was already running is left alone).
 
 Flags: `--tier=mid|low|high` (default `mid`), `--n=3`, `--device="Pixel 7"`
 (any playwright-core device name), `--headless`, `--vite-port` /

@@ -47,7 +47,7 @@ async function main() {
     spawnLogged("cargo", ["run", "-p", "baccarat-server"], {
       cwd: repoRoot(),
       env: { ...process.env, PORT: String(SERVER_PORT) },
-    }, "server"),
+    }, "server", SERVER_PORT),
     180_000,
   );
 
@@ -57,6 +57,7 @@ async function main() {
       ["vite", "--port", String(VITE_PORT), "--strictPort"],
       { cwd: new URL("../web/", import.meta.url).pathname },
       "vite",
+      VITE_PORT,
     ),
     60_000,
   );
@@ -144,9 +145,15 @@ function isListening(port) {
   });
 }
 
-function spawnLogged(cmd, cmdArgs, opts, label) {
-  const child = spawn(cmd, cmdArgs, { ...opts, stdio: ["ignore", "pipe", "pipe"] });
-  spawned.push(child);
+function spawnLogged(cmd, cmdArgs, opts, label, port) {
+  // `detached: true` puts the child in its own process group (pgid ===
+  // child.pid). That matters because `cargo run` forks the actual server
+  // binary as a further child of itself: SIGTERM to just the `cargo`
+  // process doesn't reach that grandchild, which otherwise outlives it and
+  // is left holding the port. Signalling the whole group (`-pid`) reaches
+  // cargo, the server binary, and anything else it spawned.
+  const child = spawn(cmd, cmdArgs, { ...opts, stdio: ["ignore", "pipe", "pipe"], detached: true });
+  spawned.push({ child, label, port });
   const prefix = (data) =>
     data
       .toString()
@@ -164,16 +171,50 @@ function spawnLogged(cmd, cmdArgs, opts, label) {
   return child;
 }
 
+/** Send `sig` to a spawned child's whole process group, falling back to just
+ *  the child if the group signal throws (e.g. it already exited). */
+function killGroup(child, sig) {
+  try {
+    process.kill(-child.pid, sig);
+  } catch {
+    try {
+      child.kill(sig);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
 async function shutdown(code) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log("\n[phones] shutting down...");
   await Promise.all(browsers.map((b) => b.close().catch(() => {})));
-  for (const child of spawned) {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
+
+  for (const entry of spawned) {
+    if (entry.child.exitCode === null && entry.child.signalCode === null) {
+      killGroup(entry.child, "SIGTERM");
     }
   }
+
+  // Give each group a moment to release its port, then confirm — and
+  // escalate to SIGKILL for anything still holding on.
+  const deadline = Date.now() + 5000;
+  for (const entry of spawned) {
+    if (entry.port === undefined) continue;
+    let released = !(await isListening(entry.port));
+    while (!released && Date.now() < deadline) {
+      await sleep(200);
+      released = !(await isListening(entry.port));
+    }
+    if (!released) {
+      killGroup(entry.child, "SIGKILL");
+      await sleep(300);
+      released = !(await isListening(entry.port));
+    }
+    console.log(`[phones] port ${entry.port} ${released ? "released" : "still in use — gave up"}`);
+  }
+
   process.exit(code);
 }
 
