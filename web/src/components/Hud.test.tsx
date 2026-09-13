@@ -43,3 +43,16 @@ test("shows goal progress when the table has a win condition", () => {
   expect(screen.getByText("Goal $4,000.00")).toBeInTheDocument();
   expect(screen.getByText("25%")).toBeInTheDocument();
 });
+
+test("at the rail the money box is an invitation: no bankroll, a seat on offer", async () => {
+  const onTakeSeat = vi.fn();
+  const { rerender } = render(<Hud snapshot={bettingSnapshot()} spectating onTakeSeat={onTakeSeat} />);
+  expect(screen.queryByText("$1,000.00")).not.toBeInTheDocument();
+  expect(screen.getByText("Watching")).toBeInTheDocument();
+  const seat = screen.getByRole("button", { name: "Take a seat" });
+  await userEvent.click(seat);
+  expect(onTakeSeat).toHaveBeenCalledOnce();
+  // every chair taken: the offer stays visible but can't be taken up
+  rerender(<Hud snapshot={bettingSnapshot()} spectating onTakeSeat={onTakeSeat} seatsFull />);
+  expect(screen.getByRole("button", { name: "Table full" })).toBeDisabled();
+});

@@ -169,6 +169,10 @@ pub struct Table {
     last_outcome: Option<crate::round::Outcome>,
     /// The settled round's cards, kept on the felt until the next deal.
     last_round: Option<RoundResult>,
+    /// True from a settle until any seat opens the next coup (bets or sits
+    /// out). Each seat's own settled display is keyed on its `payouts`; a
+    /// spectator has no seat, so theirs is keyed on the table as a whole.
+    settled_on_felt: bool,
     /// Memoized scoreboard, keyed on history length. `history` is append-only
     /// (only pushed at settle, never cleared), so equal length ⇒ identical
     /// content ⇒ identical roads — this skips recomputing all five roads on
@@ -195,6 +199,7 @@ impl Table {
             history: Vec::new(),
             last_outcome: None,
             last_round: None,
+            settled_on_felt: false,
             sb_cache: std::cell::RefCell::new(None),
         }
     }
@@ -313,6 +318,7 @@ impl Table {
         // betting again closes last round's settled display
         player.payouts = None;
         player.bets.push(PlacedBet { kind, amount });
+        self.settled_on_felt = false; // the next coup is open
         Ok(())
     }
 
@@ -329,6 +335,7 @@ impl Table {
         player.bets.clear();
         player.sitting_out = true;
         player.payouts = None;
+        self.settled_on_felt = false; // a decision opens the next coup too
         Ok(())
     }
 
@@ -743,6 +750,7 @@ impl Table {
         }
         self.last_outcome = Some(round.outcome);
         self.last_round = Some(round.clone());
+        self.settled_on_felt = true;
         self.history.push(RoundRecord::from_round(&round));
         self.phase = Phase::Betting;
         Ok(())
@@ -773,6 +781,20 @@ impl Table {
             .iter()
             .find(|p| p.id == pid)
             .ok_or(TableError::NoSuchPlayer)?;
+        Ok(self.view_as(Some(player)))
+    }
+
+    /// The table as someone standing behind the seats sees it: a spectator
+    /// with no chair, no chips and no cards. Everything the seats share — the
+    /// felt, the roads, who holds which hand, the seat strip — is here. The
+    /// money fields are empty, every peeked sliver stays face down (a peek is
+    /// one squeezer's private glimpse), and the settled coup stays on the felt
+    /// until any seat opens the next one.
+    pub fn view_public(&self) -> TableView {
+        self.view_as(None)
+    }
+
+    fn view_as(&self, viewer: Option<&Player>) -> TableView {
         let seats = self
             .players
             .iter()
@@ -783,8 +805,8 @@ impl Table {
                 staked: p.bets.iter().map(|b| b.amount).sum(),
                 sitting_out: p.sitting_out,
                 decided: p.decided(self.config.table_min),
-                /// Out of chips for this table — the client shows a rebuy or
-                /// leave prompt, and the deal no longer waits on them.
+                // Out of chips for this table — the client shows a rebuy or
+                // leave prompt, and the deal no longer waits on them.
                 broke: p.broke(self.config.table_min),
             })
             .collect();
@@ -794,11 +816,20 @@ impl Table {
             }
             Phase::Betting => (None, None),
         };
+        let viewer_id = viewer.map(|p| p.id);
+        // A seat's settled display closes the moment THEY re-bet or sit out
+        // (their `payouts` clears). A spectator's closes when anyone does.
+        let showing_settled = match viewer {
+            Some(p) => p.payouts.is_some(),
+            None => self.settled_on_felt,
+        };
+        let bets = viewer.map(|p| p.bets.clone()).unwrap_or_default();
+        let bankroll = viewer.map_or(0, |p| p.bankroll);
 
         // A settled coup keeps its cards on the felt, face up, until the next
         // deal — the result should be readable, not swept away with the chips.
         let settled_hands = |side: Side| -> HandView {
-            match (&self.last_round, player.payouts.is_some()) {
+            match (&self.last_round, showing_settled) {
                 (Some(round), true) => {
                     let hand = match side {
                         Side::Player => &round.player,
@@ -810,30 +841,25 @@ impl Table {
                 _ => HandView { cards: Vec::new(), total: None },
             }
         };
-        let view = match &self.phase {
+        match &self.phase {
             Phase::Betting => TableView {
-                phase: if player.payouts.is_some() {
-                    PhaseTag::Settled
-                } else {
-                    PhaseTag::Betting
-                },
+                phase: if showing_settled { PhaseTag::Settled } else { PhaseTag::Betting },
                 player: settled_hands(Side::Player),
                 banker: settled_hands(Side::Banker),
-                bets: player.bets.clone(),
-                bankroll: player.bankroll,
+                bets,
+                bankroll,
                 table_min: self.config.table_min,
                 table_max: self.config.table_max,
-                // Gate on the viewer's own settled display, like payouts and
-                // explain — once they re-bet, the previous coup's outcome is
-                // no longer theirs to see.
-                outcome: if player.payouts.is_some() { self.last_outcome } else { None },
-                payouts: player.payouts.clone(),
+                // Gate on the settled display, like payouts and explain — once
+                // it closes, the previous coup's outcome is no longer on show.
+                outcome: if showing_settled { self.last_outcome } else { None },
+                payouts: viewer.and_then(|p| p.payouts.clone()),
                 events: Vec::new(),
                 scoreboard: self.scoreboard(),
                 // Keep the 'why this round' trace on the settled felt — the same
                 // window (and key) the face-up cards use — so the explanation is
                 // there while the learner studies the finished coup.
-                explain: match (&self.last_round, player.payouts.is_some()) {
+                explain: match (&self.last_round, showing_settled) {
                     (Some(round), true) => round.trace.clone(),
                     _ => Vec::new(),
                 },
@@ -843,18 +869,21 @@ impl Table {
             },
             Phase::Dealing { round, reveal, .. } => {
                 // A peeked sliver is the squeezer's private glimpse. Everyone
-                // else sees that card still face down until it is revealed —
-                // otherwise every client at the table receives the identity
-                // the squeeze is supposed to keep in one player's hands.
-                // (holder == None only carries peeks on a solo table, where
-                // the sole viewer made them.)
+                // else — another seat, or a spectator — sees that card still
+                // face down until it is revealed; otherwise every client at the
+                // table receives the identity the squeeze is supposed to keep in
+                // one player's hands. (holder == None only carries peeks on a
+                // solo table, where the sole viewer made them.)
+                let hidden = |holder: Option<PlayerId>| match (viewer_id, holder) {
+                    (None, _) => true,
+                    (Some(v), Some(h)) => h != v,
+                    (Some(_), None) => false,
+                };
                 let redact = |statuses: &[CardStatus], holder: Option<PlayerId>| {
                     statuses
                         .iter()
                         .map(|s| match s {
-                            CardStatus::Peeked if matches!(holder, Some(h) if h != pid) => {
-                                CardStatus::FaceDown
-                            }
+                            CardStatus::Peeked if hidden(holder) => CardStatus::FaceDown,
                             s => *s,
                         })
                         .collect::<Vec<_>>()
@@ -863,8 +892,8 @@ impl Table {
                     phase: PhaseTag::Dealing,
                     player: hand_view(&round.player, &redact(&reveal.player, player_squeezer)),
                     banker: hand_view(&round.banker, &redact(&reveal.banker, banker_squeezer)),
-                    bets: player.bets.clone(),
-                    bankroll: player.bankroll,
+                    bets,
+                    bankroll,
                     table_min: self.config.table_min,
                     table_max: self.config.table_max,
                     outcome: None,
@@ -886,8 +915,7 @@ impl Table {
                     banker_squeezer,
                 }
             }
-        };
-        Ok(view)
+        }
     }
 }
 
@@ -1160,6 +1188,89 @@ mod tests {
             assert!(matches!(card, crate::session::CardView::FaceDown));
         }
         assert!(v.player.total.is_none());
+    }
+
+    #[test]
+    fn a_spectator_sees_the_felt_but_no_money_and_no_face_down_card() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 2_000).unwrap();
+        t.deal().unwrap();
+        let v = t.view_public();
+        assert_eq!(v.phase, PhaseTag::Dealing);
+        assert!(v.bets.is_empty(), "no chair, no chips");
+        assert_eq!(v.bankroll, 0);
+        assert!(v.payouts.is_none());
+        for card in v.player.cards.iter().chain(v.banker.cards.iter()) {
+            assert!(matches!(card, CardView::FaceDown));
+        }
+        // everything the seats share is there: who's seated, who holds what
+        assert_eq!(v.seats.len(), 2);
+        assert_eq!(v.seats[1].staked, 2_000);
+        assert_eq!(v.player_squeezer, Some(a));
+        assert_eq!(v.banker_squeezer, Some(b));
+        assert_eq!((v.table_min, v.table_max), (100, 1_000_000));
+    }
+
+    #[test]
+    fn a_spectator_never_sees_a_peeked_sliver() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        t.peek(a, Side::Player, 0).unwrap();
+        assert!(matches!(t.view_for(a).unwrap().player.cards[0], CardView::Peeked { .. }));
+        assert!(matches!(t.view_public().player.cards[0], CardView::FaceDown));
+        t.reveal(a, Side::Player, 0).unwrap();
+        assert!(matches!(t.view_public().player.cards[0], CardView::FaceUp(_)));
+    }
+
+    #[test]
+    fn a_spectator_keeps_the_settled_coup_until_a_seat_opens_the_next_one() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.sit_out(b).unwrap();
+        // nothing settled yet: an empty betting felt
+        let v = t.view_public();
+        assert_eq!(v.phase, PhaseTag::Betting);
+        assert!(v.player.cards.is_empty());
+        assert!(v.outcome.is_none());
+
+        t.deal().unwrap();
+        t.settle().unwrap();
+        let v = t.view_public();
+        assert_eq!(v.phase, PhaseTag::Settled);
+        assert!(v.outcome.is_some());
+        assert!(v.payouts.is_none(), "no seat, no payouts");
+        assert!(v.player.cards.iter().all(|c| matches!(c, CardView::FaceUp(_))));
+        assert!(v.player.total.is_some());
+        assert!(!v.explain.is_empty(), "the trace rides on the settled felt");
+
+        // b opens the next coup: the spectator's felt clears...
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        let v = t.view_public();
+        assert_eq!(v.phase, PhaseTag::Betting);
+        assert!(v.player.cards.is_empty());
+        assert!(v.outcome.is_none());
+        assert!(v.explain.is_empty());
+        // ...while a, who hasn't acted, is still looking at the result
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Settled);
+    }
+
+    #[test]
+    fn sitting_out_opens_the_next_coup_for_the_spectator_too() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        assert_eq!(t.view_public().phase, PhaseTag::Settled);
+        t.sit_out(a).unwrap();
+        assert_eq!(t.view_public().phase, PhaseTag::Betting);
     }
 
     #[test]

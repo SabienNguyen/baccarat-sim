@@ -29,9 +29,9 @@ export interface DealerFlipOffer {
 export function dealerFlipOffer(
   snapshot: RoundSnapshot,
   squeezers: { player: number | null; banker: number | null } | null,
-  me: number,
+  me: number | null,
 ): DealerFlipOffer | null {
-  if (snapshot.phase !== "Dealing" || squeezers === null) return null;
+  if (snapshot.phase !== "Dealing" || squeezers === null || me === null) return null;
   const mine = squeezers.player === me && squeezers.banker !== me ? "Player" : null;
   if (mine === null) return null; // Banker-only squeezers wait on the pacer; both/none: no house hand
   if (squeezers.banker !== null) return null; // another seat holds it — ask them, not the dealer

@@ -6,6 +6,7 @@ import { storeFor, resetStore } from "./store/useGameStore";
 import { HomeScreen } from "./components/HomeScreen";
 import { Multiplayer } from "./multiplayer/Multiplayer";
 import { SeatsStrip } from "./multiplayer/SeatsStrip";
+import { MAX_SEATS } from "./multiplayer/protocol";
 import type { TableTier } from "./tables";
 import { urlParam } from "./urlParams";
 import { isFaceUp } from "./cards";
@@ -51,15 +52,18 @@ interface AppProps {
  *  store (tests) goes straight to the table. */
 export function App({ store }: AppProps = {}) {
   // Deep links: ?room=CODE lands straight in multiplayer (Multiplayer reads the
-  // code and auto-joins); ?tier=low|mid|high opens that solo table directly —
-  // this is the landing half of the "share your run / beat the table" links.
+  // code and auto-joins), ?watch=CODE the same but at the rail; ?tier=low|mid|high
+  // opens that solo table directly — the landing half of the "share your run /
+  // beat the table" links.
   const [tier, setTier] = useState<TableTier | null>(() => {
     if (store) return "mid";
-    if (urlParam("room")) return null;
+    if (urlParam("room") || urlParam("watch")) return null;
     const t = urlParam("tier");
     return t === "low" || t === "mid" || t === "high" ? t : null;
   });
-  const [multi, setMulti] = useState(() => !store && !!urlParam("room"));
+  const [multi, setMulti] = useState(
+    () => !store && (!!urlParam("room") || !!urlParam("watch")),
+  );
   const [resetSeq, setResetSeq] = useState(0);
   if (multi) {
     return <Multiplayer onExit={() => setMulti(false)} />;
@@ -89,9 +93,11 @@ interface GameTableProps {
   onReset?: () => void;
   /** Single-player table tier, for the victory share link's deep link back. */
   tier?: TableTier;
+  /** From the rail: sit down at the table being watched (multiplayer). */
+  onTakeSeat?: () => void;
 }
 
-export function GameTable({ store: active, onLeave, onReset, tier }: GameTableProps) {
+export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }: GameTableProps) {
   const [cutting, setCutting] = useState(false);
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
@@ -129,6 +135,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const goalReached = useStore(active, (s) => s.goalReached);
   const dismissGoal = useStore(active, (s) => s.dismissGoal);
   const busted = useStore(active, (s) => s.busted);
+  const spectating = useStore(active, (s) => s.spectating);
+  const watchers = useStore(active, (s) => s.watchers);
 
   // every table noise rides the store: works for local and remote play alike
   useGameSounds(active);
@@ -272,6 +280,9 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
         goal={goal}
         onResetBankroll={onReset}
         onLeave={onLeave}
+        spectating={spectating}
+        onTakeSeat={onTakeSeat}
+        seatsFull={(seats?.length ?? 0) >= MAX_SEATS}
       />
       <main className="stage">
         {seats !== null && (
@@ -280,7 +291,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
             me={me}
             squeezers={squeezers}
             betting={snapshot.phase !== "Dealing"}
-            onRename={rename}
+            onRename={spectating ? undefined : rename}
+            watchers={watchers}
           />
         )}
         <DealerLine
@@ -331,21 +343,25 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
           onWatch={seats === null ? watchHand : undefined}
+          spectating={spectating}
         />
         {showNudge && nudge !== null && (
           <BonusNudge hit={nudge} onDismiss={() => setDismissedNudgeSeq(settleSeq)} />
         )}
-        <BetRail
-          snapshot={snapshot}
-          denoms={denoms}
-          selectedChip={selectedChip}
-          available={available}
-          onSelectChip={selectChip}
-          onStake={stake}
-          onClear={clearBets}
-          view={betView}
-          onView={setBetView}
-        />
+        {/* No chips at the rail: the felt is there to watch, not to bet on. */}
+        {!spectating && (
+          <BetRail
+            snapshot={snapshot}
+            denoms={denoms}
+            selectedChip={selectedChip}
+            available={available}
+            onSelectChip={selectChip}
+            onStake={stake}
+            onClear={clearBets}
+            view={betView}
+            onView={setBetView}
+          />
+        )}
       </main>
       <div className="board-dock">
         <Scoreboard

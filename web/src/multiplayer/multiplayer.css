@@ -202,7 +202,7 @@
 .mp-rooms li {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--ink);
   border-radius: 8px;
@@ -246,11 +246,16 @@
 .mp-table {
   position: relative;
 }
-.mp-roomtag {
+/* the room's tags: the invite link, and the watch link beside it */
+.mp-tags {
   position: fixed;
   top: 8px;
   right: 12px;
   z-index: 60;
+  display: flex;
+  gap: 6px;
+}
+.mp-roomtag {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -411,14 +416,40 @@
   .seat-status--wait { animation: none; }
 }
 
-/* in-between widths and phones: the room tag joins the flow, no overlap */
+/* in-between widths and phones: the room tags join the flow, no overlap */
 @media (max-width: 1180px) {
-  .mp-roomtag {
+  .mp-tags {
     position: static;
-    display: block;
-    width: fit-content;
+    justify-content: center;
+    flex-wrap: wrap;
     margin: 8px auto 0;
   }
+}
+/* the rail's own chip in the seat strip: who's standing behind the seats */
+.seat-chip--rail {
+  min-width: 90px;
+  min-height: 0;
+  padding: 8px 14px;
+  border-style: dashed;
+  box-shadow: none;
+}
+/* the lobby's second verb: watch a table, full or not */
+.mp-watch {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #f3eede;
+  background: var(--panel-bevel-hi);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.mp-watch:hover {
+  filter: brightness(1.15);
+}
+.mp-watch:disabled {
+  filter: brightness(0.6);
+  cursor: not-allowed;
 }
 
 /* phones: the lobby stacks comfortably */

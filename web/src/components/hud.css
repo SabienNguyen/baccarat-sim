@@ -134,6 +134,28 @@
 .hud-action:hover {
   filter: brightness(1.2);
 }
+/* At the rail the money box is an invitation instead: one gold button. */
+.hud-box--rail {
+  gap: 8px;
+}
+.hud-seat {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: #1a1208;
+  background: var(--gold);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.hud-seat:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.hud-seat:disabled {
+  filter: grayscale(0.6) brightness(0.7);
+  cursor: not-allowed;
+}
 .hud-goal-bar {
   display: block;
   width: 100%;

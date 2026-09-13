@@ -3,6 +3,9 @@
 import type { BetKind, FlipRequest, RoundSnapshot, Side } from "../engine/types";
 import type { TableTier } from "../tables";
 
+/** Chairs at a table — mirrors the server's MAX_SEATS. */
+export const MAX_SEATS = 7;
+
 /** One seat's public face, shown to the whole table. */
 export interface SeatView {
   id: number;
@@ -28,6 +31,8 @@ export interface RoomInfo {
   tier: TableTier;
   seats: number;
   max_seats: number;
+  /** Spectators at the rail (absent from a server that predates them). */
+  watchers?: number;
 }
 
 export type ClientMsg =
@@ -35,6 +40,10 @@ export type ClientMsg =
   | { type: "create_room"; name: string; tier: TableTier; private: boolean }
   | { type: "join_room"; room: string; name: string }
   | { type: "rejoin"; room: string; token: string }
+  /** Stand behind the seats: every push, no chair. Works on a full table. */
+  | { type: "watch"; room: string }
+  /** Keepalive while watching — a spectator otherwise never speaks. */
+  | { type: "ping" }
   | { type: "leave" }
   | { type: "rename"; name: string }
   | { type: "bet"; kind: BetKind; amount: number }
@@ -61,8 +70,17 @@ export type ServerMsg =
       /** Credential for reclaiming this seat, bankroll intact, after a drop. */
       token?: string;
     }
-  | { type: "state"; view: TableViewMsg }
-  | { type: "left" }
+  | {
+      type: "watching";
+      room: string;
+      tier: TableTier;
+      view: TableViewMsg;
+      proto?: number;
+      watchers?: number;
+    }
+  | { type: "state"; view: TableViewMsg; watchers?: number }
+  /** Stood up. `reason` when the server did it (the table closed under us). */
+  | { type: "left"; reason?: string }
   | { type: "error"; message: string }
   | { type: "closed"; reason: string };
 
@@ -129,6 +147,39 @@ export function loadSeat(): { room: string; token: string } | null {
 export function clearSeatToken(): void {
   try {
     sessionStorage.removeItem(SEAT_KEY);
+  } catch {
+    /* nothing to do */
+  }
+}
+
+/**
+ * The table this tab is watching, so a dropped socket (or a reload) puts the
+ * spectator back at the same rail. No credential is needed — watching is
+ * open to anyone with the code — so this is just the code. Same lifetime as
+ * the seat token: the tab, not the browser.
+ */
+const WATCH_KEY = "baccarat.watch";
+
+export function saveWatchRoom(room: string): void {
+  try {
+    sessionStorage.setItem(WATCH_KEY, room);
+  } catch {
+    /* private mode, or storage full — a reconnect lands in the lobby */
+  }
+}
+
+export function loadWatchRoom(): string | null {
+  try {
+    const room = sessionStorage.getItem(WATCH_KEY);
+    return room && room.length > 0 ? room : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearWatchRoom(): void {
+  try {
+    sessionStorage.removeItem(WATCH_KEY);
   } catch {
     /* nothing to do */
   }

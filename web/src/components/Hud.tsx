@@ -10,6 +10,12 @@ interface HudProps {
   goal?: number | null;
   onResetBankroll?: () => void;
   onLeave?: () => void;
+  /** Watching from the rail: no bankroll to show, a seat to offer instead. */
+  spectating?: boolean;
+  /** Take a seat at the table being watched. */
+  onTakeSeat?: () => void;
+  /** Every chair is taken — the offer stays visible but can't be taken up. */
+  seatsFull?: boolean;
 }
 
 /** Format a signed net amount, e.g. 500 -> "+$5.00", -500 -> "-$5.00". */
@@ -21,16 +27,42 @@ function formatNet(net: number): string {
 // notes name a bet the same way — and so the two Dragon Bonus sides don't both
 // render as a bare "DragonBonus".
 
-export function Hud({ snapshot, goal, onResetBankroll, onLeave }: HudProps) {
+export function Hud({
+  snapshot,
+  goal,
+  onResetBankroll,
+  onLeave,
+  spectating = false,
+  onTakeSeat,
+  seatsFull = false,
+}: HudProps) {
   const progress = goal ? Math.min(snapshot.bankroll / goal, 1) : 0;
   return (
     <section aria-label="HUD" className="hud panel">
       <h1 className="hud-title">Baccarat Simulator</h1>
 
-      <div className="hud-box hud-box--bankroll">
-        <span className="hud-box-label">Bankroll</span>
-        <span className="hud-box-value">{formatCents(snapshot.bankroll)}</span>
-      </div>
+      {spectating ? (
+        // No chips at the rail: the money box becomes the way to get some.
+        <div className="hud-box hud-box--rail">
+          <span className="hud-box-label">Watching</span>
+          {onTakeSeat && (
+            <button
+              type="button"
+              className="hud-seat"
+              disabled={seatsFull}
+              title={seatsFull ? "Every seat is taken" : undefined}
+              onClick={onTakeSeat}
+            >
+              {seatsFull ? "Table full" : "Take a seat"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="hud-box hud-box--bankroll">
+          <span className="hud-box-label">Bankroll</span>
+          <span className="hud-box-value">{formatCents(snapshot.bankroll)}</span>
+        </div>
+      )}
 
       {goal != null && (
         <div className="hud-box hud-box--goal">

@@ -104,6 +104,15 @@ your connection and your seat and bankroll are held for two minutes while the
 client reconnects on its own. Single player runs the **same table rules** with
 one seat.
 
+**Spectator mode.** Any table can be watched from the rail — a full public
+table from the lobby, a private one by its code, or straight from a
+`?watch=CODE` link. A watcher sees exactly what the seats share (the felt, the
+squeeze as it happens, the dealer's calls, the roads, who's holding which hand)
+and nothing they don't: no peeked slivers, no chips, no bets. Watchers never
+block a deal and never keep an empty table open; when the last seat leaves, the
+rail is sent back to the lobby with a word. **Take a seat** sits a watcher down
+in place — and on a full table they simply keep watching.
+
 ### On a phone
 
 <div align="center">

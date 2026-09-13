@@ -74,3 +74,7 @@ test("not offered when another seat holds the other hand (multiplayer)", () => {
   expect(dealerFlipOffer(snap, { player: 3, banker: null }, 5)).toBeNull();
   expect(dealerFlipOffer(snap, { player: 3, banker: null }, 3)).toEqual({ side: "Banker", remaining: 2 });
 });
+
+test("never offered at the rail — a spectator holds no hand to be squeezing", () => {
+  expect(dealerFlipOffer(dealing([DOWN, DOWN], [DOWN, DOWN]), iHoldPlayer, null)).toBeNull();
+});

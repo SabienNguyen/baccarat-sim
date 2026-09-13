@@ -94,6 +94,7 @@ The app is billed as a learning tool; these close the gaps between "plays correc
 | F15 | **Multiplayer must be deployable in minutes, not re-coded.** The production socket URL was hardcoded in `protocol.ts` and baked at build time, so moving off Fly meant editing source and rebuilding — the worst possible friction at the one moment traffic arrives | S | ✅ done 2026-07-25 — the deploy workflow now passes the `VITE_WS_URL` repository variable into the web build (verified: an override URL really does land in the bundle), and `render.yaml` deploys the existing Dockerfile to Render's free tier, which needs no card and supports WebSockets. Switching hosts is now: deploy, set one variable, done |
 | F16 | **What "ready for traffic" still lacks.** Deploying is now trivial, but the table service has known gaps that only bite under real load: F6 (a busted player can block deals), F7 (a disconnect forfeits the seat and bankroll; a rejoin is a free rebuy), F10 (no client reconnect, so a blip is a dead end). None matter at zero users; all three matter on day one of a traffic spike | M | open — F7 then F10 is the order that matters, since F7 is the one that loses a player money |
 | F10 | Client-side reconnect with backoff | M | ✅ **done 2026-07-25** — a dropped socket now retries on its own (1s, 2s, 4s, 8s, 16s, 30s, then the manual screen) instead of dead-ending. Pairs with F7: the seat is held for two minutes, so a reconnect inside that window returns the player to their own chair and bankroll without them doing anything. A close the *server* chose (AFK eviction, protocol skew) is a verdict, not a blip, and is never retried. Pending timers are cleared on unmount; the manual **Try again** resets the budget. 3 new tests, and the three F14 tests were rewritten to exhaust the budget rather than assume a close is instantly terminal |
+| F17 | **Spectator mode** — watch any table from the rail: a full public table from the lobby, a private one by code, or a `?watch=CODE` link. Server: `Table::view_public()` (no money, every peek redacted, the settled felt held until any seat opens the next coup), a per-room rail (`MAX_WATCHERS=20`) that gets every `State`/`Announce` but never blocks a deal or keeps a room alive (the sweep clears it with `Left{reason}`), `Watch`/`Ping` messages, unknown codes spend the join strike budget, and a same-room `JoinRoom` seats a watcher in place (a full table leaves them watching). Client: lobby Watch buttons, a watch-link tag, a rail heartbeat, no bet rail / one Explain control / a **Take a seat** HUD box, a “N watching” chip in the seat strip, silent settles | M | ✅ shipped 2026-09-13 — engine 4 / server 10 / web 16 new tests; protocol stays v1 (additive) |
 
 ## Hardening
 
@@ -568,3 +569,12 @@ organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
   tight enough to catch a real tableau bug). Single source of truth confirmed —
   no divergent payout/draw logic between `Session` and `Table`. Web 326 /
   server 9 green.
+- **2026-09-13 (spectator mode, F17):** Mapped the multiplayer path end to
+  end before building (engine `view_for` → `Room`/`Registry` → socket handler
+  → `remoteStore` → `GameTable`). The one privacy-bearing change is in the
+  engine: `view_for` now shares a `view_as(viewer: Option<&Player>)` with the
+  new `view_public()`, so a watcher's redaction (every peek face down) and a
+  seat's (only *other* seats' peeks) come from one match instead of two code
+  paths. The connection's `Option<Seat>` became `Option<At>` (seat or rail);
+  every table command still requires `At::Seat`. Server 44 / engine 182 /
+  web 499 green.

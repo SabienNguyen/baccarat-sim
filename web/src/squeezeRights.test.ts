@@ -37,3 +37,10 @@ test("no squeeze info (a plain session) stays interactive", () => {
   expect(canSqueeze("Player", null, 0)).toBe(true);
   expect(canSqueeze("Banker", null, 7)).toBe(true);
 });
+
+test("at the rail nothing is yours to squeeze — unless the session has no rights at all", () => {
+  expect(canSqueeze("Player", sq(5, 3), null)).toBe(false);
+  expect(canSqueeze("Banker", sq(5, 3), null)).toBe(false);
+  expect(canSqueeze("Player", sq(null, null), null)).toBe(false);
+  expect(canSqueeze("Player", null, null)).toBe(true); // a plain session, as ever
+});

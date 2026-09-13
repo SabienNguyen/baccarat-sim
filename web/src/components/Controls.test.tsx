@@ -101,3 +101,19 @@ test("the Explain button reflects and toggles explain mode", async () => {
   expect(onToggleExplain).toHaveBeenCalledOnce();
 });
 
+test("at the rail only Explain is offered — nothing there moves the game", () => {
+  render(
+    <Controls
+      snapshot={bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] })}
+      onDeal={vi.fn()}
+      onSettle={vi.fn()}
+      onNewHand={vi.fn()}
+      onNewShoe={vi.fn()}
+      onSitOut={vi.fn()}
+      onToggleExplain={vi.fn()}
+      spectating
+    />,
+  );
+  expect(screen.getByRole("button", { name: "Explain" })).toBeInTheDocument();
+  expect(screen.getAllByRole("button")).toHaveLength(1);
+});

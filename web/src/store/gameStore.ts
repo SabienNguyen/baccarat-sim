@@ -33,13 +33,17 @@ export interface GameState {
   lastError: DealerError | null;
   /** Everyone at the table (multiplayer); null at a single-player table. */
   seats: SeatView[] | null;
+  /** Watching from the rail (multiplayer): every push, no chair, no chips. */
+  spectating: boolean;
+  /** Spectators at the rail (multiplayer); null at a single-player table. */
+  watchers: number | null;
   /** Change the name the rest of the table sees (multiplayer); no-op alone. */
   rename: (name: string) => void;
   /** Who holds each hand's cards (multiplayer squeeze rights). */
   squeezers: { player: number | null; banker: number | null } | null;
   /** This client's own seat id, to read `squeezers` from its point of view
-   *  (a single-player table seats its player as 0). */
-  me: number;
+   *  (a single-player table seats its player as 0); null at the rail. */
+  me: number | null;
   /** The high-limit courtesy: while still squeezing your own hand, ask the
    *  dealer to turn one or both of the house hand's cards early. */
   requestDealerFlip: (count: FlipRequest) => void;
@@ -141,6 +145,8 @@ export function createGameStore(
       snapshot: session.snapshot(),
       lastError: null,
       seats: null,
+      spectating: false,
+      watchers: null,
       // read the rights off the opening snapshot too, not just after a command
       squeezers: squeezersOf(session.snapshot()),
       me: 0, // the sole seat at a single-player table

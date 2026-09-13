@@ -38,6 +38,13 @@ pub enum ClientMsg {
     JoinRoom { room: String, name: String },
     /// Reclaim a seat kept warm after a drop. The token came from `Joined`.
     Rejoin { room: String, token: String },
+    /// Stand behind the seats: every push the table gets, no chair, no chips.
+    /// Works on a full table and, by code, on a private one.
+    Watch { room: String },
+    /// Keepalive. A spectator sends nothing else, and a silent connection is
+    /// otherwise evicted as away (see IDLE_LIMIT).
+    Ping,
+    /// Stand up — from a seat or from the rail.
     Leave,
     /// Change the name the table sees for this seat. Sanitized like a join.
     Rename { name: String },
@@ -60,6 +67,8 @@ pub struct RoomInfo {
     pub tier: Tier,
     pub seats: usize,
     pub max_seats: usize,
+    /// Spectators at the rail.
+    pub watchers: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -78,8 +87,21 @@ pub enum ServerMsg {
         /// if the socket drops. Sent only to its owner; never broadcast.
         token: String,
     },
-    State { view: TableView },
-    Left,
+    /// Standing at the rail: the spectator's view (see `Table::view_public`).
+    /// No token — there is no seat to reclaim; a dropped watcher just watches
+    /// again.
+    Watching { room: String, tier: Tier, view: TableView, proto: u32, watchers: usize },
+    State {
+        view: TableView,
+        /// Spectators at the rail, so the table can show who's watching.
+        watchers: usize,
+    },
+    /// Stood up. `reason` when the server did it — the table closed under a
+    /// spectator — so the client can say why in the lobby.
+    Left {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
     Error { message: String },
     /// The server is closing this connection for a stated reason (e.g. the
     /// seat was given up after being away). The client shows `reason`.
@@ -113,6 +135,22 @@ mod tests {
 
         let m: ClientMsg = serde_json::from_str(r#"{"type":"rename","name":"alice"}"#).unwrap();
         assert!(matches!(m, ClientMsg::Rename { ref name } if name == "alice"));
+
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"watch","room":"ab12cd"}"#).unwrap();
+        assert!(matches!(m, ClientMsg::Watch { ref room } if room == "ab12cd"));
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"ping"}"#).unwrap();
+        assert!(matches!(m, ClientMsg::Ping));
+    }
+
+    #[test]
+    fn a_plain_left_carries_no_reason_field() {
+        // Older clients match `{"type":"left"}` exactly; a server-initiated
+        // stand-up adds the reason, a voluntary one stays as it was.
+        assert_eq!(serde_json::to_string(&ServerMsg::Left { reason: None }).unwrap(), r#"{"type":"left"}"#);
+        assert_eq!(
+            serde_json::to_string(&ServerMsg::Left { reason: Some("closed".into()) }).unwrap(),
+            r#"{"type":"left","reason":"closed"}"#
+        );
     }
 
     #[test]

@@ -55,3 +55,14 @@ test("without a seat id (single player) nobody gets a rename control", () => {
   render(<SeatsStrip seats={seats} squeezers={null} betting />);
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
+
+test("the rail shows as one more chip, only when someone is standing at it", () => {
+  const { rerender } = render(<SeatsStrip seats={seats} squeezers={null} betting watchers={3} />);
+  const rail = screen.getByLabelText("Watching");
+  expect(rail).toHaveTextContent("3");
+  expect(rail).toHaveTextContent("watching");
+  rerender(<SeatsStrip seats={seats} squeezers={null} betting watchers={0} />);
+  expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
+  rerender(<SeatsStrip seats={seats} squeezers={null} betting />);
+  expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
+});

@@ -14,7 +14,8 @@ use axum::{Json, Router};
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
 use rooms::{
-    arm_squeeze_clock, arm_squeeze_grace, error_message, maybe_pace, Registry, Room, OUT_QUEUE,
+    arm_squeeze_clock, arm_squeeze_grace, error_message, maybe_pace, Registry, Room, WatcherId,
+    OUT_QUEUE,
 };
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -202,6 +203,18 @@ struct Seat {
     pid: baccarat_engine::table::PlayerId,
 }
 
+/// Where a connection is: in a chair, or at the rail behind them. A rail
+/// connection sends nothing but keepalives and receives everything the
+/// table does; the only command it can turn into anything is a `JoinRoom`
+/// for the same table, which seats it in place.
+enum At {
+    Seat(Seat),
+    Rail { room: Arc<Mutex<Room>>, wid: WatcherId },
+}
+
+/// The dealer's word to a watcher who reaches for the chips.
+const RAIL_ONLY: &str = "You're watching — take a seat to play.";
+
 async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
     let (mut ws_tx, mut ws_rx) = socket.split();
     // Outbound queue: room broadcasts land here and drain to the socket.
@@ -221,7 +234,7 @@ async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
         }
     });
 
-    let mut seat: Option<Seat> = None;
+    let mut seat: Option<At> = None;
     let mut failed_joins: u32 = 0;
 
     loop {
@@ -260,13 +273,15 @@ async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
             Ok(Some(Ok(_))) => continue, // non-text frame (ping/binary): ignore
             Ok(Some(Err(_))) | Ok(None) => break, // socket errored or closed
             Err(_) => {
-                // Idle past the limit — away too long.
-                let reason = if seat.is_some() {
+                // Idle past the limit — away too long. (A watcher pings, so a
+                // silent rail connection is as gone as a silent lobby one.)
+                let seated = matches!(seat, Some(At::Seat(_)));
+                let reason = if seated {
                     "You were away too long — the table gave up your seat."
                 } else {
                     "Closed for inactivity — reconnect when you're ready."
                 };
-                tracing::info!(seated = seat.is_some(), "idle connection evicted");
+                tracing::info!(seated, "idle connection evicted");
                 let _ = tx.try_send(ServerMsg::Closed { reason: reason.into() });
                 break;
             }
@@ -274,7 +289,12 @@ async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
     }
 
     // Connection gone: stand up and tell the table.
-    if let Some(Seat { room, pid }) = seat.take() {
+    if let Some(At::Rail { room, wid }) = &seat {
+        let mut guard = room.lock().await;
+        guard.unwatch(*wid);
+        guard.broadcast(); // the seats' "watching" count
+    }
+    if let Some(At::Seat(Seat { room, pid })) = seat.take() {
         let since = {
             let mut guard = room.lock().await;
             // Hold the seat rather than stand the player up: a dropped socket
@@ -306,13 +326,63 @@ async fn handle_command(
     cmd: ClientMsg,
     registry: &Registry,
     tx: &mpsc::Sender<ServerMsg>,
-    seat: &mut Option<Seat>,
+    seat: &mut Option<At>,
     failed_joins: &mut u32,
 ) -> bool {
+    // A rail the room cleared under us (it emptied and was swept) is no
+    // longer a place we're at: the client already got its `Left`, and its
+    // next join or watch must not be refused as "already at a table".
+    if let Some(At::Rail { room, wid }) = seat.as_ref() {
+        if !room.lock().await.is_watching(*wid) {
+            *seat = None;
+        }
+    }
     match cmd {
         ClientMsg::ListRooms => {
             let rooms = registry.list_public().await;
             let _ = tx.try_send(ServerMsg::Rooms { rooms });
+        }
+        // Nothing to do: the read itself is what resets the idle clock.
+        ClientMsg::Ping => {}
+        ClientMsg::Watch { room } => {
+            if seat.is_some() {
+                let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
+                return true;
+            }
+            match registry.get(&room).await {
+                Some(room) => {
+                    let mut guard = room.lock().await;
+                    match guard.watch(tx.clone()) {
+                        Some(wid) => {
+                            *seat = Some(At::Rail { room: room.clone(), wid });
+                            let _ = tx.try_send(ServerMsg::Watching {
+                                room: guard.id.clone(),
+                                tier: guard.tier,
+                                view: guard.table.view_public(),
+                                proto: PROTOCOL_VERSION,
+                                watchers: guard.watchers(),
+                            });
+                            guard.broadcast(); // everyone's "watching" count
+                            tracing::info!(room = %guard.id, watchers = guard.watchers(), "watcher at the rail");
+                            // A valid code, same as a real seating: the
+                            // strike budget is for guessing, not for watching.
+                            *failed_joins = 0;
+                        }
+                        None => {
+                            let _ = tx.try_send(ServerMsg::Error {
+                                message: "The rail's full at this table — try again in a bit.".into(),
+                            });
+                        }
+                    }
+                }
+                None => {
+                    // The same budget as a join: a watch is the same lookup
+                    // against the same invite codes.
+                    if unknown_code(tx, failed_joins) {
+                        return false;
+                    }
+                }
+            }
         }
         ClientMsg::CreateRoom { name, tier, private } => {
             // Guard before allocating: `sit` refuses when already seated, and a
@@ -324,7 +394,7 @@ async fn handle_command(
             } else {
                 match registry.create(tier, private).await {
                     Some(room) => {
-                        sit(room, &name, tx, seat).await;
+                        sit(room, &name, tx, seat, None).await;
                     }
                     None => {
                         let _ = tx.try_send(ServerMsg::Error {
@@ -348,7 +418,7 @@ async fn handle_command(
                     match guard.reclaim(&token) {
                         Some(pid) => {
                             guard.seat(pid, tx.clone());
-                            *seat = Some(Seat { room: room.clone(), pid });
+                            *seat = Some(At::Seat(Seat { room: room.clone(), pid }));
                             match guard.table.view_for(pid) {
                                 Ok(view) => {
                                     let fresh = guard.issue_token(pid);
@@ -392,33 +462,31 @@ async fn handle_command(
         }
         ClientMsg::JoinRoom { room, name } => match registry.get(&room).await {
             Some(room) => {
+                // From the rail, a join for THIS table is "take a seat": the
+                // watcher becomes a player in place, keeping their rail spot
+                // if the table turns out to be full. A join for another table
+                // from the rail is refused like any join while seated.
+                let from_rail = match seat.as_ref() {
+                    Some(At::Rail { room: here, wid }) if Arc::ptr_eq(here, &room) => Some(*wid),
+                    _ => None,
+                };
                 // Reset the strike budget only on a real seating — not on any
                 // lookup hit. Otherwise an attacker interleaves one known code
                 // (their own room, or any from ListRooms) every few guesses to
                 // zero the counter and brute-force invite codes forever on one
                 // socket. A refused sit ("already seated") must not reset it.
-                if sit(room, &name, tx, seat).await {
+                if sit(room, &name, tx, seat, from_rail).await {
                     *failed_joins = 0;
                 }
             }
             None => {
-                // The room code doubles as a private table's invite code, so
-                // bad guesses get a budget: log them, and cut the connection
-                // once it looks like a brute-force rather than a typo.
-                *failed_joins += 1;
-                tracing::warn!(strikes = *failed_joins, "join attempt for unknown room code");
-                if *failed_joins >= MAX_JOIN_FAILURES {
-                    let _ = tx.try_send(ServerMsg::Closed {
-                        reason: "Too many unknown table codes — check your invite and reconnect."
-                            .into(),
-                    });
+                if unknown_code(tx, failed_joins) {
                     return false;
                 }
-                let _ = tx.try_send(ServerMsg::Error { message: "No table by that code.".into() });
             }
         },
-        ClientMsg::Leave => {
-            if let Some(Seat { room, pid }) = seat.take() {
+        ClientMsg::Leave => match seat.take() {
+            Some(At::Seat(Seat { room, pid })) => {
                 {
                     let mut guard = room.lock().await;
                     guard.conns.remove(&pid);
@@ -427,13 +495,21 @@ async fn handle_command(
                 }
                 maybe_pace(room);
                 registry.sweep().await;
-                let _ = tx.try_send(ServerMsg::Left);
+                let _ = tx.try_send(ServerMsg::Left { reason: None });
             }
-        }
-        // table commands need a seat
+            Some(At::Rail { room, wid }) => {
+                let mut guard = room.lock().await;
+                guard.unwatch(wid);
+                guard.broadcast();
+                let _ = tx.try_send(ServerMsg::Left { reason: None });
+            }
+            None => {}
+        },
+        // table commands need a seat — the rail has no chips to push
         table_cmd => {
-            let Some(Seat { room, pid }) = seat.as_ref() else {
-                let _ = tx.try_send(ServerMsg::Error { message: "Take a seat first.".into() });
+            let Some(At::Seat(Seat { room, pid })) = seat.as_ref() else {
+                let message = if seat.is_some() { RAIL_ONLY } else { "Take a seat first." };
+                let _ = tx.try_send(ServerMsg::Error { message: message.into() });
                 return true;
             };
             let pid = *pid;
@@ -487,7 +563,7 @@ async fn handle_command(
                     // now, not the long clock.
                     let gone_squeezers = if dealt { room.held_squeezers() } else { Vec::new() };
                     drop(room);
-                    if let Some(Seat { room, .. }) = seat.as_ref() {
+                    if let Some(At::Seat(Seat { room, .. })) = seat.as_ref() {
                         maybe_pace(room.clone());
                         for (pid, since) in gone_squeezers {
                             arm_squeeze_grace(room.clone(), pid, since);
@@ -506,14 +582,34 @@ async fn handle_command(
     true
 }
 
-/// Returns true only if this connection actually took a seat.
+/// An unknown room code. The code doubles as a private table's invite code,
+/// so bad guesses get a budget: log them, and cut the connection once it
+/// looks like a brute-force rather than a typo. Returns true when the
+/// connection should close.
+fn unknown_code(tx: &mpsc::Sender<ServerMsg>, failed_joins: &mut u32) -> bool {
+    *failed_joins += 1;
+    tracing::warn!(strikes = *failed_joins, "attempt for unknown room code");
+    if *failed_joins >= MAX_JOIN_FAILURES {
+        let _ = tx.try_send(ServerMsg::Closed {
+            reason: "Too many unknown table codes — check your invite and reconnect.".into(),
+        });
+        return true;
+    }
+    let _ = tx.try_send(ServerMsg::Error { message: "No table by that code.".into() });
+    false
+}
+
+/// Returns true only if this connection actually took a seat. `from_rail`
+/// is this connection's spot at THIS room's rail, given up only once the
+/// chair is really theirs — a full table leaves them watching, not stranded.
 async fn sit(
     room: Arc<Mutex<Room>>,
     name: &str,
     tx: &mpsc::Sender<ServerMsg>,
-    seat: &mut Option<Seat>,
+    seat: &mut Option<At>,
+    from_rail: Option<WatcherId>,
 ) -> bool {
-    if seat.is_some() {
+    if seat.is_some() && from_rail.is_none() {
         let _ = tx.try_send(ServerMsg::Error { message: "You're already at a table.".into() });
         return false;
     }
@@ -522,6 +618,9 @@ async fn sit(
     let name = clean_name(name);
     match guard.table.join(&name, buy_in) {
         Ok(pid) => {
+            if let Some(wid) = from_rail {
+                guard.unwatch(wid);
+            }
             guard.seat(pid, tx.clone());
             // Commit the connection-local seat NOW, before the fallible work
             // below (`view_for`'s expect, and `broadcast` which calls
@@ -529,7 +628,7 @@ async fn sit(
             // unwind's disconnect cleanup keys off `seat.is_some()` and will
             // `leave(pid)` + remove the conn — without this early commit it
             // would see `None` and leave a ghost seat wedging the room (S9).
-            *seat = Some(Seat { room: room.clone(), pid });
+            *seat = Some(At::Seat(Seat { room: room.clone(), pid }));
             let view = guard.table.view_for(pid).expect("just joined");
             let token = guard.issue_token(pid);
             let _ = tx.try_send(ServerMsg::Joined {
@@ -655,7 +754,7 @@ mod squeeze_clock_tests {
         tokio::time::advance(rooms::SQUEEZE_GRACE * 4).await; // ...and fires on Betting: no-op
         settle_tasks().await;
 
-        let mut seat = Some(Seat { room: room.clone(), pid: b });
+        let mut seat = Some(At::Seat(Seat { room: room.clone(), pid: b }));
         let mut strikes = 0;
         assert!(handle_command(ClientMsg::Deal, &registry, &tb, &mut seat, &mut strikes).await);
         settle_tasks().await;
@@ -674,7 +773,7 @@ mod squeeze_clock_tests {
         }
         let state = msgs
             .iter()
-            .position(|m| matches!(m, ServerMsg::State { view } if view.player_squeezer.is_none()))
+            .position(|m| matches!(m, ServerMsg::State { view, .. } if view.player_squeezer.is_none()))
             .expect("bob sees the house holding Player");
         let line = msgs
             .iter()
@@ -687,7 +786,7 @@ mod squeeze_clock_tests {
     async fn a_repeated_peek_does_not_rewind_the_squeeze_clock() {
         let registry = Registry::new();
         let (room, a, _b, ta, _ra) = dealt(&registry).await;
-        let mut seat = Some(Seat { room: room.clone(), pid: a });
+        let mut seat = Some(At::Seat(Seat { room: room.clone(), pid: a }));
         let mut strikes = 0;
         let gen0 = room.lock().await.squeeze_generation();
 
@@ -742,5 +841,162 @@ mod tests {
         assert_eq!(clean_name("a\u{00AD}b\u{061C}c\u{180E}"), "abc");
         // a name that is ONLY an invisible payload collapses to guest
         assert_eq!(clean_name("\u{E0061}\u{E0062}\u{E0063}"), "guest");
+    }
+}
+
+#[cfg(test)]
+mod rail_tests {
+    //! The rail through the command handler: watch, be refused the chips,
+    //! take a seat in place, and spend the same strike budget as a join.
+    use super::*;
+    use protocol::Tier;
+
+    fn drain(rx: &mut mpsc::Receiver<ServerMsg>) -> Vec<ServerMsg> {
+        let mut out = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            out.push(m);
+        }
+        out
+    }
+
+    /// A room with one seated player, plus a fresh connection's channel.
+    async fn room_with_a_seat(registry: &Registry) -> (Arc<Mutex<Room>>, String) {
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let id = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let (ta, ra) = mpsc::channel(OUT_QUEUE);
+            std::mem::forget(ra); // keep alice's queue open without draining it
+            g.seat(a, ta);
+            g.id.clone()
+        };
+        (room, id)
+    }
+
+    #[tokio::test]
+    async fn watching_then_taking_a_seat_in_place() {
+        let registry = Registry::new();
+        let (room, id) = room_with_a_seat(&registry).await;
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let mut at: Option<At> = None;
+        let mut strikes = 3; // a couple of typos on the way in
+
+        // watch: the public view comes back, and the strike budget resets
+        assert!(handle_command(ClientMsg::Watch { room: id.to_lowercase() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(at, Some(At::Rail { .. })));
+        assert_eq!(strikes, 0, "a valid code is not a guess");
+        let msgs = drain(&mut rx);
+        match &msgs[0] {
+            ServerMsg::Watching { room, view, watchers, proto, .. } => {
+                assert_eq!(room, &id);
+                assert_eq!(*watchers, 1);
+                assert_eq!(*proto, PROTOCOL_VERSION);
+                assert_eq!(view.bankroll, 0);
+                assert_eq!(view.seats.len(), 1);
+            }
+            other => panic!("expected Watching, got {other:?}"),
+        }
+        assert_eq!(room.lock().await.watchers(), 1);
+
+        // the chips are out of reach from the rail
+        let bet = ClientMsg::Bet { kind: baccarat_engine::session::BetKind::Main(baccarat_engine::settle::BetSpot::Player), amount: 2_500 };
+        assert!(handle_command(bet, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Error { message }] if message == RAIL_ONLY));
+        assert_eq!(room.lock().await.table.seats(), 1, "nothing changed at the table");
+
+        // watching twice, or opening another table from the rail, is refused
+        assert!(handle_command(ClientMsg::Watch { room: id.clone() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Error { .. }]));
+        assert!(handle_command(ClientMsg::CreateRoom { name: "w".into(), tier: Tier::Low, private: false }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Error { .. }]));
+        assert_eq!(registry.room_count().await, 1, "no room was leaked for a refused sit");
+
+        // take a seat: same room, in place
+        assert!(handle_command(ClientMsg::JoinRoom { room: id.clone(), name: "bob".into() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(at, Some(At::Seat(_))));
+        let msgs = drain(&mut rx);
+        assert!(matches!(msgs[0], ServerMsg::Joined { .. }), "{msgs:?}");
+        let g = room.lock().await;
+        assert_eq!(g.watchers(), 0, "the rail spot is given up");
+        assert_eq!(g.table.seats(), 2);
+        assert_eq!(g.table.name_of(baccarat_engine::table::PlayerId(1)), Some("bob"));
+    }
+
+    #[tokio::test]
+    async fn a_full_table_leaves_the_watcher_at_the_rail() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Low, false).await.unwrap();
+        let id = {
+            let mut g = room.lock().await;
+            for i in 0..rooms::MAX_SEATS {
+                let pid = g.table.join(&format!("p{i}"), 50_000).unwrap();
+                let (t, r) = mpsc::channel(OUT_QUEUE);
+                std::mem::forget(r);
+                g.seat(pid, t);
+            }
+            g.id.clone()
+        };
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let mut at: Option<At> = None;
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Watch { room: id.clone() }, &registry, &tx, &mut at, &mut strikes).await);
+        drain(&mut rx);
+        assert!(handle_command(ClientMsg::JoinRoom { room: id.clone(), name: "late".into() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Error { message }] if message.contains("full")));
+        assert!(matches!(at, Some(At::Rail { .. })), "still watching, not stranded");
+        assert_eq!(room.lock().await.watchers(), 1);
+    }
+
+    #[tokio::test]
+    async fn leaving_the_rail_and_a_cleared_rail_both_free_the_connection() {
+        let registry = Registry::new();
+        let (room, id) = room_with_a_seat(&registry).await;
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let mut at: Option<At> = None;
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Watch { room: id.clone() }, &registry, &tx, &mut at, &mut strikes).await);
+        drain(&mut rx);
+        assert!(handle_command(ClientMsg::Leave, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(at.is_none());
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Left { reason: None }]));
+        assert_eq!(room.lock().await.watchers(), 0);
+
+        // back to the rail; then the room clears it under us (it closed)
+        assert!(handle_command(ClientMsg::Watch { room: id.clone() }, &registry, &tx, &mut at, &mut strikes).await);
+        drain(&mut rx);
+        room.lock().await.close_rail("The table closed — everyone left.");
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Left { reason: Some(_) }]));
+        // a stale rail is no rail: the next watch goes through
+        assert!(handle_command(ClientMsg::Watch { room: id.clone() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Watching { .. }, ..]));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_code_costs_a_watcher_the_same_strike_as_a_joiner() {
+        let registry = Registry::new();
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let mut at: Option<At> = None;
+        let mut strikes = 0;
+        for n in 1..MAX_JOIN_FAILURES {
+            assert!(handle_command(ClientMsg::Watch { room: "NOPE00".into() }, &registry, &tx, &mut at, &mut strikes).await);
+            assert_eq!(strikes, n);
+            assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Error { .. }]));
+        }
+        // the last strike closes the connection, as it does for a join
+        assert!(!handle_command(ClientMsg::Watch { room: "NOPE00".into() }, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(matches!(drain(&mut rx).as_slice(), [ServerMsg::Closed { .. }]));
+        assert!(at.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_ping_changes_nothing() {
+        let registry = Registry::new();
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let mut at: Option<At> = None;
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ping, &registry, &tx, &mut at, &mut strikes).await);
+        assert!(drain(&mut rx).is_empty());
+        assert!(at.is_none());
     }
 }

@@ -15,10 +15,20 @@ interface SeatsStripProps {
   betting: boolean;
   /** Commit a new name for our own seat. */
   onRename?: (name: string) => void;
+  /** Spectators at the rail; shown as one more chip when there are any. */
+  watchers?: number | null;
 }
 
-/** Everyone at the table: name, roll, stake, and who holds the cards. */
-export function SeatsStrip({ seats, me = null, squeezers, betting, onRename }: SeatsStripProps) {
+/** Everyone at the table: name, roll, stake, who holds the cards — and how
+ *  many are standing behind them watching. */
+export function SeatsStrip({
+  seats,
+  me = null,
+  squeezers,
+  betting,
+  onRename,
+  watchers = null,
+}: SeatsStripProps) {
   return (
     <div className="seats-strip" aria-label="Seats">
       {seats.map((s) => {
@@ -43,6 +53,12 @@ export function SeatsStrip({ seats, me = null, squeezers, betting, onRename }: S
           </div>
         );
       })}
+      {watchers !== null && watchers > 0 && (
+        <div className="seat-chip seat-chip--rail" aria-label="Watching">
+          <span className="seat-name">👁 {watchers}</span>
+          <span className="seat-status">watching</span>
+        </div>
+      )}
     </div>
   );
 }

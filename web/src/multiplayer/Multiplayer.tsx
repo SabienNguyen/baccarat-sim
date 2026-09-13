@@ -7,7 +7,14 @@ import { GameTable } from "../App";
 import { TABLES, type TableTier } from "../tables";
 import { formatCents } from "../format";
 import type { ClientMsg, RoomInfo, ServerMsg } from "./protocol";
-import { clearSeatToken, loadSeat, saveSeatToken } from "./protocol";
+import {
+  clearSeatToken,
+  clearWatchRoom,
+  loadSeat,
+  loadWatchRoom,
+  saveSeatToken,
+  saveWatchRoom,
+} from "./protocol";
 import { socketUrl } from "./protocol";
 import { urlParam } from "../urlParams";
 import { track } from "../analytics";
@@ -47,7 +54,8 @@ async function copyText(text: string): Promise<boolean> {
 type Stage =
   | { at: "connecting" }
   | { at: "lobby" }
-  | { at: "table"; store: RemoteStore; room: string }
+  // `watching`: at the rail, not in a chair — the same felt, no chips.
+  | { at: "table"; store: RemoteStore; room: string; watching: boolean }
   // Never reached the table service at all — a different situation from a
   // session that dropped, and the only one where single player is the answer.
   | { at: "offline" }
@@ -61,8 +69,13 @@ type Stage =
 const RETRY_MAX = 6;
 const retryDelay = (n: number) => Math.min(1000 * 2 ** n, 30_000);
 
+/** A spectator never has anything to say, and the server reads five silent
+ *  minutes as "away" — so the rail keeps a heartbeat going. */
+export const PING_MS = 60_000;
+
 export function Multiplayer({ onExit, connect }: MultiplayerProps) {
-  const [copied, setCopied] = useState(false);
+  /** Which of the two table links just went to the clipboard. */
+  const [copied, setCopied] = useState<"room" | "watch" | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const storeRef = useRef<RemoteStore | null>(null);
@@ -87,11 +100,18 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   const autoRoom = useRef<string | null>(
     connect ? null : (urlParam("room")?.trim().toUpperCase().slice(0, 6) || null),
   );
-  const [code, setCode] = useState(autoRoom.current ?? "");
-  // How the pending join was started, reported once the server seats us:
-  // an invite link vs. the lobby (typed code or the room list). Creating a
-  // table or reclaiming a held seat is neither.
-  const joinPath = useRef<"join-room-link" | "join-lobby" | null>(null);
+  // ?watch=CODE: the same, but to the rail.
+  const autoWatch = useRef<string | null>(
+    connect ? null : (urlParam("watch")?.trim().toUpperCase().slice(0, 6) || null),
+  );
+  const [code, setCode] = useState(autoRoom.current ?? autoWatch.current ?? "");
+  // How the pending join or watch was started, reported once the server
+  // answers: an invite link vs. the lobby (typed code or the room list), or
+  // a seat taken from the rail. Creating a table or reclaiming a held seat
+  // is neither.
+  const joinPath = useRef<
+    "join-room-link" | "join-lobby" | "join-rail" | "watch-room-link" | "watch-lobby" | null
+  >(null);
   const [tier, setTier] = useState<TableTier>("mid");
   const [isPrivate, setIsPrivate] = useState(false);
 
@@ -118,6 +138,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       if (held) {
         socket.send(JSON.stringify({ type: "rejoin", room: held.room, token: held.token }));
       }
+      // A rail this tab was at goes the same way — nothing to reclaim, just
+      // watch again. A held seat comes first: it has money on it.
+      const rail = held ? null : loadWatchRoom();
+      if (rail) {
+        socket.send(JSON.stringify({ type: "watch", room: rail }));
+      }
       // Deep-link auto-join: on success we land at the table; on a bad code the
       // error handler leaves us in the (already-listed) lobby with the notice.
       if (autoRoom.current) {
@@ -125,6 +151,9 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         saveName(n);
         joinPath.current = "join-room-link";
         socket.send(JSON.stringify({ type: "join_room", room: autoRoom.current, name: n }));
+      } else if (autoWatch.current && !held && !rail) {
+        joinPath.current = "watch-room-link";
+        socket.send(JSON.stringify({ type: "watch", room: autoWatch.current }));
       }
     };
     socket.onmessage = (e) => {
@@ -152,6 +181,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           return;
         }
         if (msg.token) saveSeatToken(msg.room, msg.token);
+        clearWatchRoom(); // a seat taken from the rail is a seat, not a watch
         if (joinPath.current) track(joinPath.current);
         joinPath.current = null;
         const store = createRemoteStore({
@@ -166,12 +196,34 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           },
         });
         storeRef.current = store;
-        setStage({ at: "table", store, room: msg.room });
+        setStage({ at: "table", store, room: msg.room, watching: false });
+      } else if (msg.type === "watching") {
+        if (msg.proto !== undefined && msg.proto !== 1) {
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v1`);
+          storeRef.current = null;
+          setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
+          return;
+        }
+        saveWatchRoom(msg.room);
+        if (joinPath.current) track(joinPath.current);
+        joinPath.current = null;
+        const store = createRemoteStore({
+          tier: msg.tier,
+          view: msg.view,
+          me: null,
+          watchers: msg.watchers,
+          send: (m) => socket.send(JSON.stringify(m)),
+        });
+        storeRef.current = store;
+        setStage({ at: "table", store, room: msg.room, watching: true });
       } else if (msg.type === "left") {
-        // A deliberate stand-up, not a drop: the seat is gone, so the token is
-        // dead weight and must not be replayed on the next connect.
+        // A deliberate stand-up, not a drop: the seat (or the rail spot) is
+        // gone, so neither must be replayed on the next connect. A reason
+        // means the server stood us up — the table closed under the rail.
         clearSeatToken();
+        clearWatchRoom();
         storeRef.current = null;
+        if (msg.reason) setNotice(msg.reason);
         setStage({ at: "lobby" });
         socket.send(JSON.stringify({ type: "list_rooms" }));
       } else if (msg.type === "closed") {
@@ -223,6 +275,15 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   useEffect(() => () => {
     if (copyTimer.current) clearTimeout(copyTimer.current);
   }, []);
+
+  // The rail's heartbeat (see PING_MS). Seats don't need one: every action is
+  // a message, and a seat that goes silent for five minutes *should* be stood
+  // up — it's blocking the table's next deal.
+  useEffect(() => {
+    if (stage.at !== "table" || !stage.watching) return;
+    const beat = setInterval(() => ws.current?.send(JSON.stringify({ type: "ping" })), PING_MS);
+    return () => clearInterval(beat);
+  }, [stage]);
 
   const rememberName = () => {
     const n = name.trim() || "guest";
@@ -305,34 +366,56 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
   }
 
   if (stage.at === "table") {
+    // A full URL, not the bare code: one click drops a friend straight into
+    // this table (Multiplayer auto-joins on ?room=, auto-watches on ?watch=).
+    const copyLink = async (param: "room" | "watch") => {
+      const link =
+        typeof location !== "undefined"
+          ? `${location.origin}${location.pathname}?${param}=${stage.room}`
+          : stage.room;
+      if (await copyText(link)) {
+        setCopied(param);
+        if (copyTimer.current) clearTimeout(copyTimer.current);
+        copyTimer.current = setTimeout(() => setCopied(null), 1600);
+      }
+    };
     return (
       <div className="mp-table">
-        <button
-          type="button"
-          className="mp-roomtag"
-          title="Copy the invite link"
-          onClick={async () => {
-            // A full URL, not the bare code: one click drops a friend straight
-            // into this table (Multiplayer auto-joins on ?room=).
-            const link =
-              typeof location !== "undefined"
-                ? `${location.origin}${location.pathname}?room=${stage.room}`
-                : stage.room;
-            if (await copyText(link)) {
-              setCopied(true);
-              if (copyTimer.current) clearTimeout(copyTimer.current);
-              copyTimer.current = setTimeout(() => setCopied(false), 1600);
-            }
-          }}
-        >
-          Table <strong>{stage.room}</strong>
-          <span className="mp-copyhint">{copied ? "✓ copied" : "copy"}</span>
-        </button>
+        <div className="mp-tags">
+          <button
+            type="button"
+            className="mp-roomtag"
+            title="Copy the invite link"
+            onClick={() => void copyLink("room")}
+          >
+            Table <strong>{stage.room}</strong>
+            <span className="mp-copyhint">{copied === "room" ? "✓ copied" : "copy"}</span>
+          </button>
+          <button
+            type="button"
+            className="mp-roomtag mp-roomtag--watch"
+            title="Copy a watch-only link — no seat, no chips"
+            onClick={() => void copyLink("watch")}
+          >
+            Watch link
+            <span className="mp-copyhint">{copied === "watch" ? "✓ copied" : "copy"}</span>
+          </button>
+        </div>
         <GameTable
           store={stage.store}
           onLeave={() => {
             send({ type: "leave" });
           }}
+          onTakeSeat={
+            stage.watching
+              ? () => {
+                  // The same join as from the lobby; the server seats us in
+                  // place and the `joined` push swaps the store.
+                  joinPath.current = "join-rail";
+                  send({ type: "join_room", room: stage.room, name: rememberName() });
+                }
+              : undefined
+          }
         />
       </div>
     );
@@ -358,7 +441,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
 
         <section className="mp-panel mp-panel--join">
           <h3>Join with a code</h3>
-          <p className="mp-help">Got a code from a friend? Punch it in.</p>
+          <p className="mp-help">Got a code from a friend? Punch it in — sit down, or just watch.</p>
           <div className="mp-joinrow">
             <input
               className="mp-input mp-code"
@@ -377,6 +460,17 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
               }}
             >
               Join
+            </button>
+            <button
+              type="button"
+              className="mp-watch"
+              disabled={code.trim().length < 6}
+              onClick={() => {
+                joinPath.current = "watch-lobby";
+                send({ type: "watch", room: code.trim() });
+              }}
+            >
+              Watch
             </button>
           </div>
         </section>
@@ -426,6 +520,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
                 <span className="mp-roomname">{r.id}</span>
                 <span className="mp-roominfo">
                   {r.tier} · {r.seats}/{r.max_seats} seats
+                  {r.watchers ? ` · ${r.watchers} watching` : ""}
                 </span>
                 <button
                   type="button"
@@ -437,6 +532,18 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
                   }}
                 >
                   Sit
+                </button>
+                {/* A full table is exactly the one worth watching. */}
+                <button
+                  type="button"
+                  className="mp-watch"
+                  aria-label={`Watch ${r.id}`}
+                  onClick={() => {
+                    joinPath.current = "watch-lobby";
+                    send({ type: "watch", room: r.id });
+                  }}
+                >
+                  Watch
                 </button>
               </li>
             ))}
