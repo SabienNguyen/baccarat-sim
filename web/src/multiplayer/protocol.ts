@@ -36,6 +36,7 @@ export type ClientMsg =
   | { type: "join_room"; room: string; name: string }
   | { type: "rejoin"; room: string; token: string }
   | { type: "leave" }
+  | { type: "rename"; name: string }
   | { type: "bet"; kind: BetKind; amount: number }
   | { type: "sit_out" }
   | { type: "clear_bets" }

@@ -150,7 +150,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           tier: msg.tier,
           view: msg.view,
           me: msg.player,
-          send: (m) => socket.send(JSON.stringify(m)),
+          send: (m) => {
+            // A rename at the table is also the name for next time, the same
+            // as typing it in the lobby.
+            if (m.type === "rename") saveName(m.name);
+            socket.send(JSON.stringify(m));
+          },
         });
         storeRef.current = store;
         setStage({ at: "table", store, room: msg.room });

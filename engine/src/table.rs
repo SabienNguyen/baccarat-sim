@@ -338,6 +338,14 @@ impl Table {
         Ok(())
     }
 
+    /// Change the name the rest of the table sees. Allowed in any phase: a
+    /// name is display-only, so nothing about the coup or the money moves.
+    /// Callers sanitize; the engine stores what it's given.
+    pub fn rename(&mut self, pid: PlayerId, name: &str) -> Result<(), TableError> {
+        self.player_mut(pid)?.name = name.to_string();
+        Ok(())
+    }
+
     /// Deal the coup. Requires at least one staged bet anywhere at the table.
     pub fn deal(&mut self) -> Result<(), TableError> {
         if !matches!(self.phase, Phase::Betting) {
@@ -804,6 +812,27 @@ mod tests {
         assert_eq!(v.phase, PhaseTag::Betting);
         assert!(v.payouts.is_none());
         assert!(v.outcome.is_none());
+    }
+
+    #[test]
+    fn a_seat_can_be_renamed_mid_deal_and_everyone_sees_it() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.deal().unwrap();
+        // a display-only change: allowed while cards are out
+        t.rename(a, "alice").unwrap();
+        let vb = t.view_for(b).unwrap();
+        assert_eq!(vb.seats[0].name, "alice");
+        assert_eq!(vb.seats[1].name, "b");
+        // squeeze rights, bets and bankroll ride along untouched
+        assert_eq!(vb.player_squeezer, Some(a));
+        assert_eq!(vb.seats[0].staked, 5_000);
+        assert_eq!(vb.seats[0].bankroll, 100_000);
+        // a seat that isn't at the table can't be renamed
+        assert_eq!(t.rename(PlayerId(99), "ghost"), Err(TableError::NoSuchPlayer));
     }
 
     #[test]

@@ -75,8 +75,9 @@ the biggest Banker bettor holds the Banker cards, and the house dealer turns any
 hand nobody bet — one card per beat, announced. Every coup is opt-in: bet or sit
 out, and the deal waits for the table.
 
-Drop your connection and your seat and bankroll are held for two minutes while
-the client reconnects on its own. Single player runs the **same table rules**
+Click your own seat to change your name mid-session; the whole table sees it
+on the next push. Drop your connection and your seat and bankroll are held for
+two minutes while the client reconnects on its own. Single player runs the **same table rules**
 with one seat.
 
 ### On a phone

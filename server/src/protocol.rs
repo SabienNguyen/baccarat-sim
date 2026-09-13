@@ -39,6 +39,8 @@ pub enum ClientMsg {
     /// Reclaim a seat kept warm after a drop. The token came from `Joined`.
     Rejoin { room: String, token: String },
     Leave,
+    /// Change the name the table sees for this seat. Sanitized like a join.
+    Rename { name: String },
     Bet { kind: BetKind, amount: i64 },
     SitOut,
     ClearBets,
@@ -101,6 +103,9 @@ mod tests {
         let m: ClientMsg =
             serde_json::from_str(r#"{"type":"peek","hand":"Banker","index":1}"#).unwrap();
         assert!(matches!(m, ClientMsg::Peek { index: 1, .. }));
+
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"rename","name":"alice"}"#).unwrap();
+        assert!(matches!(m, ClientMsg::Rename { ref name } if name == "alice"));
     }
 
     #[test]

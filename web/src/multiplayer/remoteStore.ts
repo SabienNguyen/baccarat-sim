@@ -40,6 +40,14 @@ export function createRemoteStore(opts: {
     snapshot: initialSnapshot,
     lastError: null,
     seats: opts.view.seats,
+    me,
+    // The server scrubs and caps the name; the client only refuses to send
+    // an empty one so a slip of the finger can't turn a seat into "guest".
+    rename: (name) => {
+      const n = name.trim();
+      if (n.length === 0) return;
+      send({ type: "rename", name: n });
+    },
     squeezers: squeezersOf(opts.view),
     lastFlip: null,
     announcement: null,

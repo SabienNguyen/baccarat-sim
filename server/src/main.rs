@@ -409,6 +409,10 @@ async fn handle_command(
             let pid = *pid;
             let mut room = room.lock().await;
             let result = match table_cmd {
+                // Same scrub as a join: the name goes straight into every
+                // other seat's view, so it must not carry bidi/zero-width
+                // tricks. A blank name falls back to "guest", never empty.
+                ClientMsg::Rename { name } => room.table.rename(pid, &clean_name(&name)),
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
                 ClientMsg::ClearBets => room.table.clear_bets(pid),

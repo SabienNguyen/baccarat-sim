@@ -32,6 +32,10 @@ export interface GameState {
   lastError: DealerError | null;
   /** Everyone at the table (multiplayer); null at a single-player table. */
   seats: SeatView[] | null;
+  /** This client's own seat id in `seats` (multiplayer); null alone. */
+  me: number | null;
+  /** Change the name the rest of the table sees (multiplayer); no-op alone. */
+  rename: (name: string) => void;
   /** Who holds each hand's cards (multiplayer squeeze rights). */
   squeezers: { player: number | null; banker: number | null } | null;
   /** Skip this coup (multiplayer); no-op alone at a single-player table. */
@@ -132,6 +136,8 @@ export function createGameStore(
       snapshot: session.snapshot(),
       lastError: null,
       seats: null,
+      me: null,
+      rename: () => {},
       squeezers: null,
       sitOut: () => {},
       lastFlip: null,

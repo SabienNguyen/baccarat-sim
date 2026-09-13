@@ -341,6 +341,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Our own chip doubles as the rename control: the name is a button, and
+   turns into a text box in place so the seat box never jumps. */
+.seat-name--mine {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0 2px;
+  cursor: pointer;
+  border-bottom: 2px dotted rgba(240, 213, 138, 0.55);
+}
+.seat-name--mine:hover,
+.seat-name--mine:focus-visible {
+  border-bottom-style: solid;
+  outline: none;
+}
+.seat-name--mine:focus-visible {
+  box-shadow: 0 0 0 2px var(--gold);
+  border-radius: 3px;
+}
+/* the pen lives in CSS so the button's text is just the name */
+.seat-name--mine::after {
+  content: "✎";
+  margin-left: 5px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+.seat-name--edit {
+  width: 12ch;
+  color: #f3eede;
+  background: var(--panel-bevel-lo);
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-overflow: clip;
+}
+.seat-name--edit:focus {
+  outline: none;
+}
 .seat-money {
   font-family: var(--font-text);
   font-size: 19px;

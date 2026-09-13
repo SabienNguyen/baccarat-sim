@@ -47,6 +47,19 @@ test("mirrors the joined view: bankroll, seats, smallest chip armed, no win-con"
   expect(store.getState().goal).toBeNull();
 });
 
+test("the store knows its own seat and renames it over the wire", () => {
+  const { store, sent } = setup();
+  expect(store.getState().me).toBe(1);
+  store.getState().rename("  alice  ");
+  expect(sent).toEqual([{ type: "rename", name: "alice" }]);
+});
+
+test("a blank rename never reaches the wire", () => {
+  const { store, sent } = setup();
+  store.getState().rename("   ");
+  expect(sent).toEqual([]);
+});
+
 test("staking the armed chip sends a bet over the wire", () => {
   const { store, sent } = setup();
   store.getState().selectChip(10000);

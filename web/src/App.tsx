@@ -112,6 +112,8 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
+  const me = useStore(active, (s) => s.me);
+  const rename = useStore(active, (s) => s.rename);
   const squeezers = useStore(active, (s) => s.squeezers);
   const sitOut = useStore(active, (s) => s.sitOut);
   const watchHand = useStore(active, (s) => s.watchHand);
@@ -238,7 +240,13 @@ export function GameTable({ store: active, onLeave, onReset, tier }: GameTablePr
       />
       <main className="stage">
         {seats !== null && (
-          <SeatsStrip seats={seats} squeezers={squeezers} betting={snapshot.phase !== "Dealing"} />
+          <SeatsStrip
+            seats={seats}
+            me={me}
+            squeezers={squeezers}
+            betting={snapshot.phase !== "Dealing"}
+            onRename={rename}
+          />
         )}
         <DealerLine
           snapshot={snapshot}

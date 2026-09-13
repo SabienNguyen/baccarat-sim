@@ -86,6 +86,48 @@ test("creating a table sends the choice and joining mounts the live table", asyn
   expect(screen.getByText("sabien")).toBeInTheDocument();
 });
 
+test("renaming at the table goes over the wire and sticks for next time", async () => {
+  const { socket } = mount();
+  socket.open();
+  socket.push({
+    type: "joined",
+    room: "ZZTOP2",
+    player: 0,
+    tier: "high",
+    view: {
+      phase: "Betting",
+      player: { cards: [], total: null },
+      banker: { cards: [], total: null },
+      bets: [],
+      bankroll: 25_000_000,
+      table_min: 50_000,
+      table_max: 10_000_000,
+      outcome: null,
+      payouts: null,
+      events: [],
+      scoreboard: {
+        bead_plate: { cells: [] },
+        big_road: { columns: [] },
+        big_eye_boy: { columns: [] },
+        small_road: { columns: [] },
+        cockroach_pig: { columns: [] },
+      },
+      explain: [],
+      seats: [
+        { id: 0, name: "guest", bankroll: 25_000_000, staked: 0, sitting_out: false, decided: false },
+      ],
+      player_squeezer: null,
+      banker_squeezer: null,
+    },
+  });
+  await userEvent.click(screen.getByRole("button", { name: /guest — change your name/ }));
+  const box = screen.getByRole("textbox", { name: "Your name" });
+  await userEvent.clear(box);
+  await userEvent.type(box, "sabien{Enter}");
+  expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "rename", name: "sabien" });
+  expect(localStorage.getItem("baccarat.name")).toBe("sabien");
+});
+
 test("an away-too-long close shows the server's reason, not a generic outage", () => {
   const { socket } = mount();
   socket.open();
