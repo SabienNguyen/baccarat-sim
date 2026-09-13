@@ -71,7 +71,16 @@ body {
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04), transparent 60%);
   background-attachment: fixed;
   background-size: 140% 140%, 160% 160%, 200% 200%;
-  animation: felt-swirl 40s ease-in-out infinite alternate;
+}
+
+/* The drift is a fine-pointer, real-estate-to-spare treat: on a phone/tablet
+ * (coarse pointer, or a narrow viewport) it re-rasterises three full-viewport
+ * gradients every frame for no informational payoff, so the felt is static
+ * there instead. */
+@media (pointer: fine) and (min-width: 701px) {
+  body {
+    animation: felt-swirl 40s ease-in-out infinite alternate;
+  }
 }
 
 /* Touch devices only: kill the iOS rubber-band / pull-to-refresh bounce so the
@@ -98,6 +107,13 @@ body {
   body {
     animation: none;
   }
+}
+
+/* Backgrounded tab / locked phone: installSleepOnHide (audio/sleep.ts) toggles
+ * this on <html> from a `visibilitychange` listener. Freeze every animation
+ * in one shot rather than hunt down each one individually. */
+.hidden * {
+  animation-play-state: paused !important;
 }
 
 /* Shared beveled panel look used by the HUD and scoreboard docks. */

@@ -29,6 +29,7 @@ import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
 import { playSfx } from "./audio/sfx";
+import { installSleepOnHide } from "./audio/sleep";
 import { getPortal } from "./portal";
 import { createPortalTracker, type PortalView } from "./portal/signals";
 import { adBreak } from "./portal/adBreak";
@@ -65,6 +66,11 @@ export function App({ store }: AppProps = {}) {
     () => !store && (!!urlParam("room") || !!urlParam("watch")),
   );
   const [resetSeq, setResetSeq] = useState(0);
+  // One document-level listener for the whole app's lifetime (lobby,
+  // multiplayer, table) — installed here since App is the outermost
+  // component every screen mounts under. Backgrounding the tab / locking
+  // the phone sleeps the audio graph and freezes CSS animations (B2/B5).
+  useEffect(() => installSleepOnHide(), []);
   if (multi) {
     return <Multiplayer onExit={() => setMulti(false)} />;
   }
