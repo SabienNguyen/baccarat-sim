@@ -44,8 +44,18 @@
   color: #d8b0b0;
   text-align: center;
 }
+/* the rewarded-ad refusal (portal builds): one quiet line above the buttons */
+.bust-noad {
+  margin: 0;
+  font-family: var(--font-text);
+  font-size: 16px;
+  color: #d8b0b0;
+  opacity: 0.85;
+}
 .bust-actions {
   display: flex;
+  flex-wrap: wrap; /* three buttons on a portal build */
+  justify-content: center;
   gap: 14px;
   margin-top: 8px;
 }

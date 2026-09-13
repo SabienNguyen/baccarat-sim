@@ -1,10 +1,52 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
 import { bettingSnapshot, dealingSnapshot } from "./test/fixtures";
+import { createRemoteStore } from "./multiplayer/remoteStore";
+
+// A recording portal in place of the real (null) one, to check the table's
+// gameplay signals and ad break are wired. Everything else is the real module.
+const portalSpy = vi.hoisted(() => ({
+  gameplayStart: vi.fn(),
+  gameplayStop: vi.fn(),
+  happyTime: vi.fn(),
+  requestMidgameAd: vi.fn(async () => {}),
+}));
+vi.mock("./portal", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./portal")>();
+  return {
+    ...real,
+    getPortal: () => ({
+      ...real.nullAdapter,
+      name: "fake",
+      ...portalSpy,
+    }),
+  };
+});
+
+test("the table sends the portal its gameplay signals and an ad break on a fresh shoe", async () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<App store={store} />);
+  expect(portalSpy.gameplayStart).not.toHaveBeenCalled();
+  act(() => store.setState({ snapshot: dealingSnapshot() })); // the first deal
+  expect(portalSpy.gameplayStart).toHaveBeenCalledOnce();
+  act(() => store.setState({ busted: true }));
+  expect(portalSpy.gameplayStop).toHaveBeenCalledOnce();
+  act(() => store.setState({ busted: false })); // re-bought: play resumes
+  expect(portalSpy.gameplayStart).toHaveBeenCalledTimes(2);
+  act(() => store.setState({ goalReached: true }));
+  expect(portalSpy.happyTime).toHaveBeenCalledOnce();
+  expect(portalSpy.gameplayStop).toHaveBeenCalledTimes(2);
+  act(() => store.setState({ goalReached: false, snapshot: bettingSnapshot() }));
+
+  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
+  fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
+  await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
+  expect(portalSpy.requestMidgameAd).toHaveBeenCalledOnce();
+});
 
 function okResult(snap: RoundSnapshot): CommandResult {
   return { ok: true, snapshot: snap };
@@ -207,7 +249,7 @@ test("single-player auto-settles once all cards are up, then auto-advances to Be
     expect(store.getState().snapshot.phase).toBe("Dealing");
     act(() => vi.advanceTimersByTime(600)); // AUTO_SETTLE_MS
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS));
     expect(store.getState().snapshot.phase).toBe("Betting");
   } finally {
     vi.useRealTimers();
@@ -257,7 +299,7 @@ test("single-player: a winning-bonus hand auto-advances after the delay, clearin
     const store = createGameStore(fakeSession(pairWinHand()));
     render(<App store={store} />);
     expect(screen.getByText(/PLAYER PAIR JUST HIT/)).toBeInTheDocument();
-    act(() => vi.advanceTimersByTime(4600)); // AUTO_ADVANCE_MS
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS));
     expect(store.getState().snapshot.phase).toBe("Betting");
     expect(screen.queryByText(/PLAYER PAIR JUST HIT/)).toBeNull();
   } finally {
@@ -270,13 +312,13 @@ test("single-player: the table sweeps the cards out before clearing to the next 
   try {
     const store = createGameStore(fakeSession(pairWinHand()));
     const { container } = render(<App store={store} />);
-    act(() => vi.advanceTimersByTime(4100)); // still holding — no sweep yet
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS - SWEEP_MS - 100)); // still holding — no sweep yet
     expect(container.querySelector(".card-stage.sweeping")).toBeNull();
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(200)); // 4300: the sweep-out is playing
+    act(() => vi.advanceTimersByTime(200)); // 100 ms into the sweep-out
     expect(container.querySelector(".card-stage.sweeping")).not.toBeNull();
     expect(store.getState().snapshot.phase).toBe("Settled");
-    act(() => vi.advanceTimersByTime(300)); // 4600: cleared to the next hand
+    act(() => vi.advanceTimersByTime(SWEEP_MS - 100)); // AUTO_ADVANCE_MS: cleared to the next hand
     expect(store.getState().snapshot.phase).toBe("Betting");
     expect(container.querySelector(".card-stage.sweeping")).toBeNull();
   } finally {
@@ -310,4 +352,159 @@ test("busting offers a re-buy and a way out", async () => {
   await user.click(screen.getByRole("button", { name: "Leave table" }));
   expect(onReset).toHaveBeenCalledTimes(2);
   expect(onLeave).toHaveBeenCalledOnce();
+});
+
+test("single-player: a chip tapped during the sweep leaves the felt clean for the next deal", () => {
+  // Reported as "cards vanish after a tie": the hand pushes, the player re-bets
+  // as the dealer is mucking the cards, and every card from then on is invisible
+  // until a page refresh. The sweep flag must not outlive the hand it swept.
+  vi.useFakeTimers();
+  try {
+    const tied: RoundSnapshot = {
+      ...dealingSnapshot(),
+      phase: "Settled",
+      player: {
+        cards: [
+          { FaceUp: { rank: "Four", suit: "Clubs" } },
+          { FaceUp: { rank: "Two", suit: "Hearts" } },
+        ],
+        total: 6,
+      },
+      banker: {
+        cards: [
+          { FaceUp: { rank: "King", suit: "Spades" } },
+          { FaceUp: { rank: "Six", suit: "Diamonds" } },
+        ],
+        total: 6,
+      },
+      bets: [],
+      outcome: "Tie",
+      payouts: [{ bet: { kind: { Main: "Player" }, amount: 500 }, net: 0 }],
+    };
+    const betting = bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] });
+    const nextDeal: RoundSnapshot = {
+      ...betting,
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: ["FaceDown", "FaceDown"], total: null },
+    };
+    let snap = tied;
+    const store = createGameStore(
+      fakeSession(tied, {
+        snapshot: () => snap,
+        placeBet: () => okResult((snap = betting)),
+        deal: () => okResult((snap = nextDeal)),
+      }),
+    );
+    const { container } = render(<App store={store} />);
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS - SWEEP_MS + 100)); // mid-sweep: the muck is playing
+    expect(container.querySelector(".card-stage.sweeping")).not.toBeNull();
+
+    // the player re-bets before the muck finishes — this opens the next hand
+    act(() => store.getState().stake({ Main: "Player" }));
+    expect(store.getState().snapshot.phase).toBe("Betting");
+    act(() => vi.advanceTimersByTime(AUTO_ADVANCE_MS)); // well past where the muck would have ended
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+
+    // and the next deal's cards land on a felt that is NOT still sweeping
+    act(() => store.getState().deal());
+    expect(store.getState().snapshot.phase).toBe("Dealing");
+    expect(screen.getAllByLabelText("face-down card")).toHaveLength(4);
+    expect(container.querySelector(".card-stage.sweeping")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// --- the high-limit ask: flip one / flip both of the dealer's cards ---
+
+/** A table snapshot mid-squeeze: I hold Player (seat 0), the house holds Banker. */
+function houseHoldsBanker(banker: RoundSnapshot["banker"]["cards"]): RoundSnapshot {
+  return {
+    ...bettingSnapshot({
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: banker, total: null },
+      bets: [{ kind: { Main: "Player" }, amount: 500 }],
+    }),
+    // squeeze rights ride along on a table snapshot
+    ...({ player_squeezer: 0, banker_squeezer: null } as object),
+  };
+}
+
+test("while I squeeze Player, I can ask the dealer to flip one of his cards", async () => {
+  const initial = houseHoldsBanker(["FaceDown", "FaceDown"]);
+  const afterOne = houseHoldsBanker([{ FaceUp: { rank: "Five", suit: "Clubs" } }, "FaceDown"]);
+  const requestDealerFlip = vi.fn((): CommandResult => okResult(afterOne));
+  const store = createGameStore(fakeSession(initial, { requestDealerFlip }));
+  render(<GameTable store={store} onLeave={() => {}} />);
+
+  const banker = screen.getByLabelText("Banker hand");
+  expect(banker).toContainElement(screen.getByRole("group", { name: "Ask the dealer" }));
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Flip one" }));
+  expect(requestDealerFlip).toHaveBeenCalledWith("One");
+
+  // one house card up: the ask narrows to the other card
+  expect(screen.getByRole("button", { name: "Flip the other" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Flip both" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Five of Clubs")).toBeInTheDocument();
+});
+
+test("once both of the dealer's cards are up, the ask is gone", () => {
+  const bothUp = houseHoldsBanker([
+    { FaceUp: { rank: "Five", suit: "Clubs" } },
+    { FaceUp: { rank: "Two", suit: "Hearts" } },
+  ]);
+  const store = createGameStore(fakeSession(bothUp, { requestDealerFlip: () => okResult(bothUp) }));
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).not.toBeInTheDocument();
+});
+
+test("no ask before the deal, nor at a plain session without a house dealer", () => {
+  const store = createGameStore(fakeSession(bettingSnapshot()));
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.queryByRole("group", { name: "Ask the dealer" })).not.toBeInTheDocument();
+});
+
+// --- squeeze rights at a shared table: only the holder gets the gesture ---
+
+/** A shared table mid-squeeze: I'm seat 3 holding Banker; seat 5 holds Player. */
+function sharedTableStore(overrides: { player_squeezer: number | null; banker_squeezer: number | null }) {
+  const send = vi.fn();
+  const view = {
+    ...bettingSnapshot({
+      phase: "Dealing",
+      player: { cards: ["FaceDown", "FaceDown"], total: null },
+      banker: { cards: ["FaceDown", "FaceDown"], total: null },
+      bets: [{ kind: { Main: "Banker" }, amount: 500 }],
+    }),
+    seats: [
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
+    ],
+    ...overrides,
+  } as Parameters<typeof createRemoteStore>[0]["view"];
+  return { store: createRemoteStore({ tier: "mid", view, me: 3, send }), send };
+}
+
+test("at a shared table, another seat's hand is a plain face-down card, not a squeeze", async () => {
+  const { store, send } = sharedTableStore({ player_squeezer: 5, banker_squeezer: 3 });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  const player = screen.getByLabelText("Player hand");
+  const banker = screen.getByLabelText("Banker hand");
+  // my Banker cards are squeezable; seat 5's Player cards are not
+  expect(banker.querySelectorAll('[role="button"]').length).toBe(2);
+  expect(player.querySelectorAll('[role="button"]').length).toBe(0);
+  expect(player.querySelectorAll('[aria-label="face-down card"]').length).toBe(2);
+  // clicking their card sends nothing to the server
+  await userEvent.click(player.querySelectorAll('[aria-label="face-down card"]')[0]);
+  expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "peek", hand: "Player" }));
+});
+
+test("at a shared table, a house-held hand is the dealer's — no gesture for anyone", () => {
+  const { store } = sharedTableStore({ player_squeezer: null, banker_squeezer: 3 });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.getByLabelText("Player hand").querySelectorAll('[role="button"]').length).toBe(0);
+  expect(screen.getByLabelText("Banker hand").querySelectorAll('[role="button"]').length).toBe(2);
 });

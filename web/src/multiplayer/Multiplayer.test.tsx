@@ -387,3 +387,65 @@ describe("auto-reconnect (F10)", () => {
     vi.useRealTimers();
   });
 });
+
+describe("join-path analytics", () => {
+  type Win = { goatcounter?: { count: ReturnType<typeof vi.fn> } };
+  const win = window as unknown as Win;
+  let count: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    count = vi.fn();
+    win.goatcounter = { count };
+  });
+  afterEach(() => {
+    delete win.goatcounter;
+  });
+
+  function emptyView(name: string) {
+    return {
+      phase: "Betting",
+      player: { cards: [], total: null },
+      banker: { cards: [], total: null },
+      bets: [],
+      bankroll: 25_000_000,
+      table_min: 50_000,
+      table_max: 10_000_000,
+      outcome: null,
+      payouts: null,
+      events: [],
+      scoreboard: {
+        bead_plate: { cells: [] },
+        big_road: { columns: [] },
+        big_eye_boy: { columns: [] },
+        small_road: { columns: [] },
+        cockroach_pig: { columns: [] },
+      },
+      explain: [],
+      seats: [{ id: 0, name, bankroll: 25_000_000, staked: 0, sitting_out: false, decided: false }],
+      player_squeezer: null,
+      banker_squeezer: null,
+    };
+  }
+
+  test("a lobby join reports join-lobby once the server seats us", async () => {
+    const { socket } = mount();
+    socket.open();
+    socket.push({ type: "rooms", rooms: [{ id: "AB12CD", tier: "mid", seats: 2, max_seats: 7 }] });
+    // "Sit" on a listed room and "Join" with a typed code are both lobby joins
+    await userEvent.click(screen.getByRole("button", { name: "Sit" }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({ type: "join_room", room: "AB12CD" });
+    // nothing is counted until the join actually lands
+    expect(count).not.toHaveBeenCalled();
+    socket.push({ type: "joined", room: "AB12CD", player: 1, tier: "mid", view: emptyView("me") });
+    expect(count).toHaveBeenCalledTimes(1);
+    expect(count).toHaveBeenCalledWith({ path: "event/join-lobby", event: true });
+  });
+
+  test("creating a table is not a join: no join-path event", async () => {
+    const { socket } = mount();
+    socket.open();
+    await userEvent.click(screen.getByRole("button", { name: "Create table" }));
+    socket.push({ type: "joined", room: "NEWTBL", player: 0, tier: "mid", view: emptyView("guest") });
+    expect(count).not.toHaveBeenCalled();
+  });
+});

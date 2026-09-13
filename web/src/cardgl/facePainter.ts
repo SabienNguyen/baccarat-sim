@@ -8,6 +8,9 @@ import { PIP_LAYOUT, RANK_SHORT, SUIT_GLYPH, COURT_GLYPH, suitColor } from "../c
 
 export const REF_W = 100;
 export const REF_H = 143;
+/** The pip field's horizontal extent in reference units (mirrors cards.css). */
+export const PIP_X0 = 17;
+export const PIP_W = 66;
 
 // colors mirrored from theme.css / cards.css — a canvas can't read CSS vars
 export const INK = "#15110f";
@@ -61,12 +64,13 @@ export function buildFaceOps(
   }
   const pips = PIP_LAYOUT[rank];
   if (pips) {
-    // pip area: the DOM's `inset 12px 20px` → x 20..80, y 12..131
+    // pip area: the DOM's `inset 12px 14px` inside the 3px border → x 17..83
+    // (66% of the card, like a real deck's pip field), y 12..131
     for (const [px, py] of pips) {
       ops.push({
         op: "text",
         text: SUIT_GLYPH[suit],
-        x: 20 + (px / 100) * 60,
+        x: PIP_X0 + (px / 100) * PIP_W,
         y: 12 + (py / 100) * 119,
         px: rank === "Ace" ? 50 : 17,
         font: FONT_TEXT,

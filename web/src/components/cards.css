@@ -64,9 +64,12 @@
 }
 
 /* --- pip area --- */
+/* The pip field is 66% of the card's width (x 17..83 of 100 including the
+   3px border): a real deck's pips reach further toward the edges than the
+   old 20px side inset allowed, which read as a pinched face mid-squeeze. */
 .card-pips {
   position: absolute;
-  inset: 12px 20px;
+  inset: 12px 14px;
 }
 .card-pip {
   position: absolute;
@@ -419,7 +422,7 @@
     font-size: 9px;
   }
   .card-pips {
-    inset: 8px 12px;
+    inset: 8px 8px;
   }
   .card-court {
     inset: 13px 14px;

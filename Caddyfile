@@ -8,7 +8,7 @@
 # pages, assets and the /ws socket — comes from this one upstream. That means
 # the client needs no VITE_WS_URL: it defaults to /ws on its own origin.
 
-baccaratsimulator.com, www.baccaratsimulator.com {
+baccarat-sim.com, www.baccarat-sim.com {
 	encode zstd gzip
 
 	# WebSockets need no special handling in Caddy v2 — reverse_proxy upgrades

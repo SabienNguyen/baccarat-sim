@@ -2,9 +2,13 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { trackVisit } from "./analytics";
+import { getPortal } from "./portal";
 import "./theme.css";
 
 trackVisit(); // no-op until analytics is enabled (see docs/GROWTH.md G4)
+// The game-portal SDK, only on a portal build or ?portal= (see docs/DEPLOY.md);
+// otherwise the null adapter, which loads and contacts nothing.
+void getPortal().init();
 
 const root = createRoot(document.getElementById("root")!);
 

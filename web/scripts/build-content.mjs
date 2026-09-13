@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = resolve(ROOT, "public");
-const SITE = "https://sabiennguyen.github.io/baccarat-sim/";
+const SITE = "https://baccarat-sim.com/";
 const OG_IMAGE = `${SITE}og-image.png`;
 
 const esc = (s) =>

@@ -8,6 +8,7 @@ import type { RoundSnapshot } from "../engine/types";
 import type { GameState } from "../store/gameStore";
 import { tableSpec, type TableTier } from "../tables";
 import { lastFlipBetween } from "../cards";
+import { trackFirstHand } from "../analytics";
 import type { ClientMsg, ServerMsg, TableViewMsg } from "./protocol";
 
 export interface RemoteStore extends StoreApi<GameState> {
@@ -78,9 +79,15 @@ export function createRemoteStore(opts: {
     },
 
     clearBets: () => send({ type: "clear_bets" }),
-    deal: () => send({ type: "deal" }),
+    deal: () => {
+      trackFirstHand();
+      send({ type: "deal" });
+    },
     peek: (side, index) => send({ type: "peek", hand: side, index }),
     reveal: (side, index) => send({ type: "reveal", hand: side, index }),
+    // Server-authoritative: it checks the squeeze, turns the house card(s)
+    // and pushes the new view to every seat, with the dealer's line.
+    requestDealerFlip: (count) => send({ type: "dealer_flip", count }),
     settle: () => send({ type: "settle" }),
 
     // Cosmetic: flip the local view back to Betting with a swept table; the

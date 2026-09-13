@@ -1,107 +1,206 @@
-# Putting this on your own domain
+# Deploying to baccarat-sim.com
 
-Two routes. Pick by whether you mind cold starts more than you mind $5 a month.
+The site lives at **https://baccarat-sim.com/** (GitHub Pages, custom domain) and
+the multiplayer table service at **wss://table.baccarat-sim.com/ws** (the Fly app
+`baccarat-sim`; its `baccarat-sim.fly.dev` hostname keeps working alongside).
+The domain was bought at [Spaceship](https://www.spaceship.com) on 2026-09-09.
 
-|  | Route A — free tier | Route B — one small VPS |
+| | Production (this doc) | Alternative — one small VPS |
 |---|---|---|
-| Cost | **$12/year** (domain only) | **~$12/year + ~$5/month** |
-| Hosts | GitHub Pages + Render | one box, everything |
-| Cold start | ~50s after 15 min idle | none |
-| Rooms survive idle | ❌ sleeping wipes every table | ✅ |
-| You maintain | nothing | OS updates, the box |
-| Config | set `VITE_WS_URL` | none — same origin |
+| Cost | domain only (~$12/year) | domain + ~$5/month |
+| Hosts | GitHub Pages + Fly | one box, everything |
+| Config | Actions variable `VITE_WS_URL` | none — same origin |
+| Rooms survive idle | depends on Fly `min_machines_running` | ✅ |
 
-**Start with A.** It costs a domain and nothing else, and you can move to B later
-without touching code. Go to B the day real players are at tables, because that
-is when losing every room to an idle timeout stops being acceptable.
+The apex is canonical. `www.` only redirects; nothing links to it.
 
 ---
 
-## Step 0 — buy the domain (both routes)
+## Cutover runbook
 
-[Cloudflare Registrar](https://dash.cloudflare.com) → Domain Registration. It
-sells at wholesale with no markup and no cheap-first-year trick, and WHOIS
-privacy is included. A `.com` is about **$10–12/year**.
+Do these in order. Each step depends on the one before it.
 
-Avoid anything that could be mistaken for **Baccarat S.A.**, the French crystal
-house that owns the trademark and `baccarat.com`. A descriptive compound —
-`baccaratsimulator.com` — is safe because it plainly describes the card game.
-A near-miss of the mark is what gets a domain taken off you.
+### 1. DNS at Spaceship
 
----
+Spaceship → Domain → **Advanced DNS**. Delete any parking records it created,
+then add:
 
-## Route A — GitHub Pages + Render (free)
-
-### A1. Deploy the table service
-
-[Render → New Blueprint](https://dashboard.render.com/blueprint/new), point it at
-this repository. It reads `render.yaml`, builds the existing `Dockerfile`, and
-gives you `https://baccarat-table-service.onrender.com`.
-
-Nothing in `server/` changes: it already binds `0.0.0.0:$PORT`, which is all any
-container host asks for.
-
-### A2. DNS at Cloudflare
-
-| Type | Name | Value | Proxy |
+| Type | Host | Value | TTL |
 |---|---|---|---|
-| A | `@` | `185.199.108.153` | **DNS only** |
-| A | `@` | `185.199.109.153` | **DNS only** |
-| A | `@` | `185.199.110.153` | **DNS only** |
-| A | `@` | `185.199.111.153` | **DNS only** |
-| CNAME | `www` | `sabiennguyen.github.io` | **DNS only** |
-| CNAME | `tables` | `baccarat-table-service.onrender.com` | **DNS only** |
+| A | `@` | `185.199.108.153` | auto |
+| A | `@` | `185.199.109.153` | auto |
+| A | `@` | `185.199.110.153` | auto |
+| A | `@` | `185.199.111.153` | auto |
+| AAAA | `@` | `2606:50c0:8000::153` | auto |
+| AAAA | `@` | `2606:50c0:8001::153` | auto |
+| AAAA | `@` | `2606:50c0:8002::153` | auto |
+| AAAA | `@` | `2606:50c0:8003::153` | auto |
+| CNAME | `www` | `sabiennguyen.github.io` | auto |
+| CNAME | `table` | `baccarat-sim.fly.dev` | auto |
 
-> ⚠️ **Grey cloud, not orange.** Cloudflare's proxy stops GitHub issuing the TLS
-> certificate and you get a redirect loop. Turn the proxy on later, if you want
-> it, once the certificate exists — and use SSL mode *Full (strict)*.
+> The A/AAAA addresses are GitHub's, from *"Managing a custom domain for your
+> GitHub Pages site"*. They are long-standing, but confirm them against that page
+> before pasting — they are GitHub's to change.
 
-> Confirm those four IPs against GitHub's *"Managing a custom domain for your
-> GitHub Pages site"* docs before pasting. They are long-standing, but they are
-> GitHub's to change, not mine.
-
-The `tables` CNAME is worth the extra minute: players never see an
-`onrender.com` URL, and moving hosts later is one DNS edit instead of a rebuild.
-
-### A3. Point the site at the tables
-
-Repository → Settings → Secrets and variables → Actions → **Variables** → New:
-
-```
-VITE_WS_URL = wss://tables.baccaratsimulator.com/ws
-```
-
-The deploy workflow passes it into the build. Without it the client falls back to
-`/ws` on its own origin, which on Pages is nothing — so multiplayer would show
-its offline screen while single player carried on working.
-
-### A4. Turn on the custom domain
-
-Add `web/public/CNAME` containing exactly your domain (no scheme, no slash) —
-`web/public/` is copied into `dist`, so it ships with the deploy.
-
-Then Settings → Pages → Custom domain → enter it → wait for the certificate →
-tick **Enforce HTTPS**.
-
----
-
-## Route B — one VPS (~$5/month)
-
-Cheapest sensible boxes: **Hetzner CX22** (~€4) or a **$6 DigitalOcean droplet**.
-Any 1 vCPU / 2 GB Ubuntu box is plenty — the table service is a single Rust
-binary holding rooms in memory.
-
-### B1. DNS
-
-| Type | Name | Value | Proxy |
-|---|---|---|---|
-| A | `@` | your server's IPv4 | DNS only at first |
-| CNAME | `www` | `baccaratsimulator.com` | DNS only at first |
-
-### B2. On the box
+Wait for propagation before going on (usually minutes, up to an hour):
 
 ```sh
-# Docker, then the app
+dig +short baccarat-sim.com A          # the four 185.199.x.153 addresses
+dig +short baccarat-sim.com AAAA       # the four 2606:50c0:800x::153 addresses
+dig +short www.baccarat-sim.com CNAME  # sabiennguyen.github.io.
+dig +short table.baccarat-sim.com CNAME # baccarat-sim.fly.dev.
+```
+
+### 2. GitHub Pages custom domain
+
+`web/public/CNAME` contains exactly `baccarat-sim.com` and Vite copies
+`public/` into `dist`, so every deploy ships it — Pages reads that file, and it
+is what makes `www.baccarat-sim.com` redirect to the apex automatically.
+
+Then repository → **Settings → Pages → Custom domain** → `baccarat-sim.com` →
+Save. Pages runs a DNS check and provisions a certificate; once the check is
+green (a few minutes after DNS resolves), tick **Enforce HTTPS**.
+
+> If the checkbox is greyed out, the certificate isn't issued yet. Wait, reload
+> the settings page; don't remove and re-add the domain, that restarts the clock.
+
+### 3. Fly certificate for the table subdomain
+
+```sh
+flyctl certs add table.baccarat-sim.com -a baccarat-sim
+flyctl certs check table.baccarat-sim.com -a baccarat-sim   # repeat until "Issued"
+```
+
+The `table` CNAME from step 1 is all Fly needs for validation: it sees the
+hostname resolve to the app and issues a Let's Encrypt certificate. If `check`
+reports the DNS is not configured, the CNAME hasn't propagated yet.
+
+Confirm the socket endpoint answers on the new hostname before pointing the
+site at it:
+
+```sh
+curl -sS https://table.baccarat-sim.com/health
+```
+
+### 4. Point the site at the tables
+
+Repository → Settings → Secrets and variables → Actions → **Variables** →
+`VITE_WS_URL` (edit, or New repository variable):
+
+```
+VITE_WS_URL = wss://table.baccarat-sim.com/ws
+```
+
+The value must be the full socket URL **including the `/ws` path** — the client
+(`web/src/multiplayer/protocol.ts`, `socketUrl()`) uses it verbatim and appends
+nothing. Left unset, the client falls back to `/ws` on its own origin, which on
+Pages is nothing: multiplayer would show its offline screen while single player
+carried on.
+
+A variable change does not trigger a build on its own. Re-run the deploy:
+**Actions → Build & Deploy → Run workflow** (on `main`), or push to `main`.
+
+### 5. Verify
+
+```sh
+curl -sI https://baccarat-sim.com/ | head -1            # HTTP/2 200
+curl -sI http://baccarat-sim.com/ | grep -i location    # → https://baccarat-sim.com/
+curl -sI https://www.baccarat-sim.com/ | grep -i location  # → https://baccarat-sim.com/
+curl -s  https://baccarat-sim.com/CNAME                 # baccarat-sim.com
+curl -s  https://baccarat-sim.com/robots.txt | grep Sitemap  # https://baccarat-sim.com/sitemap.xml
+curl -sS https://table.baccarat-sim.com/health          # room and connection gauges
+```
+
+Then open the site, start a live table, and watch the browser console: a failed
+socket shows up as the offline screen rather than an error, so the console is
+where the real reason is. The bundle should be opening
+`wss://table.baccarat-sim.com/ws` — if it still opens `wss://baccarat-sim.com/ws`
+(its own origin), the variable wasn't in the build; check step 4.
+
+Finally, in Google Search Console, add `baccarat-sim.com` as a Domain property and
+submit `https://baccarat-sim.com/sitemap.xml`. The old `github.io` property can
+be left to expire; GitHub serves a 301 from it once the custom domain is set.
+
+---
+
+## Where the URL lives in the repo
+
+The site URL is hard-coded in the canonical tags, `og:url`, JSON-LD, `sitemap.xml`,
+`robots.txt`, the share card fallback, both READMEs, `docs/`, and the crate
+metadata. The generated content pages (`web/public/{how-to-play,glossary,...}`)
+take it from `SITE` in `web/scripts/build-content.mjs`. If the domain ever
+changes again, do it in one commit:
+
+```sh
+grep -rn "baccarat-sim.com" --exclude-dir=node_modules --exclude-dir=dist .
+```
+
+and change `web/public/CNAME` in the same commit, so canonical tags never
+advertise a host that isn't live.
+
+---
+
+## Portal builds
+
+Game portals (CrazyGames, Armor Games, Newgrounds, itch.io) run the game inside
+a cross-origin iframe and take an uploaded zip. Build it with:
+
+```sh
+npm --workspace web run build:portal
+```
+
+That runs the normal build with `VITE_PORTAL=crazygames` into `web/dist-portal/`
+and zips it to `web/dist-portal.zip` (`web/scripts/zip-portal.mjs`, no extra
+dependencies; `CNAME` is left out). Set `VITE_WS_URL` as for the site build if
+live tables should work from inside the portal. Both outputs are gitignored.
+
+| Portal | Wants | Notes |
+|---|---|---|
+| CrazyGames | zip, `index.html` at the root | Uses their SDK v3 (`web/src/portal/crazygames.ts`): gameplay start/stop, happy time on a beaten table, a midgame ad on a fresh shoe, a rewarded ad for a fresh buy-in on the bust screen. The SDK is loaded from `sdk.crazygames.com` at runtime. |
+| itch.io | zip, `index.html` at the root | HTML5 project, "This file will be played in the browser". No SDK. |
+| Newgrounds | zip, `index.html` at the root | HTML5 upload, set the viewport size. No SDK. |
+| Armor Games | zip / hosted URL, by email | No SDK. |
+
+Only the portal build talks to a portal: the adapter is chosen at runtime by
+`?portal=crazygames`, then by the build-time `VITE_PORTAL`, and otherwise falls
+back to a null adapter that loads and contacts nothing (`web/src/portal/`).
+The CrazyGames code is a separate, lazily-imported chunk, so the plain
+`npm run build` bundle never fetches it. A portal build served on its own
+(outside a portal) still works — the SDK just fails to initialise and every
+portal call becomes a no-op, with a single console warning.
+
+Which copies are embeddable: the Pages build (`baccarat-sim.com`) and the zip
+send no framing headers and may be iframed. The Fly-served copy of the site
+keeps `frame-ancestors 'none'` in its CSP (`server/src/main.rs`) and cannot be
+embedded; portals must use the zip or the Pages URL, never `*.fly.dev`.
+Storage access (`localStorage` / `sessionStorage`) is guarded throughout, so a
+portal that partitions or blocks third-party storage degrades to "no
+persistence" rather than a blank page.
+
+---
+
+## Alternative — one VPS (~$5/month)
+
+If Fly's idle stop (`min_machines_running = 0` in `fly.toml`) ever costs real
+players their rooms, the cheapest fix is one always-on box serving site and
+socket together. **Hetzner CX22** (~€4) or a **$6 DigitalOcean droplet** — any
+1 vCPU / 2 GB Ubuntu box is plenty; the table service is a single Rust binary
+holding rooms in memory.
+
+### DNS
+
+Replace the Pages records with:
+
+| Type | Host | Value |
+|---|---|---|
+| A | `@` | the server's IPv4 |
+| CNAME | `www` | `baccarat-sim.com` |
+
+Drop the `table` CNAME too — on this route the socket is same-origin.
+
+### On the box
+
+```sh
 curl -fsSL https://get.docker.com | sh
 git clone https://github.com/SabienNguyen/baccarat-sim.git
 cd baccarat-sim
@@ -112,37 +211,26 @@ docker run -d --restart=always -p 127.0.0.1:8788:8788 -e PORT=8788 baccarat
 Binding to `127.0.0.1` keeps the service off the public internet — only Caddy
 reaches it.
 
-### B3. TLS, without thinking about it
+### TLS
 
 ```sh
 apt install -y caddy
-# copy the Caddyfile from this repo to /etc/caddy/Caddyfile, edit the domain
+# copy the Caddyfile from this repo to /etc/caddy/Caddyfile
 systemctl reload caddy
 ```
 
-Caddy obtains and renews the certificate itself. No certbot, no cron, no expiry
-to forget.
+Caddy obtains and renews the certificate itself.
 
-**Set no `VITE_WS_URL` on this route.** One host serves the pages and the socket,
-so the client's same-origin default is already correct — and a value that can't
-drift is better than one that can.
+**Unset `VITE_WS_URL` on this route** (delete the Actions variable and redeploy,
+or stop using Pages altogether — the server serves `web/dist` itself via
+`SPA_DIR`). One host serves the pages and the socket, so the client's
+same-origin default is already correct, and a value that can't drift is better
+than one that can.
 
----
+### Render instead of Fly
 
-## After either route
-
-The site URL is hard-coded in **51 places across 15 files** — canonical tags,
-`og:url`, `sitemap.xml`, `robots.txt`, the share card, both READMEs and the crate
-metadata. Change them in the same commit as the DNS switch, so canonical tags
-never advertise the old host while the new one is live.
-
-Verify with an actual browser rather than trusting the dashboard:
-
-```sh
-curl -I https://baccaratsimulator.com          # 200, and HTTPS not redirecting in a loop
-curl -s https://baccaratsimulator.com/health   # route B only: room and connection gauges
-```
-
-Then open the site, start a live table, and watch the browser console: a failed
-socket shows up as the offline screen rather than an error, so the console is
-where the real reason is.
+`render.yaml` is a ready blueprint for Render's free tier (no card, WebSockets
+supported, ~50s cold start after 15 min idle). Point
+[a new Blueprint](https://dashboard.render.com/blueprint/new) at this repository,
+then swap the `table` CNAME to the `onrender.com` hostname it gives you. Nothing
+else changes: the client still reads `wss://table.baccarat-sim.com/ws`.

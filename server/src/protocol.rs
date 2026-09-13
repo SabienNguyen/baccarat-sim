@@ -3,7 +3,7 @@
 
 use baccarat_engine::scoreboard::Side;
 use baccarat_engine::session::BetKind;
-use baccarat_engine::table::{PlayerId, TableView};
+use baccarat_engine::table::{FlipRequest, PlayerId, TableView};
 use serde::{Deserialize, Serialize};
 
 /// Bumped on any breaking wire change. Sent with `Joined` so a stale client
@@ -47,6 +47,9 @@ pub enum ClientMsg {
     Deal,
     Peek { hand: Side, index: usize },
     Reveal { hand: Side, index: usize },
+    /// The squeezer asks the dealer to turn one or both of the house hand's
+    /// cards before finishing their own — the high-limit courtesy.
+    DealerFlip { count: FlipRequest },
     Settle,
     NewShoe,
 }
@@ -103,6 +106,10 @@ mod tests {
         let m: ClientMsg =
             serde_json::from_str(r#"{"type":"peek","hand":"Banker","index":1}"#).unwrap();
         assert!(matches!(m, ClientMsg::Peek { index: 1, .. }));
+
+        let m: ClientMsg =
+            serde_json::from_str(r#"{"type":"dealer_flip","count":"Both"}"#).unwrap();
+        assert!(matches!(m, ClientMsg::DealerFlip { count: FlipRequest::Both }));
 
         let m: ClientMsg = serde_json::from_str(r#"{"type":"rename","name":"alice"}"#).unwrap();
         assert!(matches!(m, ClientMsg::Rename { ref name } if name == "alice"));
