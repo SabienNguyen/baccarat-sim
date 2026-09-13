@@ -2,6 +2,27 @@ import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Multiplayer, PING_MS } from "./Multiplayer";
 
+/** jsdom on newer Node exposes a bare `localStorage` that is undefined (the
+ *  same quirk analytics.test.ts works around); a Map-backed stand-in keeps the
+ *  remembered-name checks portable. */
+function fakeStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, String(v)),
+    removeItem: (k) => void m.delete(k),
+    clear: () => m.clear(),
+    key: (i) => [...m.keys()][i] ?? null,
+    get length() {
+      return m.size;
+    },
+  } as Storage;
+}
+
+beforeAll(() => {
+  if (typeof localStorage === "undefined") vi.stubGlobal("localStorage", fakeStorage());
+});
+
 /** A hand-cranked WebSocket double. */
 class FakeSocket {
   sent: string[] = [];
