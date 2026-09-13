@@ -62,7 +62,10 @@ function ensureContext(): AudioContext | null {
       return null;
     }
   }
-  if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+  // Muted means idle: resuming here would undo the suspend setMuted(true)
+  // (or a hidden-tab suspend) just did. Only an audible level may wake the
+  // context; setMuted(false) resumes explicitly once it flips the setting.
+  if (ctx.state === "suspended" && masterLevel() > 0) void ctx.resume().catch(() => {});
   return ctx;
 }
 
@@ -92,6 +95,12 @@ export function suspendAudio(): void {
 /** Bring the context back so sound can resume (unmute, or the tab coming
  *  back to the foreground). A no-op without a context or already running. */
 export function resumeAudio(): void {
+  ensureSettings();
+  // A no-op while muted: resuming would leave a silent context rendering,
+  // which is exactly the "muted only zeroed the gain" bug this exists to
+  // close. setMuted(false) updates the setting before calling this, so
+  // unmuting still resumes.
+  if (masterLevel() === 0) return;
   if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => {});
 }
 
