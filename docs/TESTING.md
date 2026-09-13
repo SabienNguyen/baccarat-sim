@@ -1,0 +1,54 @@
+# Manual multiplayer testing
+
+`npm run phones` opens several headed, phone-emulated Chromium windows side by
+side against your local dev server, for hand-testing multiplayer end to end.
+
+```sh
+npm run phones                       # 3 windows, iPhone 14, tier=mid
+npm run phones -- --n=2              # only 2 windows
+npm run phones -- --device="Pixel 7" # different device emulation
+npm run phones -- --tier=low         # tier to pick when creating the table
+npm run phones -- --headless         # smoke-test the script itself, no UI
+```
+
+It will:
+
+1. Check port `8788` (the table service); if nothing is listening, run
+   `cargo run -p baccarat-server` itself (prefixed `[server]` logs) and wait
+   for it to come up (cold builds can take a few minutes).
+2. Check port `5173` (Vite); if nothing is listening, run
+   `npx vite --port 5173 --strictPort` in `web/` itself (`[vite]` logs) and
+   wait for it.
+3. Launch one Chromium **browser per phone** (not just a tab or context —
+   window position/size are launch args, so each phone gets its own process),
+   emulating the chosen device (viewport, DPR, touch, UA), windows laid out
+   left to right with a 20px gap.
+4. Print a banner with the manual script below, then wait for Ctrl-C, which
+   closes every window it opened and stops anything it spawned (a table
+   service or Vite dev server it started itself is stopped; one that was
+   already running is left alone).
+
+Flags: `--tier=mid|low|high` (default `mid`), `--n=3`, `--device="Pixel 7"`
+(any playwright-core device name), `--headless`, `--vite-port` /
+`--server-port` if you need non-default ports (e.g. another worktree's Vite is
+already on 5173).
+
+Each window opens on the home screen: there's no URL that lands directly on
+the multiplayer lobby (a `?room=` with no code falls back to the home screen,
+and the lobby's tier picker isn't URL-addressable), so click **Multiplayer**
+on each phone to get to the lobby.
+
+## Manual multiplayer script
+
+1. **Phone 1**: Multiplayer → pick the tier → **Create table**. Copy the code.
+2. **Phones 2–3**: Multiplayer → enter the code → **Join**.
+3. Everyone places a bet; phone 1 (or whoever's turn) **deals**.
+4. **Squeeze** on whichever phone is holding the hand that squeezes.
+5. Trigger a **dealer flip request** and confirm it resolves for everyone.
+6. **Settle** the hand and confirm balances update on all three phones.
+7. One phone **leaves** the table.
+8. One phone opens `?watch=CODE` to **watch from the rail** (no seat, no
+   chips) and confirms it sees live hands.
+9. **Rename a seat** and confirm the new name shows on the other phones.
+10. **Reload** one still-seated phone and confirm it reclaims its own seat
+    and bankroll instead of joining as a new player.
