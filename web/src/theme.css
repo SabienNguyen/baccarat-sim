@@ -198,6 +198,19 @@ body {
        core loop — see your roll, place chips, act — and lets the roads and the
        Explain panel scroll below as reference. --- */
 @media (max-width: 700px) {
+  :root {
+    /* The bar is one row (~62px) once a hand is in flight, but the Betting
+       phase adds a "Watch hand" button that wraps it to two rows (~114px,
+       measured at 390 wide) — reserve the taller figure everywhere so
+       nothing this padding is supposed to protect ever sits under the bar,
+       whichever phase is on screen. */
+    --controls-bar-clearance: calc(114px + env(safe-area-inset-bottom));
+  }
+  /* The document (not `.app`) is what actually scrolls here, so this is
+     where `scrollIntoView`/`:target` need to stop short of the fixed bar. */
+  html {
+    scroll-padding-bottom: var(--controls-bar-clearance);
+  }
   .app {
     grid-template-columns: 1fr;
     /* HUD first: the bankroll is the one number you must never scroll for. */
@@ -213,7 +226,7 @@ body {
     padding:
       max(10px, env(safe-area-inset-top))
       max(10px, env(safe-area-inset-right))
-      calc(64px + env(safe-area-inset-bottom))
+      var(--controls-bar-clearance)
       max(10px, env(safe-area-inset-left));
   }
   .app .hud,
@@ -289,6 +302,18 @@ body {
     background: rgba(11, 61, 46, 0.94);
     border-top: 2px solid var(--ink);
     box-shadow: 0 -3px 0 rgba(0, 0, 0, 0.35);
+    /* The bar's own box only ever has buttons and gaps in it, but its
+       bounding box always spans the full width — including the gaps
+       between buttons and any margin the bar has over the felt below.
+       Without this, a tap that lands in that dead space (or on content
+       the bar happens to be sitting over) is swallowed by the bar div
+       instead of falling through to the felt underneath. */
+    pointer-events: none;
+  }
+  /* ...and restore it on the actual interactive children so the buttons
+     themselves still take taps. */
+  .app > .stage > .controls .btn {
+    pointer-events: auto;
   }
   /* comfortable thumb targets on the pinned bar */
   .app > .stage > .controls .btn {
