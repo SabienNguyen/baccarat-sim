@@ -34,6 +34,7 @@ function TallyPanel({ tally: t }: { tally: BoardTally }) {
     ["Tie", <HanGlyph kind="tie" size={18} />, t.tie],
     ["Banker pair", <span className="pair-dot pair-dot--banker pair-dot--inline" />, t.bankerPair],
     ["Player pair", <span className="pair-dot pair-dot--player pair-dot--inline" />, t.playerPair],
+    ["Natural", <span className="natural-dot natural-dot--inline" />, t.natural],
     ["Game number", null, t.games],
   ];
   return (

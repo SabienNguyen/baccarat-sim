@@ -6,8 +6,8 @@ import type { BeadCell, BigRoadCell, ScoreboardSnapshot, Side } from "../engine/
 function bead(outcome: BeadCell["outcome"], pp = false, bp = false): BeadCell {
   return { outcome, player_pair: pp, banker_pair: bp };
 }
-function win(side: Side): BigRoadCell {
-  return { side, ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false };
+function win(side: Side, natural = false): BigRoadCell {
+  return { side, ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural };
 }
 
 /** B B P P P B P B B — the engine's worked example, with a few pairs and a tie. */
@@ -29,7 +29,7 @@ function board(): ScoreboardSnapshot {
     },
     big_road: {
       columns: [
-        [win("Banker"), win("Banker")],
+        [win("Banker"), win("Banker", true)],
         [win("Player"), win("Player"), win("Player")],
         [win("Banker")],
         [win("Player")],
@@ -52,6 +52,7 @@ test("the tally panel counts wins, pairs and the game number off the bead plate"
   expect(row(tally, "Tie")).toHaveTextContent("1");
   expect(row(tally, "Banker pair")).toHaveTextContent("2");
   expect(row(tally, "Player pair")).toHaveTextContent("2");
+  expect(row(tally, "Natural")).toHaveTextContent("1");
   expect(row(tally, "Game number")).toHaveTextContent("10");
 });
 

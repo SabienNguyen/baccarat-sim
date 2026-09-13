@@ -10,12 +10,16 @@ export interface BoardTally {
   tie: number;
   bankerPair: number;
   playerPair: number;
+  /** Win cells whose two-card total was a natural 8 or 9 (Big Road only —
+   *  the bead plate has no natural flag, so a natural on a tie isn't counted
+   *  here). */
+  natural: number;
   /** Hands on the plate, ties included. */
   games: number;
 }
 
 export function boardTally(scoreboard: ScoreboardSnapshot): BoardTally {
-  const t: BoardTally = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, games: 0 };
+  const t: BoardTally = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, natural: 0, games: 0 };
   for (const cell of scoreboard.bead_plate.cells) {
     t.games += 1;
     if (cell.outcome === "BankerWin") t.banker += 1;
@@ -23,6 +27,11 @@ export function boardTally(scoreboard: ScoreboardSnapshot): BoardTally {
     else t.tie += 1;
     if (cell.banker_pair) t.bankerPair += 1;
     if (cell.player_pair) t.playerPair += 1;
+  }
+  for (const column of scoreboard.big_road.columns) {
+    for (const cell of column) {
+      if (cell.natural) t.natural += 1;
+    }
   }
   return t;
 }
