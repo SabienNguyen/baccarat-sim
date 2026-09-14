@@ -41,6 +41,32 @@ impl RoundRecord {
     }
 }
 
+/// Build a round history from a bare outcome sequence (e.g. from a photographed
+/// pit display or a worked example). Accepts `B`/`P`/`T` case-insensitively,
+/// ignores whitespace and any other character, and sets every flag false —
+/// there is no pair/animal/natural information in a bare outcome letter.
+pub fn records_from_outcomes(seq: &str) -> Vec<RoundRecord> {
+    seq.chars()
+        .filter_map(|c| {
+            let outcome = match c.to_ascii_uppercase() {
+                'B' => Outcome::BankerWin,
+                'P' => Outcome::PlayerWin,
+                'T' => Outcome::Tie,
+                _ => return None,
+            };
+            Some(RoundRecord {
+                outcome,
+                player_pair: false,
+                banker_pair: false,
+                dragon7: false,
+                panda8: false,
+                tiger: false,
+                natural: false,
+            })
+        })
+        .collect()
+}
+
 /// Winning side of a decided round (no Tie — ties never occupy a Big Road cell).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
@@ -327,6 +353,82 @@ mod derived_road_tests {
         assert!(s.big_eye_boy.columns.is_empty());
         assert!(s.small_road.columns.is_empty());
         assert!(s.cockroach_pig.columns.is_empty());
+    }
+
+    // Renders a Big Road column vector as "B1 P1 B2 P1 …" — side + column height.
+    fn render_big_road(columns: &[Vec<BigRoadCell>]) -> String {
+        columns
+            .iter()
+            .map(|col| {
+                let letter = match col[0].side {
+                    Side::Banker => 'B',
+                    Side::Player => 'P',
+                };
+                format!("{letter}{}", col.len())
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    // Renders a derived-road column vector as "R1 b4 R2 …" — Red/blue + column height.
+    fn render_derived_road(columns: &[Vec<Mark>]) -> String {
+        columns
+            .iter()
+            .map(|col| {
+                let letter = match col[0] {
+                    Mark::Red => 'R',
+                    Mark::Blue => 'b',
+                };
+                format!("{letter}{}", col.len())
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn real_pit_display_68_hand_shoe_matches_every_road() {
+        // Source: Wizard of Odds "Baccarat Score Boards" page photos
+        // (bac-display-*.jpg) and its Big Road / Big Eye Boy example grids,
+        // 2012 pit display, 68 hands, verified 2026-09-14. Bead plate read
+        // top-to-bottom, column by column, no ties in this shoe. Note: the
+        // pit display's Small Road grid had scrolled four columns by hand
+        // 68, so the photo shows columns 5-42 of the full 42-column road
+        // (its first visible mark is the `b1` of column 5) — Big Eye Boy and
+        // Cockroach Pig had not scrolled and match in full.
+        let seq = "BPBBPB BBBPBP BBPPPB BBPPBP PPBBPP BPBBBP PPBBPP BPBBBP BBPBBB PBBBBP BPBPPP BP";
+        let history = records_from_outcomes(seq);
+        assert_eq!(history.len(), 68);
+
+        let s = derive_scoreboard(&history);
+
+        assert_eq!(
+            render_big_road(&s.big_road.columns),
+            "B1 P1 B2 P1 B4 P1 B1 P1 B2 P3 B3 P2 B1 P3 B2 P2 B1 P1 B3 P3 B2 P2 B1 P1 B3 P1 B2 P1 B3 P1 B4 P1 B1 P1 B1 P3 B1 P1"
+        );
+        assert_eq!(s.big_road.columns.len(), 38);
+
+        assert_eq!(
+            render_derived_road(&s.big_eye_boy.columns),
+            "R1 b4 R2 b2 R2 b2 R1 b2 R4 b3 R1 b1 R1 b1 R2 b1 R1 b1 R1 b1 R4 b1 R2 b1 R1 b1 R1 b6 R1 b3 R2 b2 R3 b1 R1 b2"
+        );
+        assert_eq!(s.big_eye_boy.columns.len(), 36);
+
+        assert_eq!(
+            render_derived_road(&s.small_road.columns),
+            "b2 R2 b1 R1 b1 R1 b1 R1 b3 R1 b1 R1 b2 R1 b2 R1 b4 R1 b4 R1 b2 R1 b1 R1 b1 R1 b4 R1 b1 R2 b1 R2 b2 R3 b2 R1 b1 R2 b1 R1 b1 R1"
+        );
+        assert_eq!(s.small_road.columns.len(), 42);
+
+        assert_eq!(
+            render_derived_road(&s.cockroach_pig.columns),
+            "R1 b1 R2 b2 R1 b4 R1 b2 R1 b1 R2 b1 R5 b4 R1 b3 R1 b3 R1 b3 R1 b2 R1 b4 R1 b3 R2 b2 R1 b1 R1 b1 R1 b1 R1"
+        );
+        assert_eq!(s.cockroach_pig.columns.len(), 35);
+
+        let banker = history.iter().filter(|r| r.outcome == Outcome::BankerWin).count();
+        let player = history.iter().filter(|r| r.outcome == Outcome::PlayerWin).count();
+        let tie = history.iter().filter(|r| r.outcome == Outcome::Tie).count();
+        assert_eq!((banker, player, tie, history.len()), (38, 30, 0, 68));
     }
 
     #[test]
