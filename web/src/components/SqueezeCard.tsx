@@ -10,6 +10,12 @@ import { CardGLEngine } from "../cardgl/engine";
 const DRAG_DISTANCE_PX = 120;
 /** Pointer travel (px) above which a gesture counts as a drag, not a tap. */
 const TAP_SLOP_PX = 8;
+/** Peek lens (T8b): the floating magnifier's CSS box size. */
+const LENS_SIZE = 120;
+/** Card-local px inset from the true corner for the lens's magnified point —
+ *  bigger than the lens's half-window (LENS_SIZE / 2 / 2 = 30, at 2x scale)
+ *  so the crop lands entirely on the card face, not half off its edge. */
+const LENS_CORNER_INSET = 36;
 
 // The GL gate, checked once: real curvature when WebGL2 is there and the
 // user hasn't asked for reduced motion; otherwise the CSS peel carries on.
@@ -115,6 +121,12 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   // follow the finger), everything else about the gesture stays ref-driven.
   const coarsePointer = useRef(false);
   const [lensAt, setLensAt] = useState<{ x: number; y: number } | null>(null);
+  // The corner the lens magnifies: fixed for the whole gesture at the card
+  // corner nearest the grab, in card-local px. NOT the live finger position —
+  // the finger pulls AWAY from the corner it's uncovering, so tracking the
+  // pointer showed mostly felt/blank stock past the card's own edge instead
+  // of the revealed face.
+  const lensCorner = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const faceUp = isFaceUp(card);
 
@@ -167,6 +179,22 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     coarsePointer.current =
       typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
     setLensAt(null);
+    // Nearest corner to the (clamped) grab — the region the fold uncovers —
+    // fixed for the rest of this gesture. Inset from the true edge (rather
+    // than the literal 0/width extreme) so the lens's crop — a 60x60
+    // unscaled-px window around this point, at 2x — lands entirely inside
+    // the card instead of half off its edge: the corner index/pip sits well
+    // inside this margin anyway.
+    if (rect.width > 0 && rect.height > 0) {
+      const localX = clamped.x - rect.left;
+      const localY = clamped.y - rect.top;
+      const insetX = Math.min(LENS_CORNER_INSET, rect.width / 2);
+      const insetY = Math.min(LENS_CORNER_INSET, rect.height / 2);
+      lensCorner.current = {
+        x: localX < rect.width / 2 ? insetX : rect.width - insetX,
+        y: localY < rect.height / 2 ? insetY : rect.height - insetY,
+      };
+    }
     if (glMode() && rect.width > 0) {
       glRect.current = { width: rect.width, height: rect.height };
       port.current = { drag: null, release: null };
@@ -341,29 +369,35 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     }
   }
 
-  // Peek lens geometry: a 120x120 CSS-px window floated above the finger,
-  // clamped inside the viewport; inside it, the card re-rendered at 2x,
-  // offset so whatever sits under the actual finger sits at the lens's
-  // centre. Only ever computed while the lens is showing.
-  const LENS_SIZE = 120;
+  // Peek lens geometry: a 120x120 CSS-px window that floats near the finger
+  // (clamped inside the viewport, and clamped above the card's own top edge
+  // so it never overlaps the card it's magnifying) but whose CONTENT is
+  // fixed at the card's grabbed corner — the region the fold is uncovering —
+  // not the live finger position (the finger pulls away from that corner as
+  // the peel deepens, which showed mostly felt/blank stock past the card's
+  // edge). Only ever computed while the lens is showing.
   let lensBoxStyle: { left: number; top: number } | null = null;
   let lensCloneStyle: { width: number; height: number; transform: string } | null = null;
   if (lensAt && start.current && start.current.rect.width > 0) {
+    const { rect } = start.current;
     const vw = typeof innerWidth === "number" ? innerWidth : LENS_SIZE;
     const vh = typeof innerHeight === "number" ? innerHeight : LENS_SIZE;
     const clampAxis = (v: number, size: number, max: number) =>
       Math.min(Math.max(v, 0), Math.max(max - size, 0));
+    // The box's bottom edge sits 72px above the finger, but never lower than
+    // 8px above the card's own top — whichever is higher up — so the lens
+    // never intersects the card it's magnifying regardless of which corner
+    // was grabbed.
+    const preferredBottom = Math.min(lensAt.y - 72, rect.top - 8);
     lensBoxStyle = {
       left: clampAxis(lensAt.x - LENS_SIZE / 2, LENS_SIZE, vw),
-      top: clampAxis(lensAt.y - 72 - LENS_SIZE / 2, LENS_SIZE, vh),
+      top: clampAxis(preferredBottom - LENS_SIZE, LENS_SIZE, vh),
     };
-    const { rect } = start.current;
-    const localX = Math.min(Math.max(lensAt.x - rect.left, 0), rect.width);
-    const localY = Math.min(Math.max(lensAt.y - rect.top, 0), rect.height);
+    const corner = lensCorner.current;
     lensCloneStyle = {
       width: rect.width,
       height: rect.height,
-      transform: `translate(${(LENS_SIZE / 2 - localX * 2).toFixed(1)}px, ${(LENS_SIZE / 2 - localY * 2).toFixed(1)}px) scale(2)`,
+      transform: `translate(${(LENS_SIZE / 2 - corner.x * 2).toFixed(1)}px, ${(LENS_SIZE / 2 - corner.y * 2).toFixed(1)}px) scale(2)`,
     };
   }
 
