@@ -1,10 +1,10 @@
-// T8b probe (overlay revision): at two phone viewports (390x844 and
-// 360x780), walk Betting -> bet -> Deal, wait for the peel overlay to take
-// over, and assert:
+// T8b probe (overlay revision): at phone viewports, walk Betting -> bet ->
+// Deal, wait for the peel overlay to take over, and assert:
 //   - `.peel-backdrop` covers the viewport (its box == {0,0,w,h})
 //   - the inline `.hud` is still in the DOM behind the backdrop (the normal
 //     felt stays mounted underneath — this is an overlay, not a swap)
-//   - overlay card widths are 112px
+//   - overlay card widths are 112px (390x844's own step; see below for the
+//     height-based steps checked at the other viewports)
 //   - document.documentElement.scrollWidth === the viewport width
 //   - a touch drag starting ON the first Player card's face peeks it (the
 //     dealer line changes) — there is no reach anymore, so the drag must
@@ -17,9 +17,36 @@
 // supports a single tap, not a move sequence) — this is exactly what the
 // app's own pointer handlers listen for, and matchMedia("(pointer: coarse)")
 // still reports true from Chromium's touch-emulated context regardless.
+//
+// Controls-bar clearance (this revision): the pinned action bar
+// (`.controls`, fixed + z-index 45, theme.css) sits on top of the overlay's
+// own z-index 40, and on a short viewport the overlay's lower content used
+// to render right under it. At FOUR phone viewports — 390x844, 390x664,
+// 360x640, 412x915 — once the overlay is up and at rest AND the "Ask the
+// dealer" flip offer has been driven onto screen (see below), this asserts
+// (at window.scrollY === 0 and `.peel-stage-content`.scrollTop === 0):
+//   - every "Flip one" / "Flip both" / "Flip the other" button's box bottom
+//     is above (< ) `.controls`'s box top
+//   - the Banker hand's `.hand-total-badge` box bottom is above `.controls`'s
+//     box top (Banker is `.peel-stage .hand` — the second one)
+//
+// The "Ask the dealer" group (DealerFlipRequest.tsx) only renders while the
+// engine would actually honour the ask (dealerFlip.ts's dealerFlipOffer): a
+// squeezer holding Player, the house holding Banker, and Player's own hand
+// not yet fully turned. Right after Deal that's already true, but the
+// Banker hand carries no `.hand-total-badge` yet — Hand.tsx only prints one
+// once a card is face-up, and the dealer's own pacer will not turn Banker's
+// initial cards until the *normal* ritual reaches them (Player exposed
+// first) — which would also clear the flip offer by revealing Player's
+// hand. So this probe drives the state the real high-limit ask exists for:
+// tapping "Flip one" itself, which turns one Banker card immediately
+// (independent of the ritual) and leaves the offer up as "Flip the other" —
+// giving both the buttons and the Banker total on screen together without
+// faking anything App.tsx/dealerFlip.ts wouldn't do on a real tap.
 import { chromium, devices } from "playwright-core";
 
 const PORT = process.env.PORT ?? 5185;
+const SHOT = process.env.SHOT ?? null;
 
 async function dragTouch(page, selector, path) {
   return page.evaluate(
@@ -66,7 +93,7 @@ async function releaseTouch(page, selector, x, y) {
   );
 }
 
-async function runProbe(width, height) {
+async function runProbe(width, height, { shot } = {}) {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
     ...devices["iPhone 14"],
@@ -136,6 +163,69 @@ async function runProbe(width, height) {
   await page.waitForTimeout(150);
   out.noLensAfterRelease = (await page.locator(".peek-lens").count()) === 0;
 
+  // --- controls-bar clearance: drive the "Ask the dealer" flip offer AND a
+  // Banker total onto screen together (see the file header) by tapping
+  // "Flip one" ourselves — exactly the real high-limit ask a player would
+  // make mid-squeeze.
+  const flipOneBtn = page.locator(".peel-stage .dealer-flip-btn", { hasText: "Flip one" });
+  out.flipOneOffered = (await flipOneBtn.count()) > 0;
+  if (out.flipOneOffered) {
+    await flipOneBtn.tap();
+    await page.waitForTimeout(500);
+  }
+
+  // The clearance assertions below only mean anything measured from a
+  // known rest position: `.peel-stage` and `.controls` are both
+  // `position: fixed` (viewport-relative), so a leftover page scrollY from
+  // an earlier tap (Playwright's tap() scrolls its target into view, and a
+  // short viewport can need that during Betting) wouldn't itself move
+  // either box — but pin both scroll positions to 0 anyway so the
+  // measurement is taken under the exact condition specified (top of page,
+  // top of the overlay's own scroll container) rather than relying on that.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    const content = document.querySelector(".peel-stage-content");
+    if (content) content.scrollTop = 0;
+  });
+
+  if (shot) {
+    await page.screenshot({ path: shot });
+    out.screenshot = shot;
+  }
+
+  out.scrollYAtRest = await page.evaluate(() => window.scrollY);
+  out.peelStageContentScrollTop = await page.evaluate(
+    () => document.querySelector(".peel-stage-content")?.scrollTop ?? null,
+  );
+
+  const controlsBox = await page.locator(".controls").boundingBox().catch(() => null);
+  out.controlsBox = controlsBox;
+
+  const clearance = await page.evaluate(() => {
+    const controlsTop = document.querySelector(".controls")?.getBoundingClientRect().top ?? null;
+    const flipBtns = Array.from(document.querySelectorAll(".peel-stage .dealer-flip-btn")).map(
+      (el) => {
+        const box = el.getBoundingClientRect();
+        return { label: el.textContent, bottom: box.bottom };
+      },
+    );
+    const bankerHand = document.querySelectorAll(".peel-stage .hand")[1] ?? null;
+    const bankerBadge = bankerHand?.querySelector(".hand-total-badge") ?? null;
+    const bankerBadgeBottom = bankerBadge ? bankerBadge.getBoundingClientRect().bottom : null;
+    return { controlsTop, flipBtns, bankerBadgeBottom };
+  });
+  out.controlsTop = clearance.controlsTop;
+  out.flipButtonBottoms = clearance.flipBtns;
+  out.bankerBadgeBottom = clearance.bankerBadgeBottom;
+  out.flipButtonsClearControls =
+    clearance.controlsTop !== null &&
+    clearance.flipBtns.length > 0 &&
+    clearance.flipBtns.every((b) => b.bottom < clearance.controlsTop);
+  out.bankerBadgeClearsControls =
+    clearance.controlsTop !== null &&
+    clearance.bankerBadgeBottom !== null &&
+    clearance.bankerBadgeBottom < clearance.controlsTop;
+
   // Reveal all -> Settled removes the backdrop
   const revealBtn = page.getByRole("button", { name: "Reveal all" });
   if (await revealBtn.count()) {
@@ -165,6 +255,39 @@ async function runProbe(width, height) {
 
 const results = [];
 results.push(await runProbe(390, 844));
-results.push(await runProbe(360, 780));
+results.push(await runProbe(390, 664, SHOT ? { shot: SHOT } : {}));
+results.push(await runProbe(360, 640));
+results.push(await runProbe(412, 915));
 
 console.log(JSON.stringify({ results }, null, 2));
+
+const failures = [];
+for (const r of results) {
+  if (!r.backdropCoversViewport) failures.push(`${r.viewport}: backdrop doesn't cover viewport`);
+  if (!r.hudStillInDom) failures.push(`${r.viewport}: .hud missing from DOM`);
+  if (!r.scrollWidthOk) failures.push(`${r.viewport}: horizontal scroll (scrollWidth ${r.scrollWidth})`);
+  if (!r.dealerLineChanged) failures.push(`${r.viewport}: peek drag didn't change the dealer line`);
+  if (!r.noLensDuringDrag) failures.push(`${r.viewport}: .peek-lens present during drag`);
+  if (!r.noLensAfterRelease) failures.push(`${r.viewport}: .peek-lens present after release`);
+  if (!r.flipOneOffered) failures.push(`${r.viewport}: "Flip one" was never offered`);
+  if (r.scrollYAtRest !== 0) failures.push(`${r.viewport}: window.scrollY is ${r.scrollYAtRest}, not 0`);
+  if (r.peelStageContentScrollTop !== 0)
+    failures.push(`${r.viewport}: .peel-stage-content.scrollTop is ${r.peelStageContentScrollTop}, not 0`);
+  if (!r.flipButtonsClearControls)
+    failures.push(
+      `${r.viewport}: a flip button's bottom is not above .controls's top (${JSON.stringify(r.flipButtonBottoms)} vs controlsTop=${r.controlsTop})`,
+    );
+  if (!r.bankerBadgeClearsControls)
+    failures.push(
+      `${r.viewport}: Banker's total badge bottom (${r.bankerBadgeBottom}) is not above .controls's top (${r.controlsTop})`,
+    );
+  if (!r.settledReached) failures.push(`${r.viewport}: never reached Settled`);
+  if (!r.backdropGoneAfterSettle) failures.push(`${r.viewport}: backdrop still present after Settled`);
+}
+
+if (failures.length > 0) {
+  console.error(`\n${failures.length} PROBE ASSERTION(S) FAILED:`);
+  for (const f of failures) console.error(`  - ${f}`);
+  process.exit(1);
+}
+console.error(`\nAll probe assertions passed across ${results.length} viewports.`);
