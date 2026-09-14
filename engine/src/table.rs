@@ -6,8 +6,8 @@
 use crate::round::{play_round, RoundResult};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::session::{
-    derive_events, fully_revealed, hand_view, BetKind, CardStatus, CommandError, Event, HandView,
-    PhaseTag, PlacedBet, RevealState,
+    aggregate_payouts, derive_events, fully_revealed, hand_view, BetKind, CardStatus, CommandError,
+    Event, HandView, PhaseTag, PlacedBet, RevealState,
 };
 use crate::settle::{settle_with, Bet, Ruleset};
 use crate::shoe::{Shoe, CUT_CARD};
@@ -802,7 +802,7 @@ impl Table {
                 })
                 .collect();
             p.bankroll += payouts.iter().map(|x| x.net).sum::<i64>();
-            p.payouts = Some(payouts);
+            p.payouts = Some(aggregate_payouts(payouts));
             p.bets.clear();
             p.sitting_out = false; // fresh decision every coup
             p.ready = false;
@@ -990,6 +990,7 @@ fn settle_one(bet: &PlacedBet, round: &RoundResult, ruleset: Ruleset) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::round::Outcome;
     use crate::session::CardView;
     use crate::settle::BetSpot;
 
@@ -1181,6 +1182,78 @@ mod tests {
         let fresh = t.view_for(a).unwrap();
         assert_eq!(fresh.phase, PhaseTag::Dealing);
         assert!(fresh.player.cards.iter().all(|c| matches!(c, CardView::FaceDown)));
+    }
+
+    #[test]
+    fn settle_aggregates_same_kind_chips_for_one_seat_on_win() {
+        // Four 500 chips on Player, all won at once, must render as one
+        // BetPayout for 2,000 — not four separate +500 lines.
+        let mut seed = 0u64;
+        loop {
+            let mut t = Table::new(
+                TableConfig {
+                    table_min: 100,
+                    table_max: 1_000_000,
+                    ruleset: Ruleset::Commission,
+                    max_seats: 1,
+                },
+                seed,
+            );
+            let a = t.join("a", 100_000).unwrap();
+            for _ in 0..4 {
+                t.place_bet(a, BetKind::Main(BetSpot::Player), 500).unwrap();
+            }
+            t.ready(a).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+            let view = t.view_for(a).unwrap();
+            if view.outcome == Some(Outcome::PlayerWin) {
+                let payouts = view.payouts.unwrap();
+                assert_eq!(payouts.len(), 1);
+                assert_eq!(payouts[0].bet.kind, BetKind::Main(BetSpot::Player));
+                assert_eq!(payouts[0].bet.amount, 2_000);
+                assert_eq!(payouts[0].net, 2_000);
+                break;
+            }
+            seed += 1;
+            assert!(seed < 2_000, "no Player win found in seed range");
+        }
+    }
+
+    #[test]
+    fn settle_aggregates_same_kind_chips_for_one_seat_on_loss() {
+        // Same four chips, but the coup goes the other way: one -2,000 line,
+        // not four -500 lines.
+        let mut seed = 0u64;
+        loop {
+            let mut t = Table::new(
+                TableConfig {
+                    table_min: 100,
+                    table_max: 1_000_000,
+                    ruleset: Ruleset::Commission,
+                    max_seats: 1,
+                },
+                seed,
+            );
+            let a = t.join("a", 100_000).unwrap();
+            for _ in 0..4 {
+                t.place_bet(a, BetKind::Main(BetSpot::Player), 500).unwrap();
+            }
+            t.ready(a).unwrap();
+            t.deal().unwrap();
+            t.settle().unwrap();
+            let view = t.view_for(a).unwrap();
+            if view.outcome == Some(Outcome::BankerWin) {
+                let payouts = view.payouts.unwrap();
+                assert_eq!(payouts.len(), 1);
+                assert_eq!(payouts[0].bet.kind, BetKind::Main(BetSpot::Player));
+                assert_eq!(payouts[0].bet.amount, 2_000);
+                assert_eq!(payouts[0].net, -2_000);
+                break;
+            }
+            seed += 1;
+            assert!(seed < 2_000, "no Banker win found in seed range");
+        }
     }
 
     #[test]
