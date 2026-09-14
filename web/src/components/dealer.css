@@ -90,6 +90,17 @@
   }
 }
 
+/* T8b: the peel stage's compact dealer line — the felt's real estate there
+   belongs to the cards. */
+.dealer-line--compact p {
+  font-size: 15px;
+  min-height: 0;
+  padding: 8px 12px 7px;
+}
+.dealer-line--compact .dealer-tag {
+  font-size: 9px;
+}
+
 @media (max-width: 520px) {
   .dealer-line p {
     font-size: 19px;

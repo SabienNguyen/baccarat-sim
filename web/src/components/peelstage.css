@@ -1,0 +1,57 @@
+/* T8b: the peel stage — once the bets are in, only the cards matter. A
+   fixed, full-viewport overlay that sits UNDER the pinned action bar
+   (z-index 45 in theme.css's phone block) so Reveal/Explain/Settle stay
+   reachable while it's up. */
+.peel-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--felt-deep, #0b3d2e);
+  overflow: hidden;
+  --peel-card: 112px;
+}
+
+.peel-stage .dealer-line {
+  flex: 0 0 auto;
+}
+
+.peel-stage-hands {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.peel-stage .hand {
+  width: 100%;
+}
+
+.peel-stage .hand-cards {
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Card sizing: 112px fits three cards a side down to a 376px-wide phone
+   (3 * 112 + 2 * 8px gap = 352px <= viewport(376) - 2 * 12px padding = 352).
+   Narrower than that (e.g. 360/375px) a 3-card hand steps down to 104px
+   (3 * 104 + 16 = 328 <= 336). A 2-card hand never needs the smaller step —
+   2 * 112 + 8 = 232 fits any phone width. */
+.peel-stage .card {
+  width: var(--peel-card);
+  height: calc(var(--peel-card) * 1.43);
+}
+@media (max-width: 375px) {
+  .peel-stage[data-cards="3"] {
+    --peel-card: 104px;
+  }
+}
