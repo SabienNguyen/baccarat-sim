@@ -61,14 +61,139 @@ function RoadInfo({ term }: { term: string }) {
   );
 }
 
+/** Parse a computed CSS value as a whole number of pixels, e.g. "27px" -> 27.
+ *  Anything else (unresolved custom property, calc(), %) yields null. */
+function parsePx(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed.endsWith("px")) return null;
+  const n = Number.parseFloat(trimmed.slice(0, -2));
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Keep a scrolling road pinned to its newest column, like the pit display:
- *  when the grid outgrows its window, the latest play stays in view. */
+ *  when the grid outgrows its window, the latest play stays in view. On top
+ *  of that, the grid is sized to a whole number of column-pitches (so the
+ *  left edge never cuts a column mid-cell) and desktop users get a wheel and
+ *  drag-to-scroll affordance plus edge shadows hinting there is more to see. */
 function useFollowLatest<T extends HTMLElement = HTMLDivElement>(columnCount: number) {
   const ref = useRef<T>(null);
+
+  // Whole-column sizing: sample --road-cell / --road-gap off the grid itself
+  // and the parent's available width, then set the grid's own width to the
+  // largest whole number of column-pitches that fits it.
+  useEffect(() => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return;
+
+    const fit = () => {
+      const style = getComputedStyle(el);
+      const cell = parsePx(style.getPropertyValue("--road-cell"));
+      const gap = parsePx(style.getPropertyValue("--road-gap"));
+      if (cell == null || gap == null) return; // unresolved: leave the CSS default (100%)
+      const available = parent.clientWidth;
+      if (available <= 0) return; // no layout (jsdom) — leave the CSS default
+      // The grid's own padding/border eat into its box under the global
+      // `* { box-sizing: border-box }` reset — a column count picked from
+      // the raw available width would still land a half column shy of the
+      // content edge. Budget for that so the whole-pitch math lands on the
+      // content box the columns actually render in, then size the element
+      // back up to the border box so it still fills that column budget.
+      const overhead =
+        (parsePx(style.paddingLeft) ?? 0) +
+        (parsePx(style.paddingRight) ?? 0) +
+        (parsePx(style.borderLeftWidth) ?? 0) +
+        (parsePx(style.borderRightWidth) ?? 0);
+      const borderBox = style.boxSizing === "border-box";
+      const contentAvailable = borderBox ? available - overhead : available;
+      const pitch = cell + gap;
+      const n = Math.max(0, Math.floor((contentAvailable + gap) / pitch));
+      const contentWidth = n > 0 ? n * cell + (n - 1) * gap : 0;
+      const width = borderBox ? contentWidth + overhead : contentWidth;
+      el.style.width = `${width}px`;
+    };
+
+    fit();
+    window.addEventListener("resize", fit);
+    if (typeof ResizeObserver === "undefined") {
+      return () => window.removeEventListener("resize", fit);
+    }
+    const ro = new ResizeObserver(fit);
+    ro.observe(parent);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, []);
+
+  // Follow the newest column, once the width above is settled.
   useEffect(() => {
     const el = ref.current;
     if (el) el.scrollLeft = el.scrollWidth;
   }, [columnCount]);
+
+  // Wheel panning, mouse drag-to-scroll, and overflow-edge affordances.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const overflowing = () => el.scrollWidth > el.clientWidth + 0.5;
+
+    const setFlag = (name: string, on: boolean) => {
+      if (on) el.setAttribute(name, "true");
+      else el.removeAttribute(name);
+    };
+    const updateOverflow = () => {
+      const over = overflowing();
+      setFlag("data-overflow-left", over && el.scrollLeft > 0.5);
+      setFlag("data-overflow-right", over && el.scrollLeft < el.scrollWidth - el.clientWidth - 0.5);
+      el.classList.toggle("road-scroll--draggable", over);
+    };
+
+    // A plain vertical mouse-wheel pans the road; leave horizontal trackpad
+    // deltas (already >= vertical) to the browser's native scrolling.
+    const onWheel = (e: WheelEvent) => {
+      if (!overflowing()) return;
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+
+    let drag: { x: number; scrollLeft: number } | null = null;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse" || !overflowing()) return;
+      drag = { x: e.clientX, scrollLeft: el.scrollLeft };
+      el.setPointerCapture(e.pointerId);
+      el.classList.add("road-scroll--dragging");
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!drag) return;
+      el.scrollLeft = drag.scrollLeft - (e.clientX - drag.x);
+    };
+    const stopDrag = () => {
+      drag = null;
+      el.classList.remove("road-scroll--dragging");
+    };
+
+    updateOverflow();
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("scroll", updateOverflow);
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", stopDrag);
+    el.addEventListener("pointercancel", stopDrag);
+    window.addEventListener("resize", updateOverflow);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("scroll", updateOverflow);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", stopDrag);
+      el.removeEventListener("pointercancel", stopDrag);
+      window.removeEventListener("resize", updateOverflow);
+    };
+  }, []);
+
   return ref;
 }
 
