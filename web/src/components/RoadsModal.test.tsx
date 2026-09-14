@@ -179,3 +179,24 @@ test("the board locks page scroll while it is open and releases it on close", ()
   unmount();
   expect(document.body.style.overflow).toBe("");
 });
+
+// The half-size derived-road CSS (scoreboard.css) is keyed off the
+// `.roads-modal .road.derived .road-grid` selector chain — it has no other
+// way to tell a Big Eye Boy / Small Road / Cockroach Pig grid apart from the
+// Big Road's. This is a structure test guarding that hook: the derived
+// roads must carry the `road derived` classes and sit under `.roads-modal`,
+// while the Big Road grid must NOT pick up the `derived` class.
+test("each derived road exposes the .road.derived class hook the smaller-cell CSS keys off", () => {
+  const { container } = render(<RoadsModal scoreboard={board()} onClose={() => {}} />);
+  const modal = container.querySelector(".roads-modal");
+  expect(modal).not.toBeNull();
+
+  for (const label of ["Big Eye Boy", "Small Road", "Cockroach Pig"]) {
+    const grid = modal!.querySelector(`[aria-label="${label}"].road.derived .road-grid`);
+    expect(grid, `${label} grid should be a .road-grid inside a .road.derived panel`).not.toBeNull();
+  }
+
+  const bigRoadGrid = modal!.querySelector('[aria-label="Big Road"] .road-grid');
+  expect(bigRoadGrid).not.toBeNull();
+  expect(bigRoadGrid!.closest(".road.derived")).toBeNull();
+});

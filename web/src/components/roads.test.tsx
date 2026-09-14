@@ -57,6 +57,52 @@ test("the big road follows the latest column when it outgrows the window", () =>
   expect(grid.scrollLeft).toBe(900);
 });
 
+test("the grid is sized to a whole number of column-pitches that fit its panel", () => {
+  const { container } = render(<BigRoadView road={road(20)} />);
+  const grid = container.querySelector<HTMLElement>(".road-grid")!;
+  const parent = grid.parentElement!;
+  Object.defineProperty(parent, "clientWidth", { value: 400, configurable: true });
+
+  const real = window.getComputedStyle;
+  const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+    const style = real.call(window, el as Element, pseudo ?? undefined);
+    if (el !== grid) return style;
+    return new Proxy(style, {
+      get(target, prop, receiver) {
+        if (prop === "getPropertyValue") {
+          return (name: string) => {
+            if (name === "--road-cell") return "27px";
+            if (name === "--road-gap") return "3px";
+            return target.getPropertyValue(name);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+  });
+
+  // the sizing effect samples layout on mount, when jsdom reports 0 for
+  // everything; re-run it the same way a real resize would.
+  window.dispatchEvent(new Event("resize"));
+
+  expect(grid.style.width).toBe("387px"); // 13 columns: 13*27 + 12*3
+
+  spy.mockRestore();
+});
+
+test("a plain mouse wheel pans an overflowing road grid horizontally", () => {
+  const { container } = render(<BigRoadView road={road(20)} />);
+  const grid = container.querySelector<HTMLElement>(".road-grid")!;
+  Object.defineProperty(grid, "scrollWidth", { value: 900, configurable: true });
+  Object.defineProperty(grid, "clientWidth", { value: 400, configurable: true });
+  grid.scrollLeft = 100;
+
+  const wheel = new WheelEvent("wheel", { deltaY: 60, deltaX: 0, cancelable: true });
+  grid.dispatchEvent(wheel);
+
+  expect(grid.scrollLeft).toBe(160);
+});
+
 // --- food roads + Chinatown bead plate (presentation only) ---
 
 const derived: DerivedRoad = { columns: [["Red", "Blue"], ["Red"]] };

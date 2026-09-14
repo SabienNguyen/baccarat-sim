@@ -101,19 +101,24 @@
 .bead-grid {
   list-style: none;
   margin: 0;
-  padding: 6px;
+  /* matches --road-gap: the follow-latest sizing hook lands the panel's
+     scrolled-to-end edge flush on a column boundary only when the leading
+     padding is no bigger than the inter-column gap; equal keeps it exact */
+  padding: var(--road-gap);
   display: grid;
   grid-auto-flow: column;
   grid-template-rows: repeat(6, var(--road-cell));
   grid-auto-columns: var(--road-cell);
   gap: var(--road-gap);
   overflow-x: auto;
+  scroll-snap-type: x proximity;
+  margin-left: auto; /* right-align a grid the follow-latest hook sized narrower than its panel */
   background-color: var(--parchment);
   background-image:
     linear-gradient(var(--parchment-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--parchment-line) 1px, transparent 1px);
   background-size: var(--road-pitch) var(--road-pitch);
-  background-position: 5px 5px;
+  background-position: var(--road-gap) var(--road-gap);
   border: 2px solid var(--ink);
   border-radius: 4px;
 }
@@ -129,6 +134,7 @@
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.25),
     inset -1px -1px 0 rgba(0, 0, 0, 0.35);
+  scroll-snap-align: start;
 }
 .bead-grid li[data-outcome="PlayerWin"] {
   background: var(--chip-blue);
@@ -161,16 +167,19 @@
   align-content: start;
   gap: var(--road-gap);
   overflow-x: auto;
+  scroll-snap-type: x proximity;
+  margin-left: auto; /* right-align a grid the follow-latest hook sized narrower than its panel */
   background-color: var(--road-paper);
   /* faint cell grid so an empty board still reads as a pit display */
   background-image:
     linear-gradient(var(--road-grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--road-grid-line) 1px, transparent 1px);
   background-size: var(--road-pitch) var(--road-pitch);
-  background-position: 5px 5px;
+  background-position: var(--road-gap) var(--road-gap);
   border: 2px solid var(--ink);
   border-radius: 6px;
-  padding: 6px;
+  /* matches --road-gap — see the .bead-grid padding comment above */
+  padding: var(--road-gap);
 }
 /* one list per logical column, but its cells take part in the grid directly */
 .road-grid ul {
@@ -194,6 +203,30 @@
   color: #fff;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
   background: rgba(0, 0, 0, 0.07);
+  scroll-snap-align: start;
+}
+/* --- scrolling affordances the useFollowLatest hook drives ---
+   cursor hints while a grid actually overflows, and a soft inset shadow on
+   whichever edge still has more columns hidden past it. */
+.road-scroll--draggable {
+  cursor: grab;
+}
+.road-scroll--dragging {
+  cursor: grabbing;
+}
+.road-grid[data-overflow-left="true"],
+.bead-grid[data-overflow-left="true"] {
+  box-shadow: inset 12px 0 10px -10px rgba(0, 0, 0, 0.45);
+}
+.road-grid[data-overflow-right="true"],
+.bead-grid[data-overflow-right="true"] {
+  box-shadow: inset -12px 0 10px -10px rgba(0, 0, 0, 0.45);
+}
+.road-grid[data-overflow-left="true"][data-overflow-right="true"],
+.bead-grid[data-overflow-left="true"][data-overflow-right="true"] {
+  box-shadow:
+    inset 12px 0 10px -10px rgba(0, 0, 0, 0.45),
+    inset -12px 0 10px -10px rgba(0, 0, 0, 0.45);
 }
 /* big road: hollow-circle look in real display colors (4px ring at 27px) */
 .road-grid li[data-side="Player"] {
@@ -274,6 +307,62 @@
   height: calc(var(--road-cell) * 24 / 27);
 }
 
+/* Registering these two as typed lengths makes the browser resolve their
+   round()/calc() at computed-value time instead of leaving it as literal
+   text: a plain custom property's getComputedStyle() value keeps its
+   round()/calc() UNEVALUATED (e.g. "round(down, calc(27px / 2), 1px)"), so
+   useFollowLatest's whole-column sizing hook (roads.tsx, parsePx() off
+   getComputedStyle(grid).getPropertyValue("--road-cell")) would silently
+   bail on a derived grid and leave it at the CSS default width. Once
+   --derived-cell/--derived-gap are registered, --road-cell: var(--derived-
+   cell) on the grid inherits their already-resolved "13px" instead of the
+   raw expression, so the JS hook reads a real, parseable px value. */
+@property --derived-cell {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --derived-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+/* Full-roads window only: a real Macau pit display runs Big Eye Boy, Small
+   Road and Cockroach Pig at about half the Big Road's cell — that's how 40+
+   columns fit a fixed-width display with no scrolling. Every size in this
+   file (grid rows/columns, li width/height, the pair/bonus tokens, the food
+   glyphs) already keys off --road-cell, so shrinking that one variable for
+   just these three grids is enough — the least invasive way to do that
+   without a self-reference cycle (`--road-cell: calc(var(--road-cell) / 2)`
+   on the same element is circular and gets thrown out) is to compute the
+   halved size on the ANCESTOR .road.derived as its own property, then have
+   the descendant .road-grid adopt it as --road-cell. --road-gap and
+   --road-pitch (the background rule-line pitch) are halved the same way so
+   the paper's grid lines still land on the (smaller) cell boundaries;
+   round(down, …) keeps every size an integer px (crisp pixel art) and
+   spends every spare px on columns rather than rounding up past what Small
+   Road / Cockroach Pig's half-width row (.roads-bottom) can actually fit.
+   Right-rail Scoreboard is untouched: this only matches inside
+   .roads-modal. */
+.roads-modal .road.derived {
+  --derived-cell: round(down, calc(var(--road-cell) / 2), 1px);
+  --derived-gap: round(down, calc(var(--road-gap) / 2), 1px);
+}
+.roads-modal .road.derived .road-grid {
+  --road-cell: var(--derived-cell);
+  --road-gap: var(--derived-gap);
+  --road-pitch: calc(var(--road-cell) + var(--road-gap));
+  /* Small Road / Cockroach Pig share a half-width row and need every spare
+     px for their 40+ columns; the base grid's own edge padding (normally
+     one --road-gap per side, to land the follow-latest width flush on a
+     column boundary) is not needed here for that same reason — the edge
+     shadow/scroll only ever appears on the *inside* boundary of a scrolled
+     column, not the grid's own frame — so it is dropped for the derived
+     grids, freeing 2px, and the background grid-line offset follows it. */
+  padding: 0;
+  background-position: 0 0;
+}
+
 /* win counters, like the pit display footer */
 .road-tally {
   display: flex;
@@ -343,7 +432,11 @@
   /* useFitCells sets --road-cell inline on this element, so the pitch has to
      be resolved here too: a custom property computed on .board would be
      inherited as a fixed 30px and the rule lines and card rows would never
-     shrink with the cells */
+     shrink with the cells. --road-gap itself also needs restating: this
+     dialog is not nested in .board, so without this the grids' `gap: var
+     (--road-gap)` resolves to nothing and the useFollowLatest sizing hook
+     (which reads --road-gap straight off the grid) has nothing to parse. */
+  --road-gap: 3px;
   --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
 /* Too short to fit legibly (useFitCells gave up scaling, or the viewport is
@@ -406,8 +499,9 @@
   font-size: max(9px, calc(var(--road-cell) * 15 / 27));
 }
 .roads-board .road-grid {
-  padding: 5px;
-  width: 100%; /* fill the slot so the whole board reads as one display */
+  padding: var(--road-gap);
+  width: 100%; /* fill the slot so the whole board reads as one display; the
+    follow-latest sizing hook overrides this with a whole-column px width */
 }
 .roads-top {
   display: grid;
@@ -442,7 +536,7 @@
   flex-direction: column;
 }
 .roads-board .bead-grid {
-  padding: 5px;
+  padding: var(--road-gap);
   flex: 1 1 auto;
   align-content: start;
 }
