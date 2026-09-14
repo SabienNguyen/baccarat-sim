@@ -215,12 +215,11 @@ body {
        Explain panel scroll below as reference. --- */
 @media (max-width: 700px) {
   :root {
-    /* The bar is one row (~62px) once a hand is in flight, but the Betting
-       phase adds a "Watch hand" button that wraps it to two rows (~114px,
-       measured at 390 wide) — reserve the taller figure everywhere so
-       nothing this padding is supposed to protect ever sits under the bar,
-       whichever phase is on screen. */
-    --controls-bar-clearance: calc(114px + env(safe-area-inset-bottom));
+    /* P12 made the bar one row in every phase (short labels + a tighter,
+       nowrap flex layout in controls.css) — measured 62px in Betting (5
+       buttons), Dealing and Settled alike, at both 390 and 360 wide. The old
+       114px here was reserved for Betting's now-eliminated second row. */
+    --controls-bar-clearance: calc(62px + env(safe-area-inset-bottom));
   }
   /* The document (not `.app`) is what actually scrolls here, so this is
      where `scrollIntoView`/`:target` need to stop short of the fixed bar. */
@@ -331,9 +330,7 @@ body {
   .app > .stage > .controls .btn {
     pointer-events: auto;
   }
-  /* comfortable thumb targets on the pinned bar */
-  .app > .stage > .controls .btn {
-    min-height: 44px;
-    flex: 1 1 auto;
-  }
+  /* Sizing/one-row layout itself lives in controls.css (min-width/height,
+     flex-basis, font floor, short-label swap) — this file only owns the bar's
+     position, background and the taps-fall-through behaviour above. */
 }

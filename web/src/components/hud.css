@@ -176,3 +176,38 @@
   font-size: 9px;
   color: var(--gold);
 }
+
+/* --- phone type floor + 44px tap targets (P12) ---
+   Nothing in the pixel display font renders below 10px here: 8px labels go to
+   10px, the 9px goal percentage to 11px. Reset bank / Lobby measured 89x30 and
+   59x30 (tap targets, not just type) — min-height plus taller padding gets both
+   to 44px without widening the row past what the two-column phone HUD has. */
+@media (max-width: 700px) {
+  .hud-box-label {
+    font-size: 10px;
+  }
+  .hud-goal-pct {
+    font-size: 11px;
+  }
+  .hud-action {
+    font-size: 10px;
+    min-height: 44px;
+    /* tight horizontal padding: Reset bank + Lobby have to share the HUD's
+       narrow second column beside the volume control without wrapping (which
+       would stretch that whole grid row to two lines' worth of height) */
+    padding: 10px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hud-actions {
+    gap: 5px;
+  }
+  .hud-seat {
+    font-size: 10px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

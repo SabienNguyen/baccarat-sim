@@ -88,4 +88,8 @@
     padding: 9px 12px 8px;
     min-height: 52px;
   }
+  /* Type floor (P12): 9px -> 11px. Not interactive, so no tap-target change. */
+  .dealer-tag {
+    font-size: 11px;
+  }
 }

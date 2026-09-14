@@ -580,6 +580,20 @@
 /* phones: the board stacks and scrolls instead of fitting (useFitCells
    stands down under 700px), the three cards share a row where they fit */
 @media (max-width: 700px) {
+  /* Type floor (P12): road headings and win-count tallies were 11px. */
+  .board h4 {
+    font-size: 12px;
+  }
+  .tally {
+    font-size: 12px;
+  }
+  /* "Full roads" measured 102x35 at 9px text — 44px tap target via
+     min-height/padding, not a wider button than the dock needs. */
+  .full-roads-btn {
+    font-size: 11px;
+    min-height: 44px;
+    padding: 10px 14px;
+  }
   .roads-backdrop {
     padding: 8px;
   }
