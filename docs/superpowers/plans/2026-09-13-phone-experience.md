@@ -123,3 +123,33 @@ by side, all at `http://localhost:5173/?room=` (lobby). Ctrl-C tears everything
 down. Flags: `--tier=mid`, `--n=3`, `--device="Pixel 7"`. Document the manual
 script: phone 1 creates a table, phones 2–3 join by code, bet, deal, squeeze,
 settle, one leaves, one watches from the rail.
+
+## T8b — Peel stage on phones + a reachable peel (owner direction 2026-09-13)
+Owner: "once the bets are in only the view of the cards matters … bring the
+cards up to the front of the player's view where they can see only the Player
+and Banker cards … since we are peeling with the finger the card is under the
+finger, so make the radius in which the card is peelable larger than the face."
+Files: new `web/src/components/PeelStage.tsx` + `peelstage.css` + test,
+`App.tsx` (mount on phones in Dealing), `SqueezeCard.tsx` (hit reach + lens),
+`cards.css`, `squeeze.ts` if the geometry needs a clamp, docs/BACKLOG.md.
+1. On coarse-pointer / ≤700px viewports, when the phase is Dealing (after the
+   deal fly-in), mount a fixed full-viewport stage above the page: compact dealer
+   line at the top, Player and Banker hands centred and LARGE (two cards ≥ 96px
+   wide each; a third card lands at the same size, three per side must still fit
+   390 with 8px gaps), the "Ask the dealer" flip buttons under the hands, and the
+   pinned bar (Reveal / Explain) still reachable. Body scroll locked while up.
+   Unmounts when the phase leaves Dealing (Settled shows the normal felt with the
+   outcome). Solo and multiplayer (seats and rail) alike; the squeeze rights are
+   unchanged — non-holders see the cards, cannot peel.
+2. Peel reach: the pointer target of a face-down card extends `--peel-reach`
+   (28px) beyond its face on every side (transparent hit-expander; keyboard/aria
+   untouched). A gesture that starts in the reach maps to the nearest corner and
+   drives the same grip/fold maths as one that starts on the face.
+3. Peek lens: on coarse pointers, while a peek is in progress, render a 2× lens
+   of the card's peeked corner ABOVE the finger (offset −72px in y, clamped to the
+   viewport) so the sliver is visible even though the finger covers the card.
+   Hidden on fine pointers. Removed on release.
+Tests: PeelStage mounts/unmounts on phase + media (mock matchMedia); SqueezeCard
+starts a drag from inside the reach; lens renders only during a peek on coarse
+pointer. Probe at 390×844 and 360×780: stage covers the viewport, hands' card
+widths, no page overflow, a drag starting 20px outside the card face peeks it.
