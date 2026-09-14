@@ -112,6 +112,24 @@ impl Room {
         }
     }
 
+    /// The ready-up rule: deal the coup the moment every seat is `decided()`
+    /// (sitting out, ready, or broke). Callers must only invoke this after an
+    /// event that can newly COMPLETE the table's decision — Ready, SitOut, a
+    /// seat leaving, or a held seat's hold expiring — never after a command
+    /// that merely leaves the decided set unchanged or shrinks it (a bet, an
+    /// Unready), since a lone already-decided seat (e.g. broke) would then
+    /// have an unrelated command deal an empty-felt coup. One call site for
+    /// the SAME path a pressed Deal takes, whichever of those events was the
+    /// last hold-out's decision.
+    pub fn try_auto_deal(&mut self) -> bool {
+        if self.table.all_ready() {
+            self.table.deal().expect("all_ready implies deal succeeds");
+            true
+        } else {
+            false
+        }
+    }
+
     /// Tell every seat and watcher the room is closing (e.g. the process is
     /// shutting down), so clients see a reason instead of a bare socket reset.
     pub fn close_all(&self, reason: &str) {
@@ -472,8 +490,18 @@ impl Registry {
             // (`table.leave` handed it to the house; without a pace the cards
             // would sit face down until someone else acted).
             if guard.expire_held() {
+                // The seat that just got evicted may have been the last
+                // undecided one — same ready-up check a live SitOut or Leave
+                // gets, so a hold expiring doesn't strand the table either.
+                let dealt = guard.try_auto_deal();
                 guard.broadcast();
                 maybe_pace(room.clone());
+                if dealt {
+                    for (pid, since) in guard.held_squeezers() {
+                        arm_squeeze_grace(room.clone(), pid, since);
+                    }
+                    arm_squeeze_clock(room.clone());
+                }
             }
             if guard.is_vacant() && reapable {
                 candidates.push(id);
@@ -655,6 +683,12 @@ pub fn ready_announcement(table: &Table, pid: PlayerId) -> String {
     let n = active.len();
     let k = active.iter().filter(|s| s.ready).count();
     format!("{name} is ready ({k}/{n})")
+}
+
+/// "{name} sits this one out" — the SitOut counterpart to `ready_announcement`.
+pub fn sit_out_announcement(table: &Table, pid: PlayerId) -> String {
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
+    format!("{name} sits this one out")
 }
 
 /// "Waiting on X, Y, Z" for the seats still undecided — at most three names,

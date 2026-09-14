@@ -487,13 +487,25 @@ async fn handle_command(
         },
         ClientMsg::Leave => match seat.take() {
             Some(At::Seat(Seat { room, pid })) => {
-                {
+                let (dealt, gone_squeezers) = {
                     let mut guard = room.lock().await;
                     guard.conns.remove(&pid);
                     let _ = guard.table.leave(pid);
+                    // The seat that just left may have been the last
+                    // undecided one — same ready-up check Ready/SitOut get,
+                    // so leaving doesn't strand the table either.
+                    let dealt = guard.try_auto_deal();
                     guard.broadcast();
+                    let gone_squeezers = if dealt { guard.held_squeezers() } else { Vec::new() };
+                    (dealt, gone_squeezers)
+                };
+                maybe_pace(room.clone());
+                for (pid, since) in gone_squeezers {
+                    arm_squeeze_grace(room.clone(), pid, since);
                 }
-                maybe_pace(room);
+                if dealt {
+                    arm_squeeze_clock(room.clone());
+                }
                 registry.sweep().await;
                 let _ = tx.try_send(ServerMsg::Left { reason: None });
             }
@@ -528,6 +540,7 @@ async fn handle_command(
             );
             let mut dealt = matches!(table_cmd, ClientMsg::Deal);
             let is_ready_cmd = matches!(table_cmd, ClientMsg::Ready);
+            let is_sit_out_cmd = matches!(table_cmd, ClientMsg::SitOut);
             let result = match table_cmd {
                 // Same scrub as a join: the name goes straight into every
                 // other seat's view, so it must not carry bidi/zero-width
@@ -556,26 +569,30 @@ async fn handle_command(
             };
             match result {
                 Ok(()) => {
-                    // Everyone must ready up before the coup deals. A
-                    // successful Ready announces the tally, and — once the
-                    // last seat is ready — runs the SAME path a pressed Deal
-                    // does (pacing, held-squeezer grace, broadcast).
-                    let mut ready_lines: Vec<String> = Vec::new();
+                    // Everyone must ready up before the coup deals. Ready and
+                    // SitOut are the only commands that can newly complete
+                    // the table's decision (Bet/ClearBets/Unready un-ready a
+                    // seat; Rename/Peek/Reveal/etc. change nothing about who
+                    // has decided) — each announces its own line, then, once
+                    // every seat is decided, runs the SAME path a pressed
+                    // Deal does (pacing, held-squeezer grace, broadcast).
+                    let mut lines: Vec<String> = Vec::new();
                     if is_ready_cmd {
-                        ready_lines.push(rooms::ready_announcement(&room.table, pid));
-                        if room.table.all_ready() {
-                            room.table.deal().expect("all_ready implies deal succeeds");
-                            dealt = true;
-                            advances_coup = true;
-                        } else {
-                            ready_lines.push(rooms::waiting_on_line(&room.table));
-                        }
+                        lines.push(rooms::ready_announcement(&room.table, pid));
+                    } else if is_sit_out_cmd {
+                        lines.push(rooms::sit_out_announcement(&room.table, pid));
+                    }
+                    if (is_ready_cmd || is_sit_out_cmd) && room.try_auto_deal() {
+                        dealt = true;
+                        advances_coup = true;
+                    } else if is_ready_cmd || is_sit_out_cmd {
+                        lines.push(rooms::waiting_on_line(&room.table));
                     }
                     room.broadcast();
                     if let Some(line) = flip_line {
                         room.announce(line);
                     }
-                    for line in ready_lines {
+                    for line in lines {
                         room.announce(line);
                     }
                     // A squeezer whose socket dropped BEFORE this deal got a
@@ -1191,6 +1208,127 @@ mod ready_command_tests {
             matches!(msgs.as_slice(), [ServerMsg::Error { message }]
                 if message == "Waiting on the table — everyone bets or sits out first."),
             "{msgs:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sit_out_by_the_last_undecided_seat_deals_the_coup() {
+        // alice bets and readies; bob is still undecided so the table waits.
+        // The moment bob sits out — instead of readying — every seat is
+        // decided, and that must deal the coup exactly like a Ready would.
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            (a, b)
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+        drain(&mut rb);
+        assert!(
+            !room.lock().await.table.all_ready(),
+            "bob hasn't decided yet, so the table isn't ready"
+        );
+
+        assert!(handle_command(ClientMsg::SitOut, &registry, &tb, &mut seat_b, &mut strikes).await);
+        let msgs_b = drain(&mut rb);
+        assert!(
+            announcements(&msgs_b).iter().any(|m| m == "bob sits this one out"),
+            "{msgs_b:?}"
+        );
+        assert!(
+            states(&msgs_b).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "bob's sit-out is the last decision the table needed — it deals: {msgs_b:?}"
+        );
+        let msgs_a = drain(&mut ra);
+        assert!(
+            states(&msgs_a).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "alice's state reaches Dealing too: {msgs_a:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sit_out_when_others_are_still_undecided_only_announces() {
+        // alice is ready, bob sits out, carol hasn't decided — still Betting,
+        // and bob's sit-out only announces itself plus who's left.
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (tc, mut rc) = mpsc::channel(OUT_QUEUE);
+        let (a, b, _c) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            let c = g.table.join("carol", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            g.seat(c, tc.clone());
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            (a, b, c)
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+        drain(&mut rb);
+        drain(&mut rc);
+
+        assert!(handle_command(ClientMsg::SitOut, &registry, &tb, &mut seat_b, &mut strikes).await);
+        let msgs_b = drain(&mut rb);
+        let lines = announcements(&msgs_b);
+        assert!(lines.iter().any(|m| m == "bob sits this one out"), "{lines:?}");
+        assert!(lines.iter().any(|m| m.contains("Waiting on carol")), "{lines:?}");
+        assert!(
+            states(&msgs_b).iter().all(|v| v.phase == PhaseTag::Betting),
+            "carol hasn't decided — no deal yet: {msgs_b:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn leaving_as_the_last_undecided_seat_deals_the_coup() {
+        // alice bets and readies; bob is undecided. Instead of readying or
+        // sitting out, bob just leaves — his seat drops out of the table
+        // entirely, and the remaining seat (alice) is now all that's left,
+        // fully decided. That must deal too, not hang.
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, _rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            (a, b)
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+
+        assert!(handle_command(ClientMsg::Leave, &registry, &tb, &mut seat_b, &mut strikes).await);
+        let msgs_a = drain(&mut ra);
+        assert!(
+            states(&msgs_a).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "bob leaving was the table's last decision — it deals: {msgs_a:?}"
         );
     }
 }
