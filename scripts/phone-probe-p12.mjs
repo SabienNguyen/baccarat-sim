@@ -32,18 +32,95 @@ async function measure(page) {
       return false;
     };
 
+    // T2b's glyph-button fix (road "?", bonus "i", volume mute/music) is a
+    // real, out-of-flow `::before` hit-expander: `position: relative` on the
+    // button, an absolutely-positioned `::before` with a negative `inset`
+    // that pads the *actual* tappable area out to 44px without the visible
+    // chip growing or the surrounding layout (a road heading, a HUD row)
+    // taking any extra space. A tap landing in that pseudo-element's box is
+    // a tap on the host button (generated content participates in hit
+    // testing the same as any other descendant box), so it's a legitimate
+    // enlargement of the real hit area — but `el.getBoundingClientRect()`
+    // only reports the host's own box, not its pseudo-elements', so a plain
+    // rect check would still flag these as under-44 after the fix. Compute
+    // the effective hit rect the same way the browser would: the host's own
+    // box, extended by however far a `position: absolute` `::before` (with
+    // no explicit width/height, so pure inset-driven sizing against the
+    // host's own padding box as the containing block) pushes past each edge.
+    const effectiveHitRect = (el, hostRect) => {
+      const cs = getComputedStyle(el, "::before");
+      if (!cs || cs.content === "none") return hostRect;
+      if (cs.position !== "absolute" && cs.position !== "fixed") return hostRect;
+      const num = (v) => (v === "auto" || v == null ? null : parseFloat(v));
+      const top = num(cs.top);
+      const right = num(cs.right);
+      const bottom = num(cs.bottom);
+      const left = num(cs.left);
+      if (top == null || right == null || bottom == null || left == null) {
+        // width/height set some other way (not pure inset) — not the pattern
+        // used here, and not safe to infer a size from, so don't credit it.
+        return hostRect;
+      }
+      const extraW = Math.max(0, -left) + Math.max(0, -right);
+      const extraH = Math.max(0, -top) + Math.max(0, -bottom);
+      return { width: hostRect.width + extraW, height: hostRect.height + extraH };
+    };
+
+    // WCAG 2.5.5/2.5.8 Target Size's own "inline" exception: a link/button
+    // that appears as a run of words inside a sentence or block of prose
+    // (e.g. the dealer's dialogue line, `.term` in glossary.css) is exempt —
+    // the surrounding text is the click/tap context, not a cramped icon.
+    // Detected structurally rather than by class name: an inline(-block)
+    // element with real sibling text directly in the same parent.
+    const isInlineTextLink = (el) => {
+      const cs = getComputedStyle(el);
+      if (cs.display !== "inline" && cs.display !== "inline-block") return false;
+      // `.term` (glossary.css) is wrapped in its own thin `<span
+      // class="glossary-term">` (for the popover), which is itself inline —
+      // the real sentence text is a level up (`.dealer-text`'s other
+      // segment spans). Climb through purely-inline wrapper ancestors
+      // looking for that prose, but stop at the first block-level (or
+      // flex/grid) parent: past that boundary a "sibling" is a layout
+      // neighbour, not running text (e.g. the "Flip one"/"Flip both" pair,
+      // each other's only sibling in a `display: flex` row, must NOT exempt
+      // either button).
+      let node = el;
+      for (let depth = 0; depth < 4; depth++) {
+        const parent = node.parentElement;
+        if (!parent) return false;
+        let proseText = "";
+        parent.childNodes.forEach((n) => {
+          if (n === node) return;
+          if (n.nodeType === 3) {
+            proseText += n.textContent;
+          } else if (n.nodeType === 1 && !(n.matches && n.matches(sel))) {
+            proseText += n.textContent || "";
+          }
+        });
+        if (proseText.trim().length > 0) return true;
+        const pd = getComputedStyle(parent).display;
+        if (pd !== "inline" && pd !== "inline-block") return false;
+        node = parent;
+      }
+      return false;
+    };
+
     const under44 = [];
     document.querySelectorAll(sel).forEach((el) => {
       if (isVisuallyHidden(el)) return;
+      if (isInlineTextLink(el)) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
-      if (r.width < 44 || r.height < 44) {
+      const hit = effectiveHitRect(el, r);
+      if (hit.width < 44 || hit.height < 44) {
         under44.push({
           tag: el.tagName,
           cls: typeof el.className === "string" ? el.className : String(el.className),
           text: (el.textContent || el.getAttribute("aria-label") || "").trim().slice(0, 30),
           w: Math.round(r.width * 100) / 100,
           h: Math.round(r.height * 100) / 100,
+          hitW: Math.round(hit.width * 100) / 100,
+          hitH: Math.round(hit.height * 100) / 100,
         });
       }
     });
@@ -74,6 +151,23 @@ async function measure(page) {
     const bar = document.querySelector(".app > .stage > .controls");
     const barRect = bar ? bar.getBoundingClientRect() : null;
 
+    // Deal must read as the primary action: its computed background-color
+    // should be the resolved `--gold` token, not the same red as every other
+    // `.controls .btn`. Resolve the token the same way the browser does (as
+    // an rgb() string) via a throwaway element, rather than string-comparing
+    // a hex literal against a computed rgb() — they'd never match.
+    let dealBackground = null;
+    let goldTokenBackground = null;
+    const dealBtn = document.querySelector(".controls .btn--primary");
+    if (dealBtn) {
+      dealBackground = getComputedStyle(dealBtn).backgroundColor;
+      const swatch = document.createElement("div");
+      swatch.style.background = getComputedStyle(document.documentElement).getPropertyValue("--gold");
+      document.body.appendChild(swatch);
+      goldTokenBackground = getComputedStyle(swatch).backgroundColor;
+      swatch.remove();
+    }
+
     return {
       under44,
       underFloor,
@@ -82,6 +176,8 @@ async function measure(page) {
       scrollHeight: document.documentElement.scrollHeight,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
+      dealBackground,
+      goldTokenBackground,
     };
   }, INTERACTIVE_SELECTOR);
 }
@@ -173,5 +269,28 @@ await androidCtx.close();
 // --- 390x664 Mid Betting document-height regression check ---
 out.midBetting_390x664 = await captureMidBettingHeight(browser, { width: 390, height: 664 });
 
+// Assertion: Deal must read as gold (`.btn--primary`), not the same red as
+// every other `.controls .btn`, specifically in the Betting-with-a-bet state
+// (the task's named check) on both device contexts.
+const assertionFailures = [];
+for (const [device, states] of [
+  ["iphone14_390x844", out.iphone14_390x844],
+  ["android_360x780", out.android_360x780],
+]) {
+  const m = states.betting;
+  if (!m.dealBackground || !m.goldTokenBackground) {
+    assertionFailures.push(`${device}: Deal button or --gold token not found`);
+  } else if (m.dealBackground !== m.goldTokenBackground) {
+    assertionFailures.push(
+      `${device}: Deal background is ${m.dealBackground}, expected the gold token's ${m.goldTokenBackground}`,
+    );
+  }
+}
+out.dealGoldAssertion = assertionFailures.length === 0 ? "PASS" : assertionFailures;
+
 console.log(JSON.stringify(out, null, 2));
+if (assertionFailures.length > 0) {
+  console.error("FAIL: Deal is not gold in Betting (bet down):", assertionFailures);
+  process.exitCode = 1;
+}
 await browser.close();

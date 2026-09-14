@@ -11,6 +11,8 @@
   font-family: var(--font-display);
   font-size: 8px;
   letter-spacing: 2px;
+  /* NB: the phone type floor (>=10px) for this label lives in the
+     `@media (max-width: 700px)` block below, alongside the button floor. */
   text-transform: uppercase;
   color: var(--accent-2);
   text-shadow: 1px 1px 0 var(--ink);
@@ -58,10 +60,19 @@
     animation: none;
   }
 }
-/* phones: the buttons stay tappable */
-@media (max-width: 600px) {
+/* phones: type floor (8->10, 9->11) plus a real 44px tap target. These are
+   full rectangular buttons with visible text, not glyph chips, so growing
+   the real box (not a hit-expander) is the natural fix here — it only
+   affects the Dealing/Settled phases, which have no page-height budget to
+   protect (unlike Mid Betting). Widened from 600px to the site's usual
+   700px phone breakpoint for consistency with every other phone rule. */
+@media (max-width: 700px) {
+  .dealer-flip-tag {
+    font-size: 10px;
+  }
   .dealer-flip-btn {
-    min-height: 40px;
-    padding: 8px 10px;
+    font-size: 11px;
+    min-height: 44px;
+    padding: 10px 12px;
   }
 }

@@ -492,3 +492,12 @@
     --deal-from-y: -22px;
   }
 }
+
+/* phone type floor (P12 follow-up): "Total" renders at 9px, below the
+   >=10px floor every other phone rule holds to. Bump it like every other
+   9px label elsewhere (9->11) — it's a label, not a tap target. */
+@media (max-width: 700px) {
+  .hand-total-label {
+    font-size: 11px;
+  }
+}

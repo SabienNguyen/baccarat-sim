@@ -64,3 +64,25 @@
   transform: translateX(-50%);
   z-index: 200;
 }
+
+/* --- phones: type floor + a real 44px hit area (P12 follow-up) ---
+   The "?" sits inline in a road heading (`<h4>Big Road <RoadInfo /></h4>`),
+   which is visible (compact roads) even in Betting — so its real box has to
+   stay exactly its current 18x18: measured, even 4px of extra height/width
+   here (18->22) pushed every road heading's line taller, which grew the Mid
+   Betting document height outside its budget. Only the font floor changes
+   (9->11px, still smaller than the 18px box so nothing clips); the visible
+   chip is untouched. An invisible `::before` hit-expander (out of flow, so
+   it adds zero layout size) pads the real tappable/clickable area out to
+   44x44 without moving anything around it. */
+@media (max-width: 700px) {
+  .road-info-btn {
+    position: relative;
+    font-size: 11px;
+  }
+  .road-info-btn::before {
+    content: "";
+    position: absolute;
+    inset: -13px;
+  }
+}
