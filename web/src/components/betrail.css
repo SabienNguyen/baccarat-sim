@@ -309,6 +309,42 @@
   padding-top: 18px;
 }
 
+/* --- short laptops (#18): 1280x720 / 1366x768 ---
+   The felt's vertical rhythm (112px arches, 16px gaps, 18px padding) was the
+   single largest contributor after card size to the stage overflowing a
+   short viewport — shrink it enough that the chip rail stays above the
+   fold. Desktop/laptop pointer, so this doesn't need the 44px phone tap
+   floor from P12. */
+@media (min-width: 701px) and (max-height: 800px) {
+  .bet-rail {
+    padding: 10px;
+    gap: 8px;
+  }
+  .felt {
+    padding: 10px;
+    gap: 8px;
+  }
+  .spot--player,
+  .spot--banker,
+  .spot--tie {
+    min-height: 78px;
+  }
+  .rail-row {
+    min-height: 34px;
+    gap: 8px;
+  }
+  .clear-bets {
+    padding: 6px 10px;
+  }
+  .chip {
+    width: 40px;
+    height: 40px;
+  }
+  .chip-face {
+    font-size: 9px;
+  }
+}
+
 /* --- responsive felt --- */
 @media (max-width: 900px) {
   .bet-rail {
