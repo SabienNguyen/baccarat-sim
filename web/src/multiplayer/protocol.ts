@@ -1,6 +1,6 @@
 // Wire types for the table service — mirrors server/src/protocol.rs.
 
-import type { BetKind, FlipRequest, RoundSnapshot, Side } from "../engine/types";
+import type { BetKind, FlipRequest, PlacedBet, RoundSnapshot, Side } from "../engine/types";
 import type { TableTier } from "../tables";
 
 /** Chairs at a table — mirrors the server's MAX_SEATS. */
@@ -12,6 +12,8 @@ export interface SeatView {
   name: string;
   bankroll: number;
   staked: number;
+  /** This seat's staged bets — the same money `staked` totals. */
+  bets: PlacedBet[];
   sitting_out: boolean;
   /** Declared ready to deal (requires a bet). Reset every coup. */
   ready: boolean;

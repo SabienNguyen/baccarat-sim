@@ -154,6 +154,9 @@ pub struct SeatView {
     pub name: String,
     pub bankroll: i64,
     pub staked: i64,
+    /// This seat's staged bets — the same money `staked` totals, broken out
+    /// by spot so every seat can see what everyone else is riding on.
+    pub bets: Vec<PlacedBet>,
     pub sitting_out: bool,
     /// Declared ready to deal (requires a bet). Reset every coup.
     pub ready: bool,
@@ -859,6 +862,7 @@ impl Table {
                 name: p.name.clone(),
                 bankroll: p.bankroll,
                 staked: p.bets.iter().map(|b| b.amount).sum(),
+                bets: p.bets.clone(),
                 sitting_out: p.sitting_out,
                 ready: p.ready,
                 decided: p.decided(self.config.table_min),
@@ -1260,6 +1264,32 @@ mod tests {
             assert!(matches!(card, crate::session::CardView::FaceDown));
         }
         assert!(v.player.total.is_none());
+    }
+
+    #[test]
+    fn every_seat_view_and_the_public_view_exposes_each_seats_bets() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 2_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Tie), 500).unwrap();
+
+        for view in [t.view_for(a).unwrap(), t.view_for(b).unwrap(), t.view_public()] {
+            assert_eq!(view.seats[0].bets, vec![PlacedBet {
+                kind: BetKind::Main(BetSpot::Player),
+                amount: 1_000,
+            }]);
+            assert_eq!(view.seats[1].bets, vec![
+                PlacedBet { kind: BetKind::Main(BetSpot::Banker), amount: 2_000 },
+                PlacedBet { kind: BetKind::Main(BetSpot::Tie), amount: 500 },
+            ]);
+            // bets always sum to the existing staked total — nothing new leaks
+            assert_eq!(
+                view.seats[1].staked,
+                view.seats[1].bets.iter().map(|b| b.amount).sum::<i64>()
+            );
+        }
     }
 
     #[test]

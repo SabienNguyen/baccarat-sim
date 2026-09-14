@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { BetRail } from "./BetRail";
 import { bettingSnapshot, dealingSnapshot } from "../test/fixtures";
 import { CHIP_DENOMINATIONS } from "../chips";
+import type { SeatView } from "../multiplayer/protocol";
 
 const noopProps = {
   denoms: CHIP_DENOMINATIONS,
@@ -190,4 +191,24 @@ test("the Dragon Bonus spots don't read as a duplicate of Dragon 7", async () =>
 test("Clear bets is disabled when nothing is staged", () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   expect(screen.getByRole("button", { name: "Clear bets" })).toBeDisabled();
+});
+
+test("other seats' bets show as coloured chips with the combined total, only in multiplayer", () => {
+  const seats: SeatView[] = [
+    { id: 0, name: "me", bankroll: 1_000_000, staked: 2500, bets: [{ kind: { Main: "Player" as const }, amount: 2500 }], sitting_out: false, ready: false, decided: false },
+    { id: 1, name: "alice", bankroll: 1_000_000, staked: 5000, bets: [{ kind: { Main: "Banker" as const }, amount: 5000 }], sitting_out: false, ready: false, decided: false },
+    { id: 2, name: "bob", bankroll: 1_000_000, staked: 2500, bets: [{ kind: { Main: "Banker" as const }, amount: 2500 }], sitting_out: false, ready: false, decided: false },
+  ];
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} seats={seats} me={0} />);
+  const banker = screen.getByRole("button", { name: "Bet Banker" });
+  expect(banker).toHaveTextContent("+$75.00");
+  expect(banker.querySelectorAll(".spot-other-chip")).toHaveLength(2);
+  // our own seat never counts as an "other" on the spot we bet
+  const player = screen.getByRole("button", { name: "Bet Player" });
+  expect(player.querySelector(".spot-others")).toBeNull();
+});
+
+test("solo (no seats) never renders other-seat chips", () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  expect(document.querySelector(".spot-others")).toBeNull();
 });

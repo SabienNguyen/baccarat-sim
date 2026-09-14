@@ -226,8 +226,9 @@ with the table service on Fly at `table.baccarat-sim.com`. **Single player** —
 three tables, win goals, bust-outs, persistent bankrolls, dealer flip requests,
 the full roads board — and **multiplayer** — public/private rooms, authentic
 squeeze rights, a paced house dealer, seats held through a disconnect, a squeeze
-grace and clock so no one seat can stall a hand, and a table that deals on past
-anyone out of chips.
+grace and clock so no one seat can stall a hand, a table that deals on past
+anyone out of chips, and every seat's bets visible to the whole table — as
+tokens under their chip and as colour-coded mini-chips on the felt.
 
 As of 2026-09-10: `cargo test` 216 passed (5 ignored: informational tables and
 a microbenchmark), `vitest` 435 passed. The site plays single player with no

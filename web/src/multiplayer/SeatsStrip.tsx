@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { formatCents } from "../format";
 import type { SeatView } from "./protocol";
+import { seatColour } from "./seatColour";
+import { betSpotLabel } from "../components/BetRail";
 import "./multiplayer.css";
 
 /** The server caps names here too; matching it keeps the box honest. */
@@ -13,6 +15,8 @@ interface SeatsStripProps {
   squeezers: { player: number | null; banker: number | null } | null;
   /** Betting phase: undecided seats show as waiting. */
   betting: boolean;
+  /** Settled phase: the payouts show in place of the staged-bet tokens. */
+  settled?: boolean;
   /** Commit a new name for our own seat. */
   onRename?: (name: string) => void;
   /** Spectators at the rail; shown as one more chip when there are any. */
@@ -26,6 +30,7 @@ export function SeatsStrip({
   me = null,
   squeezers,
   betting,
+  settled = false,
   onRename,
   watchers = null,
 }: SeatsStripProps) {
@@ -39,6 +44,7 @@ export function SeatsStrip({
           <div
             key={s.id}
             className={`seat-chip ${holding ? "seat-chip--holding" : ""} ${mine ? "seat-chip--mine" : ""}`}
+            style={{ "--seat-colour": seatColour(s.id) } as React.CSSProperties}
           >
             {holding && <span className="seat-cards">🂠 {holding} cards</span>}
             {mine ? (
@@ -48,6 +54,15 @@ export function SeatsStrip({
             )}
             <span className="seat-money">{formatCents(s.bankroll)}</span>
             {s.staked > 0 && <span className="seat-staked">{formatCents(s.staked)} riding</span>}
+            {!settled && s.bets.length > 0 && (
+              <span className="seat-bets">
+                {s.bets.map((b, i) => (
+                  <span className="seat-bet" key={i}>
+                    {betSpotLabel(b.kind)} {formatCents(b.amount)}
+                  </span>
+                ))}
+              </span>
+            )}
             {betting && s.ready && (
               <span className="seat-ready" aria-label="ready">
                 ✓
