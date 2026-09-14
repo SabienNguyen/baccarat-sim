@@ -504,3 +504,61 @@
     animation: none;
   }
 }
+
+/* --- landscape phones (T5, #19): the bet rail lives in the right column
+       beside a compact HUD, sharing ~340px of height with it — the felt's
+       arches and the chip rack both drop to a single compact row, and the
+       tab switch / hint row (not part of the core loop) step aside. This
+       block is last in the file on purpose: several rules above it (the
+       MAIN/BONUS switch, the phone rail-row) are unconditional and would
+       otherwise win the cascade over an earlier same-specificity override. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .bet-rail {
+    max-width: none;
+    padding: 6px;
+    gap: 6px;
+  }
+  .felt {
+    padding: 6px;
+    gap: 6px;
+  }
+  .felt-head {
+    display: none;
+  }
+  .rail-row {
+    display: none;
+  }
+  .main-bets {
+    gap: 5px;
+  }
+  .spot--player,
+  .spot--banker,
+  .spot--tie {
+    min-height: 44px;
+  }
+  .spot-name {
+    font-size: 10px;
+  }
+  .spot-payout {
+    display: none;
+  }
+  /* One row of chips, always — this column isn't wide enough to also wrap a
+     second row and still leave the rest of the rail visible. */
+  .chips {
+    flex-wrap: nowrap;
+    gap: 4px;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+  .chip {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+  }
+  .chip-face {
+    font-size: 8px;
+  }
+  .change-note {
+    display: none;
+  }
+}

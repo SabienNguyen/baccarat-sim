@@ -255,3 +255,36 @@
     padding: 3px 8px;
   }
 }
+
+/* --- landscape phones (T5, #19): compact HUD ---
+   Only three boxes worth their space at ~340px tall: bankroll, phase, table
+   limits. Goal/outcome/payouts/volume/reset-lobby all collapse — the rail
+   below needs the room more than they do. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app > .hud {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+    justify-content: flex-start;
+  }
+  .app > .hud .hud-title,
+  .app > .hud .hud-box--goal,
+  .app > .hud .hud-box--outcome,
+  .app > .hud .hud-payouts,
+  .app > .hud .volume,
+  .app > .hud .hud-actions {
+    display: none;
+  }
+  .app > .hud .hud-box {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+  }
+  .app > .hud .hud-box--bankroll .hud-box-value {
+    font-size: 15px;
+  }
+}
