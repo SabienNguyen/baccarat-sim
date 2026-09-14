@@ -526,7 +526,8 @@ async fn handle_command(
                 table_cmd,
                 ClientMsg::Deal | ClientMsg::Reveal { .. } | ClientMsg::DealerFlip { .. }
             );
-            let dealt = matches!(table_cmd, ClientMsg::Deal);
+            let mut dealt = matches!(table_cmd, ClientMsg::Deal);
+            let is_ready_cmd = matches!(table_cmd, ClientMsg::Ready);
             let result = match table_cmd {
                 // Same scrub as a join: the name goes straight into every
                 // other seat's view, so it must not carry bidi/zero-width
@@ -535,6 +536,8 @@ async fn handle_command(
                 ClientMsg::Bet { kind, amount } => room.table.place_bet(pid, kind, amount),
                 ClientMsg::SitOut => room.table.sit_out(pid),
                 ClientMsg::ClearBets => room.table.clear_bets(pid),
+                ClientMsg::Ready => room.table.ready(pid),
+                ClientMsg::Unready => room.table.unready(pid),
                 ClientMsg::Deal => room.table.deal(),
                 ClientMsg::Peek { hand, index } => {
                     room.table.peek(pid, hand, index).map(|lifted| advances_coup = lifted)
@@ -553,8 +556,26 @@ async fn handle_command(
             };
             match result {
                 Ok(()) => {
+                    // Everyone must ready up before the coup deals. A
+                    // successful Ready announces the tally, and — once the
+                    // last seat is ready — runs the SAME path a pressed Deal
+                    // does (pacing, held-squeezer grace, broadcast).
+                    let mut ready_lines: Vec<String> = Vec::new();
+                    if is_ready_cmd {
+                        ready_lines.push(rooms::ready_announcement(&room.table, pid));
+                        if room.table.all_ready() {
+                            room.table.deal().expect("all_ready implies deal succeeds");
+                            dealt = true;
+                            advances_coup = true;
+                        } else {
+                            ready_lines.push(rooms::waiting_on_line(&room.table));
+                        }
+                    }
                     room.broadcast();
                     if let Some(line) = flip_line {
+                        room.announce(line);
+                    }
+                    for line in ready_lines {
                         room.announce(line);
                     }
                     // A squeezer whose socket dropped BEFORE this deal got a
@@ -714,6 +735,8 @@ mod squeeze_clock_tests {
             g.seat(b, tb);
             g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            g.table.ready(a).unwrap();
+            g.table.ready(b).unwrap();
             g.table.deal().unwrap();
             (a, b)
         };
@@ -746,6 +769,8 @@ mod squeeze_clock_tests {
             g.seat(b, tb.clone());
             g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            g.table.ready(a).unwrap();
+            g.table.ready(b).unwrap();
             let since = g.hold_seat(a);
             arm_squeeze_grace(room.clone(), a, since); // what handle_socket does at the drop
             (a, b)
@@ -998,5 +1023,174 @@ mod rail_tests {
         assert!(handle_command(ClientMsg::Ping, &registry, &tx, &mut at, &mut strikes).await);
         assert!(drain(&mut rx).is_empty());
         assert!(at.is_none());
+    }
+}
+
+#[cfg(test)]
+mod ready_command_tests {
+    //! Everyone must ready up before the coup deals — through the command
+    //! handler, the way a real client drives it.
+    use super::*;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::settle::BetSpot;
+    use baccarat_engine::session::PhaseTag;
+    use protocol::Tier;
+
+    fn drain(rx: &mut mpsc::Receiver<ServerMsg>) -> Vec<ServerMsg> {
+        let mut out = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            out.push(m);
+        }
+        out
+    }
+
+    fn announcements(msgs: &[ServerMsg]) -> Vec<String> {
+        msgs.iter()
+            .filter_map(|m| match m {
+                ServerMsg::Announce { message } => Some(message.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn states(msgs: &[ServerMsg]) -> Vec<baccarat_engine::table::TableView> {
+        msgs.iter()
+            .filter_map(|m| match m {
+                ServerMsg::State { view, .. } => Some(view.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn ready_waits_on_the_other_seat_then_both_reach_dealing() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (tw, mut rw) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            g.watch(tw);
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            (a, b)
+        };
+        drain(&mut ra);
+        drain(&mut rb);
+        drain(&mut rw);
+
+        // alice readies: not everyone is ready yet, so no deal — the table
+        // says who it's still waiting on.
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs = drain(&mut ra);
+        assert!(
+            announcements(&msgs).iter().any(|m| m == "alice is ready (1/2)"),
+            "{msgs:?}"
+        );
+        assert!(
+            announcements(&msgs).iter().any(|m| m.starts_with("Waiting on")),
+            "{msgs:?}"
+        );
+        assert!(
+            states(&msgs).iter().all(|v| v.phase == PhaseTag::Betting),
+            "no deal until bob readies too"
+        );
+
+        // bob readies: now the coup deals for both seats and the rail.
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        assert!(handle_command(ClientMsg::Ready, &registry, &tb, &mut seat_b, &mut strikes).await);
+        let msgs_b = drain(&mut rb);
+        assert!(
+            announcements(&msgs_b).iter().any(|m| m == "bob is ready (2/2)"),
+            "{msgs_b:?}"
+        );
+        assert!(
+            states(&msgs_b).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "bob's own state reaches Dealing: {msgs_b:?}"
+        );
+        let msgs_a = drain(&mut ra);
+        assert!(
+            states(&msgs_a).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "alice's state reaches Dealing too: {msgs_a:?}"
+        );
+        let msgs_w = drain(&mut rw);
+        assert!(
+            states(&msgs_w).iter().any(|v| v.phase == PhaseTag::Dealing),
+            "the rail sees it deal too: {msgs_w:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn ready_without_a_bet_is_refused() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let a = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            a
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs = drain(&mut ra);
+        assert!(
+            matches!(msgs.as_slice(), [ServerMsg::Error { message }] if message == "Chips down first — then we deal."),
+            "{msgs:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unready_flips_the_seat_back_and_a_later_deal_is_refused() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let a = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            // bob is seated but hasn't decided, so alice alone never triggers
+            // an auto-deal — this test is about the ready flag flipping back.
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+            a
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+        drain(&mut rb);
+        assert!(
+            room.lock().await.table.view_for(a).unwrap().seats.iter().any(|s| s.id == a && s.ready),
+            "alice is ready"
+        );
+
+        assert!(handle_command(ClientMsg::Unready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+        assert!(
+            !room.lock().await.table.view_for(a).unwrap().seats.iter().any(|s| s.id == a && s.ready),
+            "un-readied"
+        );
+
+        assert!(handle_command(ClientMsg::Deal, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs = drain(&mut ra);
+        assert!(
+            matches!(msgs.as_slice(), [ServerMsg::Error { message }]
+                if message == "Waiting on the table — everyone bets or sits out first."),
+            "{msgs:?}"
+        );
     }
 }

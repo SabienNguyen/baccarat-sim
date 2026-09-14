@@ -646,6 +646,31 @@ pub fn flip_request_line(
     }
 }
 
+/// "{name} is ready (k/n)" — n counts seats that are still in this coup
+/// (not sitting out, not broke), k how many of those are ready.
+pub fn ready_announcement(table: &Table, pid: PlayerId) -> String {
+    let view = table.view_public();
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
+    let active: Vec<_> = view.seats.iter().filter(|s| !s.sitting_out && !s.broke).collect();
+    let n = active.len();
+    let k = active.iter().filter(|s| s.ready).count();
+    format!("{name} is ready ({k}/{n})")
+}
+
+/// "Waiting on X, Y, Z" for the seats still undecided — at most three names,
+/// then an ellipsis for the rest.
+pub fn waiting_on_line(table: &Table) -> String {
+    let view = table.view_public();
+    let waiting: Vec<&str> =
+        view.seats.iter().filter(|s| !s.decided).map(|s| s.name.as_str()).collect();
+    let shown = waiting.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+    if waiting.len() > 3 {
+        format!("Waiting on {shown}…")
+    } else {
+        format!("Waiting on {shown}")
+    }
+}
+
 /// Human dealer speech for refusals, mirrored from the web's narrateError.
 pub fn error_message(err: &TableError) -> String {
     use baccarat_engine::session::CommandError as E;
@@ -695,6 +720,8 @@ mod tests {
             let b = room.table.join("b", buy_in).unwrap();
             room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             room.table.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+            room.table.ready(a).unwrap();
+            room.table.ready(b).unwrap();
             room.table.deal().unwrap();
             room.table.settle().unwrap();
             let va = room.table.view_for(a).unwrap();
@@ -872,6 +899,7 @@ mod flip_request_line_tests {
         );
         let pid = table.join("Sabien", 100_000).unwrap();
         table.place_bet(pid, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        table.ready(pid).unwrap();
         table.deal().unwrap();
         (table, pid)
     }
@@ -924,6 +952,8 @@ mod squeeze_gap_tests {
         room.seat(b, tb);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
         room.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+        room.table.ready(a).unwrap();
+        room.table.ready(b).unwrap();
         room.table.deal().unwrap();
         (room, a, b, ra, rb)
     }
@@ -1002,6 +1032,8 @@ mod squeeze_gap_tests {
         assert!(room.held_squeezers().is_empty(), "no coup out yet");
         let since = room.hold_seat(a);
         assert!(room.held_squeezers().is_empty(), "still no coup out");
+        room.table.ready(a).unwrap();
+        room.table.ready(b).unwrap();
         room.table.deal().unwrap();
         assert_eq!(room.held_squeezers(), vec![(a, since)], "alice squeezes Player from a dead socket");
         // a holder of both hands is listed once
@@ -1012,6 +1044,7 @@ mod squeeze_gap_tests {
         solo.table.place_bet(c, BetKind::Main(BetSpot::Player), 2_500).unwrap();
         solo.table.place_bet(c, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
         let since = solo.hold_seat(c);
+        solo.table.ready(c).unwrap();
         solo.table.deal().unwrap();
         assert_eq!(solo.held_squeezers(), vec![(c, since)]);
     }
@@ -1154,6 +1187,7 @@ mod squeeze_gap_tests {
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
         room.table.place_bet(a, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+        room.table.ready(a).unwrap();
         room.table.deal().unwrap();
         drain(&mut ra);
         let taken = room.squeeze_clock_expired();
@@ -1205,6 +1239,7 @@ mod squeeze_gap_tests {
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.ready(a).unwrap();
         room.table.deal().unwrap();
         room.table.reveal(a, Side::Player, 0).unwrap();
         room.table.reveal(a, Side::Player, 1).unwrap();
@@ -1238,6 +1273,8 @@ mod squeeze_gap_tests {
             g.seat(b, tb);
             g.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             g.table.place_bet(b, BetKind::Main(BetSpot::Banker), 2_500).unwrap();
+            g.table.ready(a).unwrap();
+            g.table.ready(b).unwrap();
             g.table.deal().unwrap();
             g.hold_seat(a);
             g.held.insert(a, std::time::Instant::now() - HOLD - Duration::from_secs(1));
@@ -1289,6 +1326,7 @@ mod rail_tests {
         assert_eq!(room.info().watchers, 1);
 
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.ready(a).unwrap();
         room.table.deal().unwrap();
         room.broadcast();
 
@@ -1322,6 +1360,7 @@ mod rail_tests {
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
+        room.table.ready(a).unwrap();
         assert!(room.table.deal().is_ok(), "a watcher is not a seat the deal waits on");
         room.table.settle().unwrap();
         // and when the seat stands up, the room is dead despite the watcher

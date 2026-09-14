@@ -51,6 +51,11 @@ pub enum ClientMsg {
     Bet { kind: BetKind, amount: i64 },
     SitOut,
     ClearBets,
+    /// Declare ready to deal — requires a bet staged this coup. Once every
+    /// seat is ready (or sitting out, or broke) the coup deals automatically.
+    Ready,
+    /// Take back a ready declaration.
+    Unready,
     Deal,
     Peek { hand: Side, index: usize },
     Reveal { hand: Side, index: usize },
