@@ -39,6 +39,18 @@ test("the full roads window closes on Escape", async () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+test("the footer shows the shoe number next to the counts", () => {
+  render(<Scoreboard scoreboard={scoredSnapshot().scoreboard} shoeNumber={3} />);
+  expect(screen.getByText("Shoe 3")).toBeInTheDocument();
+});
+
+test("the modal shows a Shoe row", async () => {
+  render(<Scoreboard scoreboard={scoredSnapshot().scoreboard} shoeNumber={5} />);
+  await userEvent.click(screen.getByRole("button", { name: "Full roads" }));
+  const tally = screen.getByRole("table", { name: "Tally" });
+  expect(within(tally).getByRole("row", { name: "Shoe" })).toHaveTextContent("5");
+});
+
 test("renders empty roads without crashing", () => {
   render(<Scoreboard scoreboard={bettingSnapshot().scoreboard} />);
   expect(screen.getByLabelText("Big Road")).toBeInTheDocument();

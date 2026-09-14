@@ -463,6 +463,97 @@
     margin: 8px auto 0;
   }
 }
+/* the crown marking whoever holds the cut */
+.seat-host {
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 1px 1px 0 var(--ink);
+}
+
+/* a mark under a seat that's already voted on the open New Shoe proposal */
+.seat-vote {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.seat-vote--yes {
+  color: #6ee7a0;
+}
+.seat-vote--no {
+  color: #ff8a93;
+}
+
+/* the New Shoe vote row, under the seats */
+.vote-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  justify-content: center;
+  background: var(--panel-face);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 8px 14px;
+  position: relative;
+  overflow: hidden;
+}
+.vote-text {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: #f3eede;
+  white-space: nowrap;
+}
+.vote-buttons {
+  display: flex;
+  gap: 6px;
+}
+.vote-btn {
+  font-family: var(--font-display);
+  font-size: 12px;
+  min-width: 32px;
+  min-height: 32px;
+  color: #fff;
+  background: var(--panel-bevel-hi);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.vote-btn--yes[aria-pressed="true"] {
+  background: #1d7a3a;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+.vote-btn--no[aria-pressed="true"] {
+  background: #7a1d2c;
+  box-shadow: 0 0 0 2px var(--gold);
+}
+/* a 30s bar that drains as the vote's window closes, restarted (via the
+   element's key, keyed to the proposer) each time a new vote opens */
+.vote-clock {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--gold);
+  transform-origin: left;
+  animation: vote-clock 30s linear forwards;
+}
+@keyframes vote-clock {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vote-clock {
+    animation: none;
+    transform: scaleX(0.5);
+  }
+}
+
 /* the rail's own chip in the seat strip: who's standing behind the seats */
 .seat-chip--rail {
   min-width: 90px;

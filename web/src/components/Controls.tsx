@@ -64,6 +64,10 @@ export function Controls({
   const dealing = snapshot.phase === "Dealing";
   const settled = snapshot.phase === "Settled";
   const hasBets = snapshot.bets.length > 0;
+  // New shoe: only offered mid-Betting, and only when nobody's already
+  // proposed one — every other phase (ShoeCut included) falls out of the
+  // same `betting` check every other control already uses.
+  const newShoeDisabled = !betting || snapshot.shoe.vote !== null;
 
   if (spectating) {
     return (
@@ -123,8 +127,8 @@ export function Controls({
           <BtnLabel full="Next hand" short="Next" />
         </button>
       )}
-      <button type="button" className="btn" disabled={dealing} onClick={onNewShoe}>
-        <BtnLabel full="New Shoe" short="Shoe" />
+      <button type="button" className="btn" disabled={newShoeDisabled} onClick={onNewShoe}>
+        <BtnLabel full="New shoe" short="Shoe" />
       </button>
       <button
         type="button"

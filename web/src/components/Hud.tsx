@@ -99,6 +99,10 @@ export function Hud({
         className="hud-box hud-box--outcome"
         data-has-outcome={snapshot.outcome !== null}
       >
+        {/* The cut card is out: one more hand, then a fresh shoe. Lives in
+            this row (not its own box) so the fixed-height outcome slot on
+            phones (hud.css) never has to grow to fit it. */}
+        {snapshot.shoe.cut_card_out && <span className="hud-last-hand">LAST HAND</span>}
         <span className="hud-box-label">Outcome</span>
         <span className="hud-box-value hud-box-value--small">
           {snapshot.outcome !== null ? outcomeLabel(snapshot.outcome) : null}

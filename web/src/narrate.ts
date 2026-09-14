@@ -6,6 +6,7 @@ import type {
   HandView,
   Rank,
   BetPayout,
+  Card,
 } from "./engine/types";
 import { sideKey } from "./betKind";
 import { formatCents } from "./format";
@@ -217,9 +218,14 @@ export function narrateError(error: CommandError | { Message: string }): Narrati
   return [{ text: "Can't do that, friend." }];
 }
 
+/** How a card reads out loud — the same "{rank} of {suit}" the flip line uses. */
+function cardName(card: Card): string {
+  return `${card.rank} of ${card.suit}`;
+}
+
 /** The dealer calls a card as it turns. */
 function flipLine(flip: Flip, snapshot: RoundSnapshot): NarrationSegment[] {
-  const name = `${flip.card.rank} of ${flip.card.suit}`;
+  const name = cardName(flip.card);
   const hand = flip.side === "Player" ? snapshot.player : snapshot.banker;
   const third = hand.cards[2];
   const isThird =
@@ -250,7 +256,26 @@ function flipLine(flip: Flip, snapshot: RoundSnapshot): NarrationSegment[] {
 
 /** Turn the current snapshot into an ordered dealer line. Pure. */
 export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): NarrationSegment[] {
+  if (snapshot.phase === "ShoeCut") {
+    return snapshot.shoe.cut_reason === "CutCardOut"
+      ? [{ text: "That shoe's done. Cut the new one wherever you like." }]
+      : [{ text: "Fresh shoe — cut it wherever you like." }];
+  }
+
   if (snapshot.phase === "Betting") {
+    // Right after a cut: the bead plate is empty and the ceremony is fresh —
+    // narrate the burn once, before falling back to the ordinary betting copy.
+    if (snapshot.shoe.last_cut && snapshot.scoreboard.bead_plate.cells.length === 0) {
+      const { turned, burned } = snapshot.shoe.last_cut;
+      return [
+        {
+          text: `You cut the shoe. Dealer turns the ${cardName(turned)} and burns ${burned}. Shoe ${snapshot.shoe.number}.`,
+        },
+      ];
+    }
+    if (snapshot.shoe.cut_card_out) {
+      return [{ text: "Cut card's out — one more hand, then a fresh shoe." }];
+    }
     if (snapshot.bankroll < snapshot.table_min) {
       return [{ text: "The cage thanks you for playing — reset the bank to buy back in." }];
     }

@@ -79,6 +79,24 @@
 .hud-box--outcome .hud-box-value--small {
   color: var(--gold);
 }
+/* Pinned to a corner (not stacked) so it never pushes the box's height past
+   the fixed slot the phone media query below reserves for it. */
+.hud-box--outcome {
+  position: relative;
+}
+.hud-last-hand {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: var(--gold);
+  background: var(--ink);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
 /* Outcome/payouts are always mounted now (P14, see Hud.tsx) so the phone
    media query below can reserve their space up front; off the phone they
    still hide exactly like the old conditional mount when there's nothing to

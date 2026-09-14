@@ -44,6 +44,20 @@ test("shows goal progress when the table has a win condition", () => {
   expect(screen.getByText("25%")).toBeInTheDocument();
 });
 
+test("shows LAST HAND when the cut card is out", () => {
+  const { rerender } = render(<Hud snapshot={bettingSnapshot()} />);
+  expect(screen.queryByText("LAST HAND")).not.toBeInTheDocument();
+
+  rerender(
+    <Hud
+      snapshot={bettingSnapshot({
+        shoe: { number: 1, cut_card_out: true, cut_reason: null, cutter: null, last_cut: null, vote: null },
+      })}
+    />,
+  );
+  expect(screen.getByText("LAST HAND")).toBeInTheDocument();
+});
+
 test("at the rail the money box is an invitation: no bankroll, a seat on offer", async () => {
   const onTakeSeat = vi.fn();
   const { rerender } = render(<Hud snapshot={bettingSnapshot()} spectating onTakeSeat={onTakeSeat} />);

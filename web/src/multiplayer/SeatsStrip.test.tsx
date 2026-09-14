@@ -12,6 +12,7 @@ const seat = (id: number, name: string): SeatView => ({
   sitting_out: false,
   ready: false,
   decided: false,
+  host: false,
 });
 
 const seats = [seat(0, "alice"), seat(1, "bob")];
@@ -96,4 +97,67 @@ test("each seat's staged bets show as compact tokens, and hide once settled", ()
   rerender(<SeatsStrip seats={withBets} squeezers={null} betting={false} settled />);
   expect(screen.queryByText("P $25.00")).not.toBeInTheDocument();
   expect(screen.queryByText("TIE $5.00")).not.toBeInTheDocument();
+});
+
+const openVote = { proposer: 0, yes: [0], no: [], needed: 2 };
+
+test("shows the host marker", () => {
+  const withHost = [{ ...seat(0, "alice"), host: true }, seat(1, "bob")];
+  render(<SeatsStrip seats={withHost} squeezers={null} betting />);
+  const crown = screen.getByTitle("Has the cut");
+  expect(crown).toBeInTheDocument();
+  // only alice's chip carries it
+  expect(crown.closest(".seat-chip")).toHaveTextContent("alice");
+});
+
+test("renders the vote row with the tally and my yes/no buttons", () => {
+  render(
+    <SeatsStrip
+      seats={seats}
+      me={1}
+      squeezers={null}
+      betting
+      shoe={{ number: 1, cut_card_out: false, cut_reason: null, cutter: 0, last_cut: null, vote: openVote }}
+      voteNewShoe={() => {}}
+    />,
+  );
+  expect(screen.getByText("New shoe? 1 of 2")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Vote yes" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Vote no" })).toBeInTheDocument();
+});
+
+test("marks each seat's vote", () => {
+  render(
+    <SeatsStrip
+      seats={seats}
+      squeezers={null}
+      betting
+      shoe={{
+        number: 1,
+        cut_card_out: false,
+        cut_reason: null,
+        cutter: 0,
+        last_cut: null,
+        vote: { proposer: 0, yes: [0], no: [1], needed: 2 },
+      }}
+    />,
+  );
+  expect(screen.getByLabelText("voted yes")).toHaveTextContent("✓");
+  expect(screen.getByLabelText("voted no")).toHaveTextContent("✗");
+});
+
+test("voting yes calls voteNewShoe(true)", async () => {
+  const voteNewShoe = vi.fn();
+  render(
+    <SeatsStrip
+      seats={seats}
+      me={1}
+      squeezers={null}
+      betting
+      shoe={{ number: 1, cut_card_out: false, cut_reason: null, cutter: 0, last_cut: null, vote: openVote }}
+      voteNewShoe={voteNewShoe}
+    />,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Vote yes" }));
+  expect(voteNewShoe).toHaveBeenCalledWith(true);
 });

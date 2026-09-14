@@ -16,10 +16,21 @@ export interface BoardTally {
   natural: number;
   /** Hands on the plate, ties included. */
   games: number;
+  /** The shoe this board belongs to — 0 until the first cut. */
+  shoe: number;
 }
 
-export function boardTally(scoreboard: ScoreboardSnapshot): BoardTally {
-  const t: BoardTally = { banker: 0, player: 0, tie: 0, bankerPair: 0, playerPair: 0, natural: 0, games: 0 };
+export function boardTally(scoreboard: ScoreboardSnapshot, shoeNumber = 0): BoardTally {
+  const t: BoardTally = {
+    banker: 0,
+    player: 0,
+    tie: 0,
+    bankerPair: 0,
+    playerPair: 0,
+    natural: 0,
+    games: 0,
+    shoe: shoeNumber,
+  };
   for (const cell of scoreboard.bead_plate.cells) {
     t.games += 1;
     if (cell.outcome === "BankerWin") t.banker += 1;

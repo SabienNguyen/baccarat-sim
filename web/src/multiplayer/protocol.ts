@@ -24,6 +24,9 @@ export interface SeatView {
   decided: boolean;
   /** Bankroll can't cover the table minimum, so this seat can't bet at all. */
   broke?: boolean;
+  /** Holds the cut — the first player to join, or the next by join order
+   *  after the previous host leaves. */
+  host: boolean;
 }
 
 /** The player's snapshot plus everyone's seat summaries and squeeze rights. */
