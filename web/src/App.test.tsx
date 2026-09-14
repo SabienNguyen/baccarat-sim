@@ -62,7 +62,8 @@ function fakeSession(initial: RoundSnapshot, spies: Partial<GameSession> = {}): 
     peek: () => ok,
     reveal: () => ok,
     settle: () => ok,
-    newShoe: () => ok,
+    cutShoe: () => ok,
+    requestNewShoe: () => ok,
     ...spies,
   };
 }
@@ -195,15 +196,15 @@ test("explain panel appears only when explain mode is on", async () => {
 });
 
 test("New Shoe opens the cut-the-deck ritual and only shuffles after the cut", async () => {
-  const newShoe = vi.fn(() => okResult(bettingSnapshot()));
-  const store = createGameStore(fakeSession(bettingSnapshot(), { newShoe }));
+  const requestNewShoe = vi.fn(() => okResult(bettingSnapshot()));
+  const store = createGameStore(fakeSession(bettingSnapshot(), { requestNewShoe }));
   render(<App store={store} />);
   await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
   expect(screen.getByRole("dialog", { name: "Cut the deck" })).toBeInTheDocument();
-  expect(newShoe).not.toHaveBeenCalled();
+  expect(requestNewShoe).not.toHaveBeenCalled();
   fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
   await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
-  expect(newShoe).toHaveBeenCalledOnce();
+  expect(requestNewShoe).toHaveBeenCalledOnce();
   expect(screen.queryByRole("dialog", { name: "Cut the deck" })).toBeNull();
 });
 

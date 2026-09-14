@@ -38,6 +38,7 @@ test(`derivedRoad matches the engine's roads after each of ${HANDS} real hands`,
     ruleset: "Commission",
     seed: 42,
   });
+  session.cutShoe(500);
   let last: ScoreboardSnapshot | null = null;
   for (let hand = 0; hand < HANDS; hand++) {
     const board = playHand(session).scoreboard;

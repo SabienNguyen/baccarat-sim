@@ -14,7 +14,8 @@ function okSession(): GameSession {
     peek: () => ok,
     reveal: () => ok,
     settle: () => ok,
-    newShoe: () => ok,
+    cutShoe: () => ok,
+    requestNewShoe: () => ok,
   };
 }
 

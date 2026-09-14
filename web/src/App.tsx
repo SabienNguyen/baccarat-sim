@@ -162,7 +162,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
   const newHand = useStore(active, (s) => s.newHand);
-  const newShoe = useStore(active, (s) => s.newShoe);
+  const requestNewShoe = useStore(active, (s) => s.requestNewShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
@@ -543,7 +543,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           onCut={() => {
             // a fresh shoe is invisible in the store diff — riffle it here
             playSfx("shuffle");
-            newShoe();
+            requestNewShoe();
             setCutting(false);
             // between shoes is the natural break for a portal's midgame ad
             void adBreak(getPortal());

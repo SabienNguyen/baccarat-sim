@@ -21,19 +21,26 @@ function faceUpCount(cards: CardView[]): number {
   return cards.filter(isFaceUp).length;
 }
 
+/** A table session past its opening ShoeCut, ready for Betting. */
+function freshTable() {
+  const store = createGameStore(createTableSession(CONFIG));
+  store.getState().cutShoe(500);
+  return store;
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 test("dealing without a bet gets the dealer's no-bets line, not table jargon", () => {
-  const store = createGameStore(createTableSession(CONFIG));
+  const store = freshTable();
   store.getState().deal();
   expect(store.getState().lastError).toBe("NoBetsPlaced");
 });
 
 test("bet Banker only: the dealer announces and turns the Player hand one card per beat", () => {
   vi.useFakeTimers();
-  const store = createGameStore(createTableSession(CONFIG));
+  const store = freshTable();
   store.getState().stake({ Main: "Banker" }, 10000);
   store.getState().deal();
 
@@ -79,7 +86,7 @@ test("bet Banker only: the dealer announces and turns the Player hand one card p
 
 test("bet Player only: I flip my hand first, then the dealer takes the Banker hand", () => {
   vi.useFakeTimers();
-  const store = createGameStore(createTableSession(CONFIG));
+  const store = freshTable();
   store.getState().stake({ Main: "Player" }, 10000);
   store.getState().deal();
 
@@ -101,7 +108,7 @@ test("bet Player only: I flip my hand first, then the dealer takes the Banker ha
 
 test("bet both sides: every card is mine, the dealer never steps in", () => {
   vi.useFakeTimers();
-  const store = createGameStore(createTableSession(CONFIG));
+  const store = freshTable();
   store.getState().stake({ Main: "Player" }, 10000);
   store.getState().stake({ Main: "Banker" }, 10000);
   store.getState().deal();
@@ -117,7 +124,7 @@ test("bet both sides: every card is mine, the dealer never steps in", () => {
 
 test("chips placed straight out of a settled table round stay consistent", () => {
   vi.useFakeTimers();
-  const store = createGameStore(createTableSession(CONFIG));
+  const store = freshTable();
   for (let round = 0; round < 10; round++) {
     store.getState().stake({ Main: "Player" }, 10000);
     expect(store.getState().lastError).toBeNull();

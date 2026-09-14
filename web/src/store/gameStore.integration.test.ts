@@ -14,6 +14,7 @@ test("betting straight out of a settled round stays consistent for many rounds",
     seed: 7,
   });
   const store = createGameStore(session);
+  store.getState().cutShoe(500);
   store.getState().selectChip(10000);
 
   for (let round = 0; round < 30; round++) {
@@ -50,6 +51,7 @@ test("the hand after a tie deals a full set of cards and settles like any other"
     seed: 11,
   });
   const store = createGameStore(session);
+  store.getState().cutShoe(500);
   store.getState().selectChip(10000);
 
   const playOne = () => {

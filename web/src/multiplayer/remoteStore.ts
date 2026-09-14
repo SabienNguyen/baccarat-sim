@@ -117,7 +117,9 @@ export function createRemoteStore(opts: {
         lastFlip: null,
       }),
 
-    newShoe: () => send({ type: "new_shoe" }),
+    cutShoe: (position) => send({ type: "cut_shoe", position }),
+    requestNewShoe: () => send({ type: "propose_new_shoe" }),
+    voteNewShoe: (yes) => send({ type: "vote_new_shoe", yes }),
 
     // Watching without betting is `sit_out` at a live table; the deal fires
     // once every seat has decided.

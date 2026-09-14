@@ -1,6 +1,7 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Multiplayer, PING_MS } from "./Multiplayer";
+import { CLIENT_PROTOCOL_VERSION } from "./protocol";
 
 /** jsdom on newer Node exposes a bare `localStorage` that is undefined (the
  *  same quirk analytics.test.ts works around); a Map-backed stand-in keeps the
@@ -511,7 +512,7 @@ describe("the rail (spectator mode)", () => {
     room: "AB12CD",
     tier: "mid",
     view: railView(),
-    proto: 1,
+    proto: CLIENT_PROTOCOL_VERSION,
     watchers: 3,
     ...over,
   });

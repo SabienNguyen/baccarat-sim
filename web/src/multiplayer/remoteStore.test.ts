@@ -21,6 +21,7 @@ function view(over: Partial<TableViewMsg> = {}): TableViewMsg {
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
     seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false }],
     player_squeezer: null,
     banker_squeezer: null,
@@ -204,6 +205,26 @@ test("another player going broke doesn't mark me busted", () => {
   expect(store.getState().busted).toBe(false);
 });
 
+
+test("cutShoe sends cut_shoe with the position", () => {
+  const { store, sent } = setup();
+  store.getState().cutShoe(600);
+  expect(sent.at(-1)).toEqual({ type: "cut_shoe", position: 600 });
+});
+
+test("requestNewShoe sends propose_new_shoe", () => {
+  const { store, sent } = setup();
+  store.getState().requestNewShoe();
+  expect(sent.at(-1)).toEqual({ type: "propose_new_shoe" });
+});
+
+test("voteNewShoe sends vote_new_shoe", () => {
+  const { store, sent } = setup();
+  store.getState().voteNewShoe(true);
+  expect(sent.at(-1)).toEqual({ type: "vote_new_shoe", yes: true });
+  store.getState().voteNewShoe(false);
+  expect(sent.at(-1)).toEqual({ type: "vote_new_shoe", yes: false });
+});
 
 test("asking the dealer for a flip goes over the wire; the server decides", () => {
   const { store, sent } = setup();

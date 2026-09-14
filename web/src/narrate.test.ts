@@ -21,6 +21,7 @@ function snap(phase: RoundSnapshot["phase"], events: Event[] = []): RoundSnapsho
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
   };
 }
 

@@ -33,7 +33,10 @@ export interface GameSession {
   peek(hand: Side, index: number): CommandResult;
   reveal(hand: Side, index: number): CommandResult;
   settle(): CommandResult;
-  newShoe(): CommandResult;
+  /** Only the cutter may call this; `position` is 0..=1000 (fraction of the shoe). */
+  cutShoe(position: number): CommandResult;
+  /** Betting only: leaves ShoeCut { reason: Requested } (solo) or opens a table vote. */
+  requestNewShoe(): CommandResult;
   /** Top up the roll without disturbing the shoe (table sessions only). */
   rebuy?(amountCents: number): CommandResult;
   /** Skip this coup — with `deal`, that's a watched hand (table sessions only). */
@@ -101,7 +104,8 @@ export function createSession(config: SessionConfig): GameSession {
     peek: (hand, index) => run(() => inner.peek(hand, index)),
     reveal: (hand, index) => run(() => inner.reveal(hand, index)),
     settle: () => run(() => inner.settle()),
-    newShoe: () => run(() => inner.new_shoe()),
+    cutShoe: (position) => run(() => inner.cut_shoe(position)),
+    requestNewShoe: () => run(() => inner.request_new_shoe()),
   };
 }
 
@@ -170,7 +174,8 @@ export function createTableSession(config: SessionConfig): GameSession {
     peek: (hand, index) => run(() => inner.peek(hand, index)),
     reveal: (hand, index) => run(() => inner.reveal(hand, index)),
     settle: () => run(() => inner.settle()),
-    newShoe: () => run(() => inner.new_shoe()),
+    cutShoe: (position) => run(() => inner.cut_shoe(position)),
+    requestNewShoe: () => run(() => inner.propose_new_shoe()),
     rebuy: (amountCents) => run(() => inner.rebuy(safeCents(amountCents))),
     sitOut: () => run(() => inner.sit_out()),
     dealerFlipPending: () => inner.dealer_flip_pending(),
