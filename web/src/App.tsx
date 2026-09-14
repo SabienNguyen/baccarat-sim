@@ -4,6 +4,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { type GameState } from "./store/gameStore";
 import { storeFor, resetStore } from "./store/useGameStore";
 import { HomeScreen } from "./components/HomeScreen";
+import { RoadsReplay } from "./components/RoadsReplay";
 import { Multiplayer } from "./multiplayer/Multiplayer";
 import { SeatsStrip } from "./multiplayer/SeatsStrip";
 import { MAX_SEATS } from "./multiplayer/protocol";
@@ -87,24 +88,42 @@ export function App({ store }: AppProps = {}) {
   // component every screen mounts under. Backgrounding the tab / locking
   // the phone sleeps the audio graph and freezes CSS animations (B2/B5).
   useEffect(() => installSleepOnHide(), []);
+
+  // `?roads=<sequence>` opens the full board over whatever else is on
+  // screen, so it works from the home screen too — no table needed.
+  const roadsReplay = <RoadsReplay />;
+
   if (multi) {
-    return <Multiplayer onExit={() => setMulti(false)} />;
+    return (
+      <>
+        <Multiplayer onExit={() => setMulti(false)} />
+        {roadsReplay}
+      </>
+    );
   }
   if (tier === null) {
-    return <HomeScreen onPlay={setTier} onMultiplayer={() => setMulti(true)} />;
+    return (
+      <>
+        <HomeScreen onPlay={setTier} onMultiplayer={() => setMulti(true)} />
+        {roadsReplay}
+      </>
+    );
   }
   const active = store ?? storeFor(tier);
   return (
-    <GameTable
-      key={`${tier}-${resetSeq}`}
-      store={active}
-      tier={tier}
-      onLeave={() => setTier(null)}
-      onReset={() => {
-        resetStore(tier);
-        setResetSeq((n) => n + 1); // remount at the same table with a fresh buy-in
-      }}
-    />
+    <>
+      <GameTable
+        key={`${tier}-${resetSeq}`}
+        store={active}
+        tier={tier}
+        onLeave={() => setTier(null)}
+        onReset={() => {
+          resetStore(tier);
+          setResetSeq((n) => n + 1); // remount at the same table with a fresh buy-in
+        }}
+      />
+      {roadsReplay}
+    </>
   );
 }
 
