@@ -53,8 +53,14 @@
 
 /* Deal is the primary action: a distinct gold face and a bigger flex share
    (see the phone block below) so it reads as the obvious next move even once
-   four/five secondary buttons are squeezed onto the same row. */
-.btn--primary {
+   four/five secondary buttons are squeezed onto the same row.
+   Specificity, not source order, decides this: `.controls .btn` above is two
+   classes (0,2,0) and Deal matches it too (it's `.btn.btn--primary` inside
+   `.controls`), so a single-class `.btn--primary` (0,1,0) always lost to it
+   regardless of where it sat in the file — Deal rendered the same red as
+   every other button. `.controls .btn--primary` matches `.controls .btn`'s
+   specificity and comes after it in source order, so it wins. */
+.controls .btn--primary {
   background: var(--gold);
   color: #1a1208;
   text-shadow: none;

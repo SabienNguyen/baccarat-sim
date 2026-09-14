@@ -25,3 +25,47 @@
   accent-color: var(--gold);
   cursor: pointer;
 }
+
+/* --- phones: 44px hit areas without widening the row (P12 follow-up) ---
+   Mute/Music sit beside the volume slider in the HUD's shared
+   volume/hud-actions row (theme.css phone block); that row is already
+   pinned to >=44px tall by Reset bank/Lobby on the other side, so growing
+   these two buttons' own boxes to 44px would only make the row *wider*, and
+   the row is already tight (mute+music+slider+gaps has to share half the
+   HUD). An out-of-flow `::before` hit-expander gets the real tappable area
+   to 44px on both axes with zero extra layout width. The slider is a real
+   form control (no pseudo-element hit-expander trick works the same way for
+   `<input>` on all engines), so its own box grows to 44px tall instead —
+   the row is already >=44px tall for other reasons, so this costs nothing.
+   Thumb also grows to the requested >=28px. */
+@media (max-width: 700px) {
+  .volume-mute,
+  .volume-music {
+    position: relative;
+  }
+  .volume-mute::before,
+  .volume-music::before {
+    content: "";
+    position: absolute;
+    /* music is the narrower of the two (23px); the same inset on both
+       covers mute's 33px too */
+    inset: -11px;
+  }
+  .volume-slider {
+    height: 44px;
+    /* UA stylesheets give `<input>` a ~2px block margin by default; left in
+       place, that margin box (not the 44px border-box) is what the flex
+       row's own intrinsic height is measured against, pushing the shared
+       HUD grid row from 44px to 48px — the one thing the whole point of
+       reusing that row (rather than growing it) was to avoid. */
+    margin-block: 0;
+  }
+  .volume-slider::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  .volume-slider::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+}
