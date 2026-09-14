@@ -84,20 +84,25 @@ struct Player {
     bets: Vec<PlacedBet>,
     /// Chose to skip this coup.
     sitting_out: bool,
+    /// Declared ready to deal, having bet — reset every coup.
+    ready: bool,
     /// Last round's payouts, kept until the next deal.
     payouts: Option<Vec<crate::session::BetPayout>>,
 }
 
 impl Player {
-    /// Bet down, sitting out, or unable to bet at all — ready for the deal.
+    /// Sitting out, unable to bet at all, or bet AND declared ready — ready
+    /// for the deal.
     ///
     /// The affordability case is what stops one broke seat freezing the table.
     /// A player whose bankroll won't cover the table minimum cannot place a bet
     /// even if they want to, so waiting for them to "decide" waits forever;
     /// treating them as decided is the same call a pit makes when it deals past
-    /// someone who has stopped buying in.
+    /// someone who has stopped buying in. A seat that has bet but not yet
+    /// readied up is NOT decided — everyone must ready up before the coup
+    /// deals.
     fn decided(&self, table_min: i64) -> bool {
-        self.sitting_out || !self.bets.is_empty() || self.broke(table_min)
+        self.sitting_out || self.ready || self.broke(table_min)
     }
 
     /// Can't cover the table minimum, so can't take part in this coup.
@@ -150,7 +155,9 @@ pub struct SeatView {
     pub bankroll: i64,
     pub staked: i64,
     pub sitting_out: bool,
-    /// Bet down or sitting out — the deal waits for everyone to decide.
+    /// Declared ready to deal (requires a bet). Reset every coup.
+    pub ready: bool,
+    /// Sitting out, ready, or broke — the deal waits for everyone to decide.
     pub decided: bool,
     /// Bankroll won't cover the table minimum, so this seat can't bet at all.
     pub broke: bool,
@@ -242,6 +249,7 @@ impl Table {
             bankroll: buy_in,
             bets: Vec::new(),
             sitting_out: false,
+            ready: false,
             payouts: None,
         });
         Ok(id)
@@ -291,6 +299,7 @@ impl Table {
             .into());
         }
         let (min, max) = (self.config.table_min, self.config.table_max);
+        let solo = self.config.max_seats == 1;
         let player = self.player_mut(pid)?;
         if amount < min {
             return Err(CommandError::BetBelowMinimum { min, got: amount }.into());
@@ -318,6 +327,10 @@ impl Table {
         // betting again closes last round's settled display
         player.payouts = None;
         player.bets.push(PlacedBet { kind, amount });
+        // A change to the bets un-readies the seat — ready again to confirm.
+        // A solo table (one seat, nobody else to wait on) keeps today's
+        // behavior: a bet alone is enough, so a bet auto-readies there.
+        player.ready = solo;
         self.settled_on_felt = false; // the next coup is open
         Ok(())
     }
@@ -347,8 +360,50 @@ impl Table {
             }
             .into());
         }
-        self.player_mut(pid)?.bets.clear();
+        let player = self.player_mut(pid)?;
+        player.bets.clear();
+        player.ready = false;
         Ok(())
+    }
+
+    /// Declare ready to deal: requires at least one bet staged this coup.
+    /// A change of mind after readying (another bet, or clearing bets) drops
+    /// it again — see `place_bet` / `clear_bets`.
+    pub fn ready(&mut self, pid: PlayerId) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing,
+            }
+            .into());
+        }
+        let player = self.player_mut(pid)?;
+        if player.bets.is_empty() {
+            return Err(CommandError::NoBetsPlaced.into());
+        }
+        player.ready = true;
+        Ok(())
+    }
+
+    /// Take back a ready declaration. Betting phase only.
+    pub fn unready(&mut self, pid: PlayerId) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing,
+            }
+            .into());
+        }
+        self.player_mut(pid)?.ready = false;
+        Ok(())
+    }
+
+    /// Betting phase, at least one seat, and every seat decided under the
+    /// ready-up rule — the same gate `deal()` checks.
+    pub fn all_ready(&self) -> bool {
+        matches!(self.phase, Phase::Betting)
+            && !self.players.is_empty()
+            && self.players.iter().all(|p| p.decided(self.config.table_min))
     }
 
     /// Buy more chips without leaving the table. In a pit you hand over cash
@@ -747,6 +802,7 @@ impl Table {
             p.payouts = Some(payouts);
             p.bets.clear();
             p.sitting_out = false; // fresh decision every coup
+            p.ready = false;
         }
         self.last_outcome = Some(round.outcome);
         self.last_round = Some(round.clone());
@@ -804,6 +860,7 @@ impl Table {
                 bankroll: p.bankroll,
                 staked: p.bets.iter().map(|b| b.amount).sum(),
                 sitting_out: p.sitting_out,
+                ready: p.ready,
                 decided: p.decided(self.config.table_min),
                 // Out of chips for this table — the client shows a rebuy or
                 // leave prompt, and the deal no longer waits on them.
@@ -953,6 +1010,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         assert_eq!(t.view_for(a).unwrap().player_squeezer, Some(a));
     }
@@ -967,6 +1026,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         t.peek(a, Side::Player, 0).unwrap();
         // the holder sees their own sliver
@@ -986,6 +1047,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
         assert!(t.view_for(a).unwrap().outcome.is_some());
@@ -1003,6 +1065,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         // a display-only change: allowed while cards are out
         t.rename(a, "alice").unwrap();
@@ -1064,6 +1128,8 @@ mod tests {
         // Opposite main bets: exactly one wins (or both push on tie).
         t.place_bet(a, BetKind::Main(BetSpot::Player), 10_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 10_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
 
@@ -1086,6 +1152,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         let dealt = t.view_for(a).unwrap();
         t.settle().unwrap();
@@ -1105,6 +1172,7 @@ mod tests {
 
         // the next deal sweeps them for the fresh coup
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         let fresh = t.view_for(a).unwrap();
         assert_eq!(fresh.phase, PhaseTag::Dealing);
@@ -1119,6 +1187,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         // ...but NOT before the cards are turned: the trace names the values
         // outright ("...it was 3"), so shipping it mid-squeeze spoiled every
@@ -1152,6 +1221,7 @@ mod tests {
 
         // and the next deal clears it so the fresh Betting felt shows no stale trace
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
     }
 
@@ -1161,6 +1231,7 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         let b = t.join("b", 50_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.sit_out(b).unwrap();
         t.deal().unwrap();
 
@@ -1182,6 +1253,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         let v = t.view_for(a).unwrap();
         for card in v.player.cards.iter().chain(v.banker.cards.iter()) {
@@ -1197,6 +1269,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 2_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         let v = t.view_public();
         assert_eq!(v.phase, PhaseTag::Dealing);
@@ -1219,6 +1293,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.peek(a, Side::Player, 0).unwrap();
         assert!(matches!(t.view_for(a).unwrap().player.cards[0], CardView::Peeked { .. }));
@@ -1240,6 +1315,7 @@ mod tests {
         assert!(v.player.cards.is_empty());
         assert!(v.outcome.is_none());
 
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
         let v = t.view_public();
@@ -1266,6 +1342,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
         assert_eq!(t.view_public().phase, PhaseTag::Settled);
@@ -1279,6 +1356,7 @@ mod tests {
         let a = t.join("a", 100_000).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.sit_out(b).unwrap();
         t.deal().unwrap();
         // a bet Player, so the Player hand is HIS squeeze
@@ -1344,6 +1422,7 @@ mod tests {
         assert_eq!(v.scoreboard.bead_plate.cells.len(), 1, "it still joins the roads");
         // and the next coup can be bet normally
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
     }
 
@@ -1352,6 +1431,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 10_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.leave(a).unwrap();
         assert_eq!(t.seats(), 0);
@@ -1366,6 +1446,7 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+        t.ready(a).unwrap();
         t.sit_out(b).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
@@ -1396,6 +1477,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         let v = t.view_for(a).unwrap();
         assert_eq!(v.player_squeezer, Some(a));
@@ -1415,6 +1498,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         // right card first is fine — it's your hand
         t.reveal(a, Side::Player, 1).unwrap();
@@ -1428,6 +1512,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         // Banker's first card may not be revealed before the Player hand is up
         assert_eq!(t.reveal(b, Side::Banker, 0), Err(TableError::OutOfOrder));
@@ -1445,6 +1531,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         // nobody bet Banker: at a shared table only the paced dealer turns it
         assert!(matches!(t.peek(a, Side::Banker, 0), Err(TableError::NotYourSqueeze { .. })));
@@ -1466,6 +1553,7 @@ mod tests {
         );
         let p = solo.join("me", 100_000).unwrap();
         solo.place_bet(p, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        solo.ready(p).unwrap();
         solo.deal().unwrap();
         solo.reveal(p, Side::Player, 0).unwrap();
         solo.reveal(p, Side::Player, 1).unwrap();
@@ -1477,6 +1565,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
         assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Settled);
@@ -1495,6 +1584,8 @@ mod tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 2_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         let v = t.view_for(a).unwrap();
         // somebody owns the Player hand, so it must NOT be auto-flipped
@@ -1510,6 +1601,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         // a holds the Player hand, so nothing is exposed yet
         let v = t.view_for(a).unwrap();
@@ -1536,6 +1628,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         // nobody owns either hand: the dealer flips the whole coup, in order
         let mut flips = 0;
@@ -1554,6 +1647,7 @@ mod tests {
         let a = t.join("a", 10_000_000).unwrap();
         for _ in 0..200 {
             t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
+            t.ready(a).unwrap();
             t.deal().unwrap();
             t.settle().unwrap();
         }
@@ -1570,6 +1664,7 @@ mod tests {
         let a = t.join("a", 5_000).unwrap();
         for _ in 0..4 {
             t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            t.ready(a).unwrap();
             t.deal().unwrap();
             t.settle().unwrap();
         }
@@ -1585,6 +1680,7 @@ mod tests {
         assert_eq!(after.scoreboard.big_road.columns, before.scoreboard.big_road.columns);
         // and the next card off the shoe is the shoe's next card, not a new deal
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
         assert_eq!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len(), beads + 1);
@@ -1595,6 +1691,7 @@ mod tests {
         let mut t = table();
         let a = t.join("a", 5_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert!(matches!(
             t.rebuy(a, 1_000),
@@ -1625,6 +1722,7 @@ mod tests {
             let mut prev_remaining = usize::MAX;
             loop {
                 t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
+                t.ready(a).unwrap();
                 t.deal().unwrap();
                 t.settle().unwrap();
                 coups += 1;
@@ -1688,6 +1786,7 @@ mod tests {
                     }
                     let bet = stake.min(roll).max(MIN);
                     t.place_bet(p, BetKind::Main(BetSpot::Banker), bet).unwrap();
+                    t.ready(p).unwrap();
                     t.deal().unwrap();
                     t.settle().unwrap();
                     hands += 1;
@@ -1719,6 +1818,7 @@ mod tests {
         let a = t.join("a", 10_000_000).unwrap();
         for expected in 1..=6 {
             t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            t.ready(a).unwrap();
             t.deal().unwrap();
             t.settle().unwrap();
             let first = t.view_for(a).unwrap().scoreboard;
@@ -1730,6 +1830,155 @@ mod tests {
                 "cache went stale — bead count didn't track the coup count"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod ready_tests {
+    //! Everyone must ready up before the coup deals — a bet alone no longer
+    //! marks a seat decided.
+    use super::*;
+    use crate::settle::BetSpot;
+
+    fn table() -> Table {
+        Table::new(
+            TableConfig {
+                table_min: 100,
+                table_max: 1_000_000,
+                ruleset: Ruleset::Commission,
+                max_seats: 7,
+            },
+            42,
+        )
+    }
+
+    #[test]
+    fn ready_requires_a_bet() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        assert!(matches!(
+            t.ready(a),
+            Err(TableError::Command(CommandError::NoBetsPlaced))
+        ));
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        assert!(t.view_for(a).unwrap().seats[0].ready);
+    }
+
+    #[test]
+    fn a_bet_after_ready_unreadies_the_seat() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        assert!(t.view_for(a).unwrap().seats[0].ready);
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 500).unwrap();
+        assert!(!t.view_for(a).unwrap().seats[0].ready, "a changed mind un-readies");
+    }
+
+    #[test]
+    fn clearing_bets_also_unreadies_the_seat() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        t.clear_bets(a).unwrap();
+        assert!(!t.view_for(a).unwrap().seats[0].ready);
+    }
+
+    #[test]
+    fn deal_waits_on_a_betted_but_unready_seat_and_proceeds_once_ready() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        // both bet, neither has readied — the deal must wait
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+        assert!(!t.all_ready());
+        t.ready(a).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers), "b still hasn't readied");
+        assert!(!t.all_ready());
+        t.ready(b).unwrap();
+        assert!(t.all_ready());
+        t.deal().unwrap();
+    }
+
+    #[test]
+    fn sitting_out_seats_never_block_ready_up() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.sit_out(b).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers), "a hasn't readied yet");
+        t.ready(a).unwrap();
+        assert!(t.all_ready());
+        t.deal().unwrap();
+    }
+
+    #[test]
+    fn broke_seats_never_block_ready_up() {
+        let mut t = Table::new(
+            TableConfig { table_min: 100, table_max: 10_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            7,
+        );
+        let a = t.join("a", 5_000).unwrap();
+        let broke = t.join("broke", 50).unwrap(); // below the table minimum
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers), "a hasn't readied yet");
+        t.ready(a).unwrap();
+        assert!(t.all_ready(), "the broke seat never blocks readiness");
+        let _ = broke;
+        t.deal().unwrap();
+    }
+
+    #[test]
+    fn settle_resets_ready_for_the_next_coup() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        t.deal().unwrap();
+        t.settle().unwrap();
+        assert!(!t.view_for(a).unwrap().seats[0].ready, "a fresh coup starts unready");
+        assert!(!t.all_ready(), "an empty felt isn't all-ready");
+    }
+
+    #[test]
+    fn unready_flips_the_seat_back_and_a_later_deal_is_refused() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        assert!(t.all_ready());
+        t.unready(a).unwrap();
+        assert!(t.view_for(a).unwrap().seats[0].ready == false);
+        assert!(!t.all_ready());
+        assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
+    }
+
+    #[test]
+    fn ready_and_unready_are_refused_outside_betting() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
+        t.deal().unwrap();
+        assert!(matches!(
+            t.ready(a),
+            Err(TableError::Command(CommandError::WrongPhase { .. }))
+        ));
+        assert!(matches!(
+            t.unready(a),
+            Err(TableError::Command(CommandError::WrongPhase { .. }))
+        ));
+    }
+
+    #[test]
+    fn all_ready_is_false_with_no_seats() {
+        let t = table();
+        assert!(!t.all_ready());
     }
 }
 
@@ -1752,6 +2001,7 @@ mod broke_seat_tests {
         let broke = t.join("broke", 50).unwrap(); // below the 100 minimum
 
         t.place_bet(rich, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.ready(rich).unwrap();
         // The broke seat never acts — it cannot, no bet it could make is legal.
         // Before this fix the deal waited on them forever.
         t.deal().expect("a seat that cannot bet must not block the coup");
@@ -1774,6 +2024,8 @@ mod broke_seat_tests {
         );
 
         t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().expect("both decided now");
     }
 
@@ -1785,6 +2037,8 @@ mod broke_seat_tests {
         let b = t.join("b", 150).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         t.settle().unwrap();
 
@@ -1794,11 +2048,14 @@ mod broke_seat_tests {
             let left = t.view_for(a).unwrap().seats.iter().find(|s| s.id == b).unwrap().bankroll;
             t.place_bet(b, BetKind::Main(BetSpot::Tie), left.min(10_000)).unwrap();
             t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+            t.ready(a).unwrap();
+            t.ready(b).unwrap();
             t.deal().unwrap();
             t.settle().unwrap();
         }
 
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.ready(a).unwrap();
         t.deal().expect("the busted seat must not hold the table hostage");
     }
 }
@@ -1837,6 +2094,7 @@ mod dealer_flip_tests {
         let mut t = table_seeded(seed);
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         (t, a)
     }
@@ -1897,6 +2155,7 @@ mod dealer_flip_tests {
         let a = t.join("a", 100_000).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.sit_out(b).unwrap();
         t.deal().unwrap();
         assert_eq!(t.request_dealer_flip(b, FlipRequest::One), Err(TableError::NothingToTurn));
@@ -1912,6 +2171,8 @@ mod dealer_flip_tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         assert_eq!(
             t.request_dealer_flip(a, FlipRequest::One),
@@ -1929,6 +2190,7 @@ mod dealer_flip_tests {
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert_eq!(t.request_dealer_flip(a, FlipRequest::One), Err(TableError::NothingToTurn));
     }
@@ -1953,6 +2215,7 @@ mod dealer_flip_tests {
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert!(t.dealer_flip_pending());
         assert_eq!(t.request_dealer_flip(a, FlipRequest::One), Err(TableError::NothingToTurn));
@@ -2049,6 +2312,8 @@ mod squeeze_gap_tests {
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         (t, a, b)
     }
@@ -2091,6 +2356,7 @@ mod squeeze_gap_tests {
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert_eq!(t.surrender_squeeze(a), vec![Side::Player, Side::Banker]);
     }
@@ -2101,6 +2367,7 @@ mod squeeze_gap_tests {
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert!(t.surrender_squeeze_side(a, Side::Player));
         let v = t.view_for(a).unwrap();
@@ -2136,6 +2403,7 @@ mod squeeze_gap_tests {
         let mut t = shared();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.ready(b).unwrap();
         t.deal().unwrap();
         // Player hand is the house's and comes first: the pacer is at work
         assert!(t.stalled_squeeze().is_none());
@@ -2184,6 +2452,7 @@ mod squeeze_gap_tests {
         let mut t = solo();
         let p = t.join("me", 100_000).unwrap();
         t.place_bet(p, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
+        t.ready(p).unwrap();
         t.deal().unwrap();
         t.peek(p, Side::Banker, 0).unwrap();
         assert_eq!(t.reveal(p, Side::Banker, 0), Err(TableError::OutOfOrder));
@@ -2205,6 +2474,7 @@ mod squeeze_gap_tests {
         let mut t = shared();
         let a = t.join("a", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        t.ready(a).unwrap();
         t.deal().unwrap();
         assert_eq!(
             t.reveal(a, Side::Banker, 0),

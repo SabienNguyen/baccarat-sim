@@ -94,7 +94,8 @@ the biggest Banker bettor holds the Banker cards, and the house dealer turns any
 hand nobody bet — one card per beat, announced. Only the holder gets the squeeze
 gesture, peeks follow the ritual order, and the Player squeezer's flip request
 is validated by the server before the table hears it. Every coup is opt-in: bet
-or sit out, and the deal waits for the table.
+or sit out, and everyone at the table readies up before the dealer deals — the
+coup goes as soon as the last seat is ready, no separate Deal press needed.
 
 Nobody can freeze the table: a squeezer whose connection drops has 8 seconds to
 come back before the dealer turns that hand himself, and one who simply stops

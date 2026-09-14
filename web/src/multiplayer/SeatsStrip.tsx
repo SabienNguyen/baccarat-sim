@@ -48,6 +48,11 @@ export function SeatsStrip({
             )}
             <span className="seat-money">{formatCents(s.bankroll)}</span>
             {s.staked > 0 && <span className="seat-staked">{formatCents(s.staked)} riding</span>}
+            {betting && s.ready && (
+              <span className="seat-ready" aria-label="ready">
+                ✓
+              </span>
+            )}
             {betting && s.sitting_out && <span className="seat-status">sitting out</span>}
             {betting && !s.decided && <span className="seat-status seat-status--wait">waiting…</span>}
           </div>

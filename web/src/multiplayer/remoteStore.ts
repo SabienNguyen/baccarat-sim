@@ -58,6 +58,9 @@ export function createRemoteStore(opts: {
     lastFlip: null,
     announcement: null,
     sitOut: () => send({ type: "sit_out" }),
+    ready: () => send({ type: "ready" }),
+    unready: () => send({ type: "unready" }),
+    myReady: opts.view.seats.find((s) => s.id === me)?.ready ?? false,
     lastDelta: null,
     settleSeq: 0,
     explainOn: false,
@@ -166,6 +169,7 @@ export function createRemoteStore(opts: {
       // `joined` carries no count; the broadcast right behind it does
       watchers: msg.type === "joined" ? get().watchers : (msg.watchers ?? get().watchers),
       busted: mySeat?.broke ?? false,
+      myReady: mySeat?.ready ?? false,
       squeezers: squeezersOf(view),
       ...(flip ? { lastFlip: flip } : next.phase === "Betting" ? { lastFlip: null } : {}),
       lastDelta,

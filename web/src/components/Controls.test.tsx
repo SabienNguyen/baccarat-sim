@@ -101,6 +101,61 @@ test("the Explain button reflects and toggles explain mode", async () => {
   expect(onToggleExplain).toHaveBeenCalledOnce();
 });
 
+test("multiplayer shows Ready instead of Deal, disabled with no bets", () => {
+  render(
+    <Controls
+      snapshot={bettingSnapshot()}
+      onDeal={vi.fn()}
+      onNewShoe={vi.fn()}
+      onSitOut={vi.fn()}
+      onReady={vi.fn()}
+      onUnready={vi.fn()}
+      myReady={false}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Deal" })).toBeNull();
+  const ready = screen.getByRole("button", { name: "Ready" });
+  expect(ready).toBeDisabled();
+});
+
+test("Ready is enabled with a bet down and fires onReady", async () => {
+  const onReady = vi.fn();
+  render(
+    <Controls
+      snapshot={bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] })}
+      onDeal={vi.fn()}
+      onNewShoe={vi.fn()}
+      onSitOut={vi.fn()}
+      onReady={onReady}
+      onUnready={vi.fn()}
+      myReady={false}
+    />,
+  );
+  const ready = screen.getByRole("button", { name: "Ready" });
+  expect(ready).toBeEnabled();
+  await userEvent.click(ready);
+  expect(onReady).toHaveBeenCalledOnce();
+});
+
+test("once ready, the button reads Unready and fires onUnready", async () => {
+  const onUnready = vi.fn();
+  render(
+    <Controls
+      snapshot={bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] })}
+      onDeal={vi.fn()}
+      onNewShoe={vi.fn()}
+      onSitOut={vi.fn()}
+      onReady={vi.fn()}
+      onUnready={onUnready}
+      myReady={true}
+    />,
+  );
+  const unready = screen.getByRole("button", { name: "Unready" });
+  expect(unready).toBeEnabled();
+  await userEvent.click(unready);
+  expect(onUnready).toHaveBeenCalledOnce();
+});
+
 test("at the rail only Explain is offered — nothing there moves the game", () => {
   render(
     <Controls

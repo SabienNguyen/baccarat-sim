@@ -136,6 +136,9 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const squeezers = useStore(active, (s) => s.squeezers);
   const requestDealerFlip = useStore(active, (s) => s.requestDealerFlip);
   const sitOut = useStore(active, (s) => s.sitOut);
+  const ready = useStore(active, (s) => s.ready);
+  const unready = useStore(active, (s) => s.unready);
+  const myReady = useStore(active, (s) => s.myReady);
   const watchHand = useStore(active, (s) => s.watchHand);
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
@@ -348,6 +351,9 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
+          onReady={seats !== null ? ready : undefined}
+          onUnready={seats !== null ? unready : undefined}
+          myReady={myReady}
           onWatch={seats === null ? watchHand : undefined}
           spectating={spectating}
         />
