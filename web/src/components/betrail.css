@@ -235,35 +235,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Other seats' bets on this spot (multiplayer). Out of flow for the same
-   reason as `.spot-chips` above (P6): the spot's own width must never move
-   because of who else is betting on it. Sits at the top corner, clear of the
-   name/payout (top-centre) and this seat's own tower + stake (bottom). */
-.spot-others {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  pointer-events: none;
-}
-.spot-other-chip {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.5);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
-}
-.spot-others-total {
-  font-family: var(--font-text);
-  font-size: 10px;
-  color: #fff7e6;
-  background: rgba(0, 0, 0, 0.55);
-  border-radius: 4px;
-  padding: 0 3px;
-  white-space: nowrap;
-}
 /* Real chips cover the layout printing; fade it so the stack reads as on top. */
 .spot.is-staked .spot-name,
 .spot.is-staked .spot-payout {

@@ -373,8 +373,6 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             onClear={clearBets}
             view={betView}
             onView={setBetView}
-            seats={seats}
-            me={me}
           />
         )}
       </main>
