@@ -6,7 +6,7 @@
 //! lossless below 2^53, which covers all realistic cent amounts).
 
 use baccarat_engine::glossary::{glossary as engine_glossary, GlossaryEntry};
-use baccarat_engine::scoreboard::Side;
+use baccarat_engine::scoreboard::{derive_scoreboard, records_from_outcomes, ScoreboardSnapshot, Side};
 use baccarat_engine::session::{
     BetKind, CommandError, RoundSnapshot, Session, SessionConfig,
 };
@@ -79,6 +79,14 @@ pub fn glossary() -> Glossary {
     Glossary(engine_glossary())
 }
 
+/// Derive a full scoreboard from a bare outcome sequence (e.g. "BPBBPB...").
+/// See `baccarat_engine::scoreboard::records_from_outcomes` for the accepted
+/// format (B/P/T, case-insensitive, whitespace and other characters ignored).
+#[wasm_bindgen]
+pub fn scoreboard_from_outcomes(seq: &str) -> ScoreboardSnapshot {
+    derive_scoreboard(&records_from_outcomes(seq))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +146,15 @@ mod tests {
         let Glossary(entries) = glossary();
         assert!(entries.len() >= 20);
         assert!(entries.iter().any(|e| e.term == "monkey"));
+    }
+
+    #[wasm_bindgen_test]
+    fn scoreboard_from_outcomes_derives_roads_from_a_bare_sequence() {
+        // Same 68-hand shoe verified cell-by-cell in engine/src/scoreboard.rs.
+        let seq = "BPBBPB BBBPBP BBPPPB BBPPBP PPBBPP BPBBBP PPBBPP BPBBBP BBPBBB PBBBBP BPBPPP BP";
+        let snapshot = scoreboard_from_outcomes(seq);
+        assert_eq!(snapshot.big_road.columns.len(), 38);
+        assert_eq!(snapshot.big_eye_boy.columns.len(), 36);
     }
 }
 

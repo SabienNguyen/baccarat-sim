@@ -54,3 +54,12 @@ on each phone to get to the lobby.
 9. **Rename a seat** and confirm the new name shows on the other phones.
 10. **Reload** one still-seated phone and confirm it reclaims its own seat
     and bankroll instead of joining as a new player.
+
+## Roads replay
+
+`http://localhost:5173/?roads=<BPT sequence>` opens the full board (bead
+plate, Big Road, Big Eye Boy, Small Road, Cockroach Pig) for that shoe — no
+table or session needed — so you can replicate a published casino scoreboard
+and compare it against ours. Only letters B/P/T (any case) count; everything
+else in the string is ignored. Example, a real 68-hand pit display:
+`http://localhost:5173/?roads=BPBBPBBBBPBPBBPPPBBBPPBPPPBBPPBPBBBPPPBBPPBPBBBPBBPBBBPBBBBPBPBPPPBP`

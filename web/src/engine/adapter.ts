@@ -1,4 +1,9 @@
-import { WasmSession, WasmTable, glossary as wasmGlossary } from "engine-wasm";
+import {
+  WasmSession,
+  WasmTable,
+  glossary as wasmGlossary,
+  scoreboard_from_outcomes,
+} from "engine-wasm";
 import type { TableError } from "engine-wasm";
 import type {
   RoundSnapshot,
@@ -8,6 +13,7 @@ import type {
   Side,
   GlossaryEntry,
   FlipRequest,
+  ScoreboardSnapshot,
 } from "./types";
 
 /** An engine refusal or, from a table, the dealer's plain speech. */
@@ -176,4 +182,13 @@ export function createTableSession(config: SessionConfig): GameSession {
 
 export function getGlossary(): GlossaryEntry[] {
   return wasmGlossary();
+}
+
+/**
+ * Replay a bare B/P/T sequence (any case; anything else is ignored by the
+ * engine) into a fresh scoreboard — no session, no bets, no shoe. Used by the
+ * `?roads=` dev replay to line our board up against a real pit display.
+ */
+export function scoreboardFromOutcomes(seq: string): ScoreboardSnapshot {
+  return scoreboard_from_outcomes(seq);
 }
