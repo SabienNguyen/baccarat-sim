@@ -253,12 +253,13 @@ function bigRoadLabel(cell: BigRoadCell): string {
 
 /**
  * The animal bonus stamped on this cell, if any. At most one can apply — a
- * Dragon 7 is a banker three-card 7, a Panda 8 a player three-card 8, and a
- * Tiger a banker 6 — so the order here is just a tiebreak that never fires.
+ * Dragon 7 is a banker three-card 7 and a Tiger a banker 6 — so the order
+ * here is just a tiebreak that never fires. The engine also flags a Panda 8
+ * (player three-card 8), but that bet has no spot on this felt, so a token
+ * for it would only raise a question the table can't answer.
  */
 function bonusOf(cell: BigRoadCell): BonusKind | null {
   if (cell.dragon7) return "dragon";
-  if (cell.panda8) return "panda";
   if (cell.tiger) return "tiger";
   return null;
 }

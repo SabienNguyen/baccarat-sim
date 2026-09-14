@@ -84,8 +84,8 @@ test("the BONUS view stakes the side kind", async () => {
   const onStake = vi.fn();
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onStake={onStake} />);
   await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Bet Panda 8" }));
-  expect(onStake).toHaveBeenCalledWith({ Side: "Panda8" });
+  await userEvent.click(screen.getByRole("button", { name: "Bet Dragon 7" }));
+  expect(onStake).toHaveBeenCalledWith({ Side: "Dragon7" });
 });
 
 test("staked bets badge their side of the switch", () => {
@@ -93,7 +93,7 @@ test("staked bets badge their side of the switch", () => {
     bets: [
       { kind: { Main: "Player" }, amount: 500 },
       { kind: { Side: "Dragon7" }, amount: 500 },
-      { kind: { Side: "Panda8" }, amount: 500 },
+      { kind: { Side: "Tiger" }, amount: 500 },
     ],
   });
   render(<BetRail snapshot={snap} {...noopProps} />);
@@ -162,26 +162,32 @@ test("the explainer documents only bets the felt actually offers", async () => {
   }
 });
 
-test("both Dragon Bonus sides are on the felt and stake their own side", async () => {
+test("the Banker Dragon Bonus is on the felt and stakes its own side", async () => {
   const onStake = vi.fn();
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onStake={onStake} />);
   await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
-
-  await userEvent.click(screen.getByRole("button", { name: "Bet Player Dragon Bonus" }));
-  expect(onStake).toHaveBeenLastCalledWith({ Side: { DragonBonus: "Player" } });
-
   await userEvent.click(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" }));
   expect(onStake).toHaveBeenLastCalledWith({ Side: { DragonBonus: "Banker" } });
 });
 
-test("the Dragon Bonus spots don't read as a duplicate of Dragon 7", async () => {
+test("the felt posts five side bets: no Player Dragon Bonus, no Panda 8", async () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
-  // Three spots carry the word "dragon"; each has to say which bet it is.
+  const spots = screen.getAllByRole("button", { name: /^Bet / }).map((b) => b.getAttribute("aria-label"));
+  expect(spots).toEqual([
+    "Bet Player Pair",
+    "Bet Banker Pair",
+    "Bet Banker Dragon Bonus",
+    "Bet Dragon 7",
+    "Bet Tiger",
+  ]);
+});
+
+test("the Dragon Bonus spot doesn't read as a duplicate of Dragon 7", async () => {
+  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
+  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
+  // Two spots carry the word "dragon"; each has to say which bet it is.
   expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toHaveTextContent("40:1");
-  expect(screen.getByRole("button", { name: "Bet Player Dragon Bonus" })).toHaveTextContent(
-    "P DRAGON",
-  );
   expect(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" })).toHaveTextContent(
     "B DRAGON",
   );

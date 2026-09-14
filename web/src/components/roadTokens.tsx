@@ -30,17 +30,6 @@ const ART: Record<BonusKind, string[]> = {
     ".gg..gg.",
     "........",
   ],
-  // fully outlined: white-on-cream has no contrast against the road paper
-  panda: [
-    ".kk..kk.",
-    "kkkkkkkk",
-    "kwwwwwwk",
-    "kwkwwkwk",
-    "kwkwwkwk",
-    "kwwkkwwk",
-    ".kwwwwk.",
-    "..kkkk..",
-  ],
   tiger: [
     "o......o",
     "oo....oo",
@@ -53,11 +42,10 @@ const ART: Record<BonusKind, string[]> = {
   ],
 };
 
-export type BonusKind = "dragon" | "panda" | "tiger";
+export type BonusKind = "dragon" | "tiger";
 
 const LABEL: Record<BonusKind, string> = {
   dragon: "Dragon 7",
-  panda: "Panda 8",
   tiger: "Tiger",
 };
 

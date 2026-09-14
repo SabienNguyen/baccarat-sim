@@ -47,13 +47,13 @@ test("a banker pair would win", () => {
   expect(bonusWouldWin(s, [])?.kind).toEqual({ Side: "BankerPair" });
 });
 
-test("panda 8: player wins with a three-card total of 8", () => {
+test("a panda 8 hand teaches nothing — that bet has no spot on the felt", () => {
   const s = settled({
     player: { cards: [up("Two"), up("Three"), up("Three")], total: 8 },
     banker: { cards: [up("Five"), up("Ace")], total: 6 },
     outcome: "PlayerWin",
   });
-  expect(bonusWouldWin(s, [])?.kind).toEqual({ Side: "Panda8" });
+  expect(bonusWouldWin(s, [])).toBeNull();
 });
 
 test("dragon 7: banker wins with a three-card total of 7", () => {

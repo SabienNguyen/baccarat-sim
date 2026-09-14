@@ -151,7 +151,7 @@
 }
 .side-bets {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 10px;
 }
 .spot {
@@ -354,11 +354,11 @@
     padding: 12px;
     gap: 12px;
   }
-  /* 4 across keeps seven spots to two rows — three would cost a third row,
-     which the phone layout can't spare (see P1/P2 in docs/BACKLOG.md). It also
-     lands the two P/B pairs together on the top row. */
+  /* 3 across keeps five spots to two rows (3 + 2) without an orphan — the
+     phone layout can't spare a third row (see P1/P2 in docs/BACKLOG.md). The
+     P/B pairs still land together on the top row. */
   .side-bets {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .spot--player,
   .spot--banker,

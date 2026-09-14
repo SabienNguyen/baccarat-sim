@@ -22,19 +22,15 @@ function isPair(cards: CardView[]): boolean {
   return a !== null && a === rankOf(cards[1]);
 }
 
-// Highest payout first — the nudge advertises the best bet you missed.
+// Highest payout first — the nudge advertises the best bet you missed. Only
+// bets with a spot on the felt: a Panda 8 hand teaches nothing here, since
+// nobody can place it.
 const CANDIDATES: Array<{ side: SideBet; label: string; payout: string; hit: (s: RoundSnapshot) => boolean }> = [
   {
     side: "Dragon7",
     label: "DRAGON 7",
     payout: "40:1",
     hit: (s) => s.outcome === "BankerWin" && s.banker.cards.length === 3 && s.banker.total === 7,
-  },
-  {
-    side: "Panda8",
-    label: "PANDA 8",
-    payout: "25:1",
-    hit: (s) => s.outcome === "PlayerWin" && s.player.cards.length === 3 && s.player.total === 8,
   },
   {
     side: "Tiger",

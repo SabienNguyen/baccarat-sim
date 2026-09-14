@@ -616,3 +616,13 @@ organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
   manifest is `standalone` with icons — plus a service worker, an install
   affordance, and an update toast; deferred until the table behaves on a
   phone. Owner-reported deal-flow problems logged as P14, unreproduced.
+- **2026-09-14 (felt trimmed, owner request):** The Player Dragon Bonus and
+  Panda 8 spots are off the felt; the Banker Dragon Bonus, pairs, Dragon 7
+  and Tiger remain. Pulled with them: the bonus sheet rows, the Panda 8
+  "you would've won" nudge, and the Big Road's panda token (the engine still
+  flags the hand; a token for a bet nobody can place only raises a question).
+  The engine is untouched — it still settles all eleven side bets, and the
+  odds/glossary pages still document them — but the table service now refuses
+  any bet without a spot (`offered` in `main.rs`, allowlist mirroring
+  `SIDE_SPOTS`), so a modified client can't play one at a live table. Bonus
+  grid is 5 across on desktop, 3 + 2 on phones. Server 45 / web 500 green.

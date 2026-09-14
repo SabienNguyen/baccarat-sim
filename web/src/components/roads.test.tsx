@@ -16,7 +16,7 @@ test("a win cell carries its pair dots and animal bonus token", () => {
   const columns: BigRoadCell[][] = [
     [{ ...cell(), side: "Player", player_pair: true }],
     [{ ...cell(), banker_pair: true, dragon7: true }],
-    [{ ...cell(), side: "Player", panda8: true }],
+    [{ ...cell(), side: "Player", panda8: true }], // flagged by the engine, no token: not on the felt
     [{ ...cell(), tiger: true }],
     [cell()], // a plain win carries no marks at all
   ];
@@ -30,7 +30,7 @@ test("a win cell carries its pair dots and animal bonus token", () => {
   const labels = [...container.querySelectorAll(".bonus-token")].map((t) =>
     t.getAttribute("aria-label"),
   );
-  expect(labels).toEqual(["Dragon 7", "Panda 8", "Tiger"]);
+  expect(labels).toEqual(["Dragon 7", "Tiger"]);
 
   // the plain cell (last column) is unmarked
   const plain = container.querySelectorAll(".road-grid ul")[4];
