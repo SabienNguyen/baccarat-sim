@@ -4,6 +4,8 @@ import { formatCents } from "../format";
 import { toChips } from "../chips";
 import { Chip, MiniChip } from "./Chip";
 import { BonusInfoModal } from "./BonusInfoModal";
+import type { SeatView } from "../multiplayer/protocol";
+import { seatColour } from "../multiplayer/seatColour";
 import "./betrail.css";
 
 interface BetRailProps {
@@ -19,6 +21,10 @@ interface BetRailProps {
   /** The nudge can fling the felt to the bonus view to show off a spot. */
   view?: BetView;
   onView?: (view: BetView) => void;
+  /** Multiplayer only: every seat, so each spot can show who else is on it. */
+  seats?: SeatView[] | null;
+  /** This client's own seat id — excluded from "others" on every spot. */
+  me?: number | null;
 }
 
 export type BetView = "main" | "bonus";
@@ -67,10 +73,46 @@ function isSide(kind: BetKind): boolean {
   return typeof kind === "object" && "Side" in kind;
 }
 
+const ALL_SPOTS: Spot[] = [...MAIN_SPOTS, ...SIDE_SPOTS];
+
+/**
+ * A short label for one bet kind, for anywhere the felt's own spot names are
+ * too long — the seats strip's per-seat tokens and the other-seats' chips on
+ * the felt. Main bets abbreviate to their initial (P/B) or TIE; bonus spots
+ * reuse the exact short names the felt already shows them as, so there is
+ * only one place that decides what a bonus kind is called.
+ */
+export function betSpotLabel(kind: BetKind): string {
+  if (!isSide(kind)) {
+    const side = (kind as { Main: "Player" | "Banker" | "Tie" }).Main;
+    return side === "Player" ? "P" : side === "Banker" ? "B" : "TIE";
+  }
+  const key = JSON.stringify(kind);
+  return ALL_SPOTS.find((s) => JSON.stringify(s.kind) === key)?.display ?? "";
+}
+
 /** Total cents staked on one spot. */
 function stakedOn(kind: BetKind, bets: PlacedBet[]): number {
   const key = JSON.stringify(kind);
   return bets.reduce((sum, b) => (JSON.stringify(b.kind) === key ? sum + b.amount : sum), 0);
+}
+
+/** Every other seat's stake on one spot (multiplayer only), for the felt's
+ *  "who else is on this" chips. Our own seat is never one of the "others". */
+function othersOn(
+  kind: BetKind,
+  seats: SeatView[] | null | undefined,
+  me: number | null | undefined
+): { id: number; amount: number }[] {
+  if (!seats) return [];
+  const key = JSON.stringify(kind);
+  const others: { id: number; amount: number }[] = [];
+  for (const s of seats) {
+    if (s.id === me) continue;
+    const amount = s.bets.reduce((sum, b) => (JSON.stringify(b.kind) === key ? sum + b.amount : sum), 0);
+    if (amount > 0) others.push({ id: s.id, amount });
+  }
+  return others;
 }
 
 interface BetSpotProps {
@@ -80,10 +122,13 @@ interface BetSpotProps {
   shape: string;
   denoms: number[];
   onStake: (kind: BetKind, denom?: number) => void;
+  /** Other seats riding on this spot (multiplayer only). */
+  others: { id: number; amount: number }[];
 }
 
-function BetSpot({ spot, betting, staked, shape, denoms, onStake }: BetSpotProps) {
+function BetSpot({ spot, betting, staked, shape, denoms, onStake, others }: BetSpotProps) {
   const chips = toChips(staked, denoms).chips;
+  const othersTotal = others.reduce((sum, o) => sum + o.amount, 0);
   return (
     <button
       type="button"
@@ -116,6 +161,21 @@ function BetSpot({ spot, betting, staked, shape, denoms, onStake }: BetSpotProps
           <span className="spot-stake">{formatCents(staked)}</span>
         </>
       )}
+      {others.length > 0 && (
+        // Out of flow for the same reason as the tower above (P6): this must
+        // never widen the spot's grid column. A dot per other seat, coloured
+        // to match its chip in the seats strip, plus their combined total.
+        <span className="spot-others" aria-label={`Others: ${formatCents(othersTotal)}`}>
+          {others.slice(0, 6).map((o) => (
+            <span
+              key={o.id}
+              className="spot-other-chip"
+              style={{ background: seatColour(o.id) }}
+            />
+          ))}
+          <span className="spot-others-total">+{formatCents(othersTotal)}</span>
+        </span>
+      )}
     </button>
   );
 }
@@ -130,6 +190,8 @@ export function BetRail({
   onClear,
   view,
   onView,
+  seats = null,
+  me = null,
 }: BetRailProps) {
   const betting = snapshot.phase === "Betting";
   // After a settle the engine is already back in Betting; touching a spot
@@ -193,6 +255,7 @@ export function BetRail({
               shape={active === "main" ? spot.label.toLowerCase() : "side"}
               denoms={denoms}
               onStake={onStake}
+              others={othersOn(spot.kind, seats, me)}
             />
           ))}
         </div>

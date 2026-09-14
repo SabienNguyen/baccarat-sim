@@ -300,6 +300,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             me={me}
             squeezers={squeezers}
             betting={snapshot.phase !== "Dealing"}
+            settled={snapshot.phase === "Settled"}
             onRename={spectating ? undefined : rename}
             watchers={watchers}
           />
@@ -372,6 +373,8 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             onClear={clearBets}
             view={betView}
             onView={setBetView}
+            seats={seats}
+            me={me}
           />
         )}
       </main>

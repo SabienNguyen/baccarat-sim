@@ -480,8 +480,8 @@ function sharedTableStore(overrides: { player_squeezer: number | null; banker_sq
       bets: [{ kind: { Main: "Banker" }, amount: 500 }],
     }),
     seats: [
-      { id: 3, name: "me", bankroll: 100_000, staked: 500, sitting_out: false, ready: true, decided: true },
-      { id: 5, name: "them", bankroll: 100_000, staked: 500, sitting_out: false, ready: true, decided: true },
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
     ],
     ...overrides,
   } as Parameters<typeof createRemoteStore>[0]["view"];
