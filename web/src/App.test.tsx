@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, DEAL_SETTLE_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
-import { bettingSnapshot, dealingSnapshot } from "./test/fixtures";
+import { bettingSnapshot, dealingSnapshot, settledSnapshot } from "./test/fixtures";
 import { createRemoteStore } from "./multiplayer/remoteStore";
 
 // A recording portal in place of the real (null) one, to check the table's
@@ -507,4 +507,65 @@ test("at a shared table, a house-held hand is the dealer's — no gesture for an
   render(<GameTable store={store} onLeave={() => {}} />);
   expect(screen.getByLabelText("Player hand").querySelectorAll('[role="button"]').length).toBe(0);
   expect(screen.getByLabelText("Banker hand").querySelectorAll('[role="button"]').length).toBe(2);
+});
+
+describe("T8b: the peel stage", () => {
+  afterEach(() => {
+    // @ts-expect-error test cleanup of a global we stub per-test
+    delete window.matchMedia;
+  });
+
+  function setPhoneLike() {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof matchMedia;
+  }
+
+  function setDesktop() {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof matchMedia;
+  }
+
+  test("mounts once Dealing has settled on a phone-like device", () => {
+    setPhoneLike();
+    vi.useFakeTimers();
+    try {
+      const store = createGameStore(fakeSession(dealingSnapshot()));
+      const { container } = render(<App store={store} />);
+      // the deal fly-in hasn't finished yet
+      expect(container.querySelector(".peel-stage")).toBeNull();
+      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
+      expect(container.querySelector(".peel-stage")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("never mounts on a desktop (fine pointer, wide viewport)", () => {
+    setDesktop();
+    vi.useFakeTimers();
+    try {
+      const store = createGameStore(fakeSession(dealingSnapshot()));
+      const { container } = render(<App store={store} />);
+      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
+      expect(container.querySelector(".peel-stage")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("unmounts once the phase leaves Dealing", () => {
+    setPhoneLike();
+    vi.useFakeTimers();
+    try {
+      let snap = dealingSnapshot();
+      const store = createGameStore(fakeSession(snap, { snapshot: () => snap }));
+      const { container, rerender } = render(<App store={store} />);
+      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
+      expect(container.querySelector(".peel-stage")).not.toBeNull();
+      snap = settledSnapshot();
+      store.setState({ snapshot: snap });
+      rerender(<App store={store} />);
+      expect(container.querySelector(".peel-stage")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

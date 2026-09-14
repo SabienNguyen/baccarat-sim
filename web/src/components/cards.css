@@ -173,6 +173,46 @@
   box-shadow: 1px 2px 2px rgba(0, 0, 0, 0.35);
 }
 
+/* --- peel reach (T8b) --- */
+/* Since we're peeling with a finger, the card ends up UNDER the fingertip —
+   the hit box needs to be bigger than the face, or the gesture never starts.
+   Invisible padding grows the wrapper's touch target 28px past the printed
+   edge on every side; the equal negative margin keeps its own layout box (and
+   so its neighbours, and the stage's gaps) exactly as before — only the hit
+   area grows. A gesture that starts in this margin still lands on the same
+   handlers, and squeeze.ts's clampToRect maps it to the nearest point on the
+   card before any fold math runs. */
+.squeeze-wrapper {
+  --peel-reach: 28px;
+  padding: var(--peel-reach);
+  margin: calc(-1 * var(--peel-reach));
+}
+
+/* --- peek lens (T8b) --- */
+/* On a coarse pointer the finger sits right on top of the corner it just
+   uncovered. While a peek is held, a small floating window shows a 2x
+   magnified re-render of the card, offset so whatever is under the finger
+   sits at the window's centre — a true magnifier, not a fixed corner crop,
+   so it works for a squeeze started from any side. */
+.peek-lens {
+  position: fixed;
+  width: 120px;
+  height: 120px;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 2px solid var(--ink);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+  background: #0b3d2e;
+  pointer-events: none;
+  z-index: 50;
+}
+.peek-lens-clone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
 /* --- the deal: cards slide in from the shoe, faces snap over --- */
 .card-dealt {
   animation: deal-in 340ms cubic-bezier(0.2, 1.2, 0.4, 1) backwards;

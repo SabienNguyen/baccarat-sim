@@ -16,6 +16,8 @@ import { dealerFlipOffer } from "./dealerFlip";
 import { DealerFlipRequest } from "./components/DealerFlipRequest";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
+import { PeelStage } from "./components/PeelStage";
+import { isPhoneLike } from "./phoneLike";
 import { BetRail, type BetView } from "./components/BetRail";
 import { BonusNudge } from "./components/BonusNudge";
 import { bonusWouldWin } from "./bonusNudge";
@@ -45,6 +47,14 @@ export const AUTO_ADVANCE_MS = 3000;
 /** The dealer's sweep: the cards muck away over this window at the end of the
  *  linger, so the felt clears with a gesture instead of the cards blinking out. */
 export const SWEEP_MS = 400;
+/** T8b: the peel stage waits this long after the phase flips to Dealing
+ *  before it mounts — the deal-in fly (cards.css) is still landing. The
+ *  last of the initial four cards (Banker's second) starts its 340ms
+ *  deal-in animation at a 420ms `--deal-delay` (Hand.tsx), finishing at
+ *  760ms; a fixed 700ms lands just before that without a visible stall — the
+ *  stage doesn't need to wait for the LAST pixel of the animation, only for
+ *  the cards to have visibly arrived. */
+export const DEAL_SETTLE_MS = 700;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -147,6 +157,23 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
 
   // every table noise rides the store: works for local and remote play alike
   useGameSounds(active);
+
+  // T8b: peel stage. Whether this device handles like a phone doesn't change
+  // mid-session, so it's read once. The stage itself waits out the deal
+  // fly-in before it mounts (see DEAL_SETTLE_MS) so the cards don't teleport
+  // into it mid-animation.
+  const [phoneLike] = useState(() => isPhoneLike());
+  const [dealSettled, setDealSettled] = useState(false);
+  useEffect(() => {
+    if (snapshot.phase !== "Dealing") {
+      setDealSettled(false);
+      return;
+    }
+    const t = setTimeout(() => setDealSettled(true), DEAL_SETTLE_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.phase]);
+  const showPeelStage = phoneLike && snapshot.phase === "Dealing" && dealSettled;
 
   // Game-portal gameplay signals (start on the first deal, stop under a
   // modal, resume when it closes) ride the store the same way. Without a
@@ -342,47 +369,85 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             the dealer line's own box on phones — see winpopup.css — instead
             of a viewport-percentage `top` that landed on the cards. The
             wrapper only matters at that breakpoint; the popup stays
-            `position: fixed` (ignoring its DOM position) everywhere else. */}
-        <div className="dealer-slot">
-          <DealerLine
+            `position: fixed` (ignoring its DOM position) everywhere else.
+            Hidden while the peel stage is up (T8b) — its own compact dealer
+            line takes over the narration so it isn't announced twice. */}
+        {!showPeelStage && (
+          <div className="dealer-slot">
+            <DealerLine
+              snapshot={snapshot}
+              lastError={lastError}
+              lastFlip={lastFlip}
+              announcement={announcement}
+            />
+            <WinPopup key={settleSeq} amount={lastDelta} />
+          </div>
+        )}
+        <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
+          {!showPeelStage && (
+            <>
+              <Hand
+                side="Player"
+                hand={snapshot.player}
+                phase={snapshot.phase}
+                visibleCount={playerVisible}
+                winner={snapshot.outcome === "PlayerWin"}
+                squeezable={canSqueeze("Player", squeezers, me)}
+                onPeek={(i) => peek("Player", i)}
+                onReveal={(i) => reveal("Player", i)}
+                actions={flipControls("Player")}
+              />
+              <Hand
+                side="Banker"
+                hand={snapshot.banker}
+                phase={snapshot.phase}
+                visibleCount={bankerVisible}
+                winner={snapshot.outcome === "BankerWin"}
+                squeezable={canSqueeze("Banker", squeezers, me)}
+                onPeek={(i) => {
+                  // A shared table holds the peek to the ritual too (the server
+                  // refuses it as out of order); hold it silently, like the flip.
+                  // Solo keeps its peek-ahead while the dealer turns Player.
+                  if (seats === null || !bankerLocked) peek("Banker", i);
+                }}
+                onReveal={(i) => {
+                  if (!bankerLocked) reveal("Banker", i);
+                }}
+                actions={flipControls("Banker")}
+              />
+            </>
+          )}
+        </div>
+        {showPeelStage && (
+          <PeelStage
             snapshot={snapshot}
             lastError={lastError}
             lastFlip={lastFlip}
             announcement={announcement}
-          />
-          <WinPopup key={settleSeq} amount={lastDelta} />
-        </div>
-        <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
-          <Hand
-            side="Player"
-            hand={snapshot.player}
-            phase={snapshot.phase}
-            visibleCount={playerVisible}
-            winner={snapshot.outcome === "PlayerWin"}
-            squeezable={canSqueeze("Player", squeezers, me)}
-            onPeek={(i) => peek("Player", i)}
-            onReveal={(i) => reveal("Player", i)}
-            actions={flipControls("Player")}
-          />
-          <Hand
-            side="Banker"
-            hand={snapshot.banker}
-            phase={snapshot.phase}
-            visibleCount={bankerVisible}
-            winner={snapshot.outcome === "BankerWin"}
-            squeezable={canSqueeze("Banker", squeezers, me)}
-            onPeek={(i) => {
-              // A shared table holds the peek to the ritual too (the server
-              // refuses it as out of order); hold it silently, like the flip.
-              // Solo keeps its peek-ahead while the dealer turns Player.
-              if (seats === null || !bankerLocked) peek("Banker", i);
+            player={{
+              hand: snapshot.player,
+              visibleCount: playerVisible,
+              winner: snapshot.outcome === "PlayerWin",
+              squeezable: canSqueeze("Player", squeezers, me),
+              onPeek: (i) => peek("Player", i),
+              onReveal: (i) => reveal("Player", i),
+              actions: flipControls("Player"),
             }}
-            onReveal={(i) => {
-              if (!bankerLocked) reveal("Banker", i);
+            banker={{
+              hand: snapshot.banker,
+              visibleCount: bankerVisible,
+              winner: snapshot.outcome === "BankerWin",
+              squeezable: canSqueeze("Banker", squeezers, me),
+              onPeek: (i) => {
+                if (seats === null || !bankerLocked) peek("Banker", i);
+              },
+              onReveal: (i) => {
+                if (!bankerLocked) reveal("Banker", i);
+              },
+              actions: flipControls("Banker"),
             }}
-            actions={flipControls("Banker")}
           />
-        </div>
+        )}
         <Controls
           snapshot={snapshot}
           onDeal={deal}

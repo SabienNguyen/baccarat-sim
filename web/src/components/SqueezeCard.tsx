@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, KeyboardEvent as ReactKeyboardE
 import type { CardView } from "../engine/types";
 import { Card } from "./Card";
 import { isFaceUp } from "../cards";
-import { foldFrom, gripFrom, PEEK_AT, REVEAL_AT, type Fold } from "../squeeze";
+import { clampToRect, foldFrom, gripFrom, PEEK_AT, REVEAL_AT, type Fold } from "../squeeze";
 import { CardGLOverlay, type GesturePort } from "../cardgl/CardGLOverlay";
 import { CardGLEngine } from "../cardgl/engine";
 
@@ -108,6 +108,13 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
   // A pointer drag is resolved by the pointer handlers; suppress the synthetic
   // `click` the browser fires afterward so it doesn't advance the card again.
   const suppressClick = useRef(false);
+  // Peek lens (T8b): a 2x magnifier that floats above the finger on a coarse
+  // pointer while a peek is held — the finger itself covers the corner it
+  // just uncovered. Cached once per gesture (a pointer's type doesn't
+  // change mid-drag); the lens position is state (it must re-render to
+  // follow the finger), everything else about the gesture stays ref-driven.
+  const coarsePointer = useRef(false);
+  const [lensAt, setLensAt] = useState<{ x: number; y: number } | null>(null);
 
   const faceUp = isFaceUp(card);
 
@@ -136,9 +143,19 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     }
     cancelAnimationFrame(springRaf.current);
     const rect = cardPaddingBox(e.currentTarget);
+    // Peel reach: a grab starting in the hit-expander (outside the card's own
+    // face) maps to the nearest point on the card — see clampToRect — so the
+    // rest of the gesture drives the identical fold maths as a grab on the
+    // face itself. Without real geometry (rect is degenerate — no measured
+    // layout, e.g. under jsdom) there is nothing to clamp against, so the
+    // raw grab point stands, same as before the reach existed.
+    const clamped =
+      rect.width > 0 && rect.height > 0
+        ? clampToRect(e.clientX, e.clientY, rect)
+        : { x: e.clientX, y: e.clientY };
     start.current = {
-      x: e.clientX,
-      y: e.clientY,
+      x: clamped.x,
+      y: clamped.y,
       // Measure the card's padding box, NOT this wrapper: the fold's clip
       // percentages resolve against the peel spans (inset 0 inside the
       // card's border), so any other box squashes the fold off the finger.
@@ -147,6 +164,9 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     peekedThisGesture.current = false;
     revealedThisGesture.current = false;
     draggedThisGesture.current = false;
+    coarsePointer.current =
+      typeof matchMedia !== "undefined" && matchMedia("(pointer: coarse)").matches;
+    setLensAt(null);
     if (glMode() && rect.width > 0) {
       glRect.current = { width: rect.width, height: rect.height };
       port.current = { drag: null, release: null };
@@ -184,10 +204,26 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
       peekedThisGesture.current = true;
       if (!isPeeked(card)) onPeek();
     }
+    // The lens only makes sense once a peek is actually held, on a coarse
+    // pointer, before the flip commits. In GL mode `fold` isn't otherwise
+    // kept live (the overlay reads the port instead, at display rate,
+    // deliberately state-free) — but the lens clone renders through the
+    // ordinary Card/Peel path, so once a peek is held it needs a real fold
+    // too. That's a limited re-render (only for the lens's window, not the
+    // whole drag), traded for reusing the exact same peel rendering.
+    if (peekedThisGesture.current && coarsePointer.current && !revealedThisGesture.current) {
+      if (glMode() && glActive && grab.rect.width > 0) {
+        setFold(foldFrom(grab.x, grab.y, e.clientX, e.clientY, grab.rect));
+      }
+      setLensAt({ x: e.clientX, y: e.clientY });
+    } else if (!peekedThisGesture.current) {
+      setLensAt(null);
+    }
   }
 
   function handlePointerUp(e: ReactPointerEvent) {
     if (faceUp || start.current === null) return;
+    setLensAt(null); // released: the lens goes with the finger that held it
     const progress = progressAt(e.clientX, e.clientY);
     // Only a DEEP pull commits the flip on release. Letting go of a
     // shallower squeeze keeps the card down — peeking costs nothing, the
@@ -238,6 +274,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     if (start.current === null) return;
     const grab = start.current;
     start.current = null;
+    setLensAt(null);
     suppressClick.current = draggedThisGesture.current || peekedThisGesture.current;
     if (glMode() && glActive && grab.rect.width > 0) {
       if (draggedThisGesture.current) {
@@ -304,10 +341,37 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     }
   }
 
+  // Peek lens geometry: a 120x120 CSS-px window floated above the finger,
+  // clamped inside the viewport; inside it, the card re-rendered at 2x,
+  // offset so whatever sits under the actual finger sits at the lens's
+  // centre. Only ever computed while the lens is showing.
+  const LENS_SIZE = 120;
+  let lensBoxStyle: { left: number; top: number } | null = null;
+  let lensCloneStyle: { width: number; height: number; transform: string } | null = null;
+  if (lensAt && start.current && start.current.rect.width > 0) {
+    const vw = typeof innerWidth === "number" ? innerWidth : LENS_SIZE;
+    const vh = typeof innerHeight === "number" ? innerHeight : LENS_SIZE;
+    const clampAxis = (v: number, size: number, max: number) =>
+      Math.min(Math.max(v, 0), Math.max(max - size, 0));
+    lensBoxStyle = {
+      left: clampAxis(lensAt.x - LENS_SIZE / 2, LENS_SIZE, vw),
+      top: clampAxis(lensAt.y - 72 - LENS_SIZE / 2, LENS_SIZE, vh),
+    };
+    const { rect } = start.current;
+    const localX = Math.min(Math.max(lensAt.x - rect.left, 0), rect.width);
+    const localY = Math.min(Math.max(lensAt.y - rect.top, 0), rect.height);
+    lensCloneStyle = {
+      width: rect.width,
+      height: rect.height,
+      transform: `translate(${(LENS_SIZE / 2 - localX * 2).toFixed(1)}px, ${(LENS_SIZE / 2 - localY * 2).toFixed(1)}px) scale(2)`,
+    };
+  }
+
   return (
     <div
       ref={wrapperRef}
       role="button"
+      className="squeeze-wrapper"
       // a folding card rises above its neighbors — the wrapper must carry
       // the z-order, since the card's own z-index can't escape it
       style={{
@@ -345,6 +409,13 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
             setGlCover(false);
           }}
         />
+      )}
+      {lensBoxStyle && lensCloneStyle && (
+        <div className="peek-lens" style={lensBoxStyle} aria-hidden>
+          <div className="peek-lens-clone" style={lensCloneStyle}>
+            <Card card={card} fold={fold} restFlat />
+          </div>
+        </div>
       )}
     </div>
   );
