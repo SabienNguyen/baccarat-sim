@@ -4,6 +4,16 @@
   width: 100%;
   max-width: 900px;
 }
+/* Wraps the dealer's line with the win/loss popup (App.tsx) so the popup can
+   anchor to this box on phones instead of a viewport-percentage offset. A
+   plain block everywhere else — the popup is `position: fixed` there and
+   ignores it. */
+.dealer-slot {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
 .dealer-tag {
   position: absolute;
   top: -10px;
@@ -83,10 +93,15 @@
 @media (max-width: 520px) {
   .dealer-line p {
     font-size: 19px;
-    /* Tighter bubble on a phone: the dealer usually speaks one short line, and
-       every pixel here pushes the chip rail toward the fold. */
+    /* Tighter bubble on a phone: every pixel here pushes the chip rail toward
+       the fold. P14: several common lines ("Bets down — $25.00 riding...",
+       a natural call, the settle line) measure 70.5px, wrapping to 2 lines —
+       52px only covered the shorter single-line case, so the felt below
+       jumped ~19px whenever a longer line landed (bet placed, a natural,
+       settle). Reserving the 2-line height up front instead keeps the
+       Player hand's position identical across the whole coup. */
     padding: 9px 12px 8px;
-    min-height: 52px;
+    min-height: 71px;
   }
   /* Type floor (P12): 9px -> 11px. Not interactive, so no tap-target change. */
   .dealer-tag {

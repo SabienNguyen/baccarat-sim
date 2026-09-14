@@ -314,6 +314,7 @@ body {
   /* bankroll spans the full width — it's the headline number */
   .app > .hud .hud-box--bankroll,
   .app > .hud .hud-box--goal,
+  .app > .hud .hud-box--outcome,
   .app > .hud .hud-payouts,
   .app > .hud .hud-actions {
     grid-column: 1 / -1;

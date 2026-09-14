@@ -48,6 +48,24 @@
   }
 }
 
+/* P14: on phones `top: 58%` of the viewport landed the popup on top of the
+   Player hand — the player is looking right at the cards when it appears.
+   `.dealer-slot` (App.tsx) wraps the dealer line and this popup together and
+   is the popup's nearest positioned ancestor here, so anchoring to it (not
+   the viewport) sits the popup over the dealer's speech bubble instead —
+   never over either hand's box. */
+@media (max-width: 700px) {
+  .win-popup {
+    position: absolute;
+    top: auto;
+    bottom: 2px;
+    left: 50%;
+    font-size: 16px;
+    padding: 6px 10px;
+    z-index: 51; /* above the dealer bubble it sits on */
+  }
+}
+
 /* Reduced motion: still show and clear the amount, but don't fly it — a
    plain fade holds the same 1.5s lifecycle so the popup never stays stuck. */
 @media (prefers-reduced-motion: reduce) {

@@ -91,25 +91,34 @@ export function Hud({
         </span>
       </div>
 
-      {snapshot.outcome !== null && (
-        <div className="hud-box hud-box--outcome">
-          <span className="hud-box-label">Outcome</span>
-          <span className="hud-box-value hud-box-value--small">{outcomeLabel(snapshot.outcome)}</span>
-        </div>
-      )}
+      {/* Always mounted (P14): on phones the HUD grid gives this box a fixed
+          height regardless of `data-has-outcome`, so its arrival at Settled
+          doesn't push the felt down. On wider screens a `[data-has-outcome=
+          "false"]` rule hides it exactly like the old conditional mount did. */}
+      <div
+        className="hud-box hud-box--outcome"
+        data-has-outcome={snapshot.outcome !== null}
+      >
+        <span className="hud-box-label">Outcome</span>
+        <span className="hud-box-value hud-box-value--small">
+          {snapshot.outcome !== null ? outcomeLabel(snapshot.outcome) : null}
+        </span>
+      </div>
 
-      {snapshot.payouts !== null && (
-        <ul aria-label="payouts" className="hud-payouts">
-          {snapshot.payouts.map((p, i) => (
-            <li key={i}>
-              <span className="hud-payout-bet">{betLabel(p.bet.kind)}</span>
-              <span className={`hud-payout-net ${p.net >= 0 ? "is-win" : "is-loss"}`}>
-                {formatNet(p.net)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul
+        aria-label="payouts"
+        className="hud-payouts"
+        data-has-payouts={snapshot.payouts !== null}
+      >
+        {snapshot.payouts?.map((p, i) => (
+          <li key={i}>
+            <span className="hud-payout-bet">{betLabel(p.bet.kind)}</span>
+            <span className={`hud-payout-net ${p.net >= 0 ? "is-win" : "is-loss"}`}>
+              {formatNet(p.net)}
+            </span>
+          </li>
+        ))}
+      </ul>
 
       <VolumeControl />
 
