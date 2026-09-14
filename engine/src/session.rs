@@ -1,11 +1,19 @@
 use crate::card::{Card, Rank, Suit};
 use crate::hand::Hand;
 use crate::round::{play_round, Outcome, RoundResult};
-use crate::shoe::Shoe;
+use crate::shoe::{CutReveal, Shoe};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::settle::{settle_with, Bet, BetSpot, Ruleset};
 use crate::sidebets::{settle_side, SideBet};
 use serde::{Deserialize, Serialize};
+
+/// A seat at a table, identified for the lifetime of the table. Lives here
+/// (rather than in `table.rs`) because `ShoeView`/`VoteView` need it too;
+/// `table.rs` re-exports it so `baccarat_engine::table::PlayerId` still works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+pub struct PlayerId(pub u64);
 
 /// How a session is configured at creation. All money is in cents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,9 +110,57 @@ pub struct HandView {
 #[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
 #[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
 pub enum PhaseTag {
+    ShoeCut,
     Betting,
     Dealing,
     Settled,
+}
+
+/// Why the table (or session) is sitting in `ShoeCut` right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+pub enum ShoeCutReason {
+    /// A brand-new table (or session), never cut.
+    NewTable,
+    /// The cut card came out and the one extra hand has been played.
+    CutCardOut,
+    /// The table voted for a new shoe.
+    Vote,
+    /// The solo player asked for a new shoe.
+    Requested,
+}
+
+/// The state of an in-progress New Shoe vote, as everyone at the table sees it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+pub struct VoteView {
+    pub proposer: PlayerId,
+    pub yes: Vec<PlayerId>,
+    pub no: Vec<PlayerId>,
+    pub needed: u8,
+}
+
+/// Everything a client needs to render the shoe lifecycle: its number, the
+/// last cut's ceremony (to replay the animation), whether the cut card is
+/// out, and — at a table — who holds the cut and any open vote.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
+#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
+pub struct ShoeView {
+    /// 0 until the first cut.
+    pub number: u32,
+    pub cut_card_out: bool,
+    /// `Some` only while the phase is `ShoeCut`.
+    pub cut_reason: Option<ShoeCutReason>,
+    /// Table only; always `None` in a solo session.
+    pub cutter: Option<PlayerId>,
+    /// The most recent cut's ceremony, for the animation. Cleared when the
+    /// phase enters `ShoeCut` again, so each cut animates exactly once.
+    pub last_cut: Option<CutReveal>,
+    /// Table only; always `None` in a solo session.
+    pub vote: Option<VoteView>,
 }
 
 /// Structured, language-neutral tags front-ends turn into narration and glossary highlights.

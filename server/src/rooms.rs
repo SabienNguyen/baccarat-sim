@@ -722,6 +722,8 @@ pub fn error_message(err: &TableError) -> String {
         }
         TableError::OutOfOrder => "Order, order — Player hand first, then Banker.".into(),
         TableError::NothingToTurn => "Nothing for the dealer to turn just now.".into(),
+        // TODO(Task 5): name the host ("The cut isn't yours — {host} has it.").
+        TableError::NotYourCut => "The cut isn't yours.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {
             format!("Too rich for this table — the max is ${}.{:02}.", max / 100, max % 100)
         }
@@ -751,6 +753,7 @@ mod tests {
             let mut room = room.lock().await;
             let (.., buy_in) = room.tier.stakes();
             let a = room.table.join("a", buy_in).unwrap();
+            room.table.cut_shoe(a, 500).unwrap();
             let b = room.table.join("b", buy_in).unwrap();
             room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             room.table.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -788,6 +791,7 @@ mod tests {
             let mut g = room.lock().await;
             let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, tx);
             g.conns.remove(&pid);
         }
@@ -812,6 +816,7 @@ mod tests {
             let mut g = room.lock().await;
             let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, tx);
         }
         assert!(registry.get(&id).await.is_some());
@@ -844,6 +849,7 @@ mod reconnect_tests {
         let mut room = Room::new("TEST01".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let pid = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(pid, 500).unwrap();
         let (tx, _rx) = mpsc::channel(OUT_QUEUE);
         room.seat(pid, tx);
         (room, pid)
@@ -932,6 +938,7 @@ mod flip_request_line_tests {
             3,
         );
         let pid = table.join("Sabien", 100_000).unwrap();
+        table.cut_shoe(pid, 500).unwrap();
         table.place_bet(pid, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         table.ready(pid).unwrap();
         table.deal().unwrap();
@@ -979,6 +986,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST02".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let b = room.table.join("bob", buy_in).unwrap();
         let (ta, ra) = mpsc::channel(OUT_QUEUE);
         let (tb, rb) = mpsc::channel(OUT_QUEUE);
@@ -1056,6 +1064,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST04".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let b = room.table.join("bob", buy_in).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         let (tb, _rb) = mpsc::channel(OUT_QUEUE);
@@ -1073,6 +1082,7 @@ mod squeeze_gap_tests {
         // a holder of both hands is listed once
         let mut solo = Room::new("TEST05".into(), Tier::Mid, false);
         let c = solo.table.join("carol", buy_in).unwrap();
+        solo.table.cut_shoe(c, 500).unwrap();
         let (tc, _rc) = mpsc::channel(OUT_QUEUE);
         solo.seat(c, tc);
         solo.table.place_bet(c, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1217,6 +1227,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST03".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1270,6 +1281,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST06".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1300,6 +1312,7 @@ mod squeeze_gap_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             let (ta, _ra) = mpsc::channel(OUT_QUEUE);
             let (tb, rb) = mpsc::channel(OUT_QUEUE);
@@ -1351,6 +1364,7 @@ mod rail_tests {
         let mut room = Room::new("RAIL01".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         let (tw, mut rw) = mpsc::channel(OUT_QUEUE);
@@ -1391,6 +1405,7 @@ mod rail_tests {
         room.watch(tw).unwrap();
         // a table of one seat plus a watcher deals as soon as the seat bets
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1444,6 +1459,7 @@ mod rail_tests {
             let mut g = room.lock().await;
             let (ta, _ra) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, ta);
             g.watch(tw).unwrap();
             g.release(pid); // the only seat stands up

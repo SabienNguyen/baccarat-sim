@@ -564,7 +564,10 @@ async fn handle_command(
                     Err(e) => Err(e),
                 },
                 ClientMsg::Settle => room.table.settle(),
-                ClientMsg::NewShoe => room.table.new_shoe(),
+                // TODO(Task 5): replaced by CutShoe/ProposeNewShoe/VoteNewShoe
+                // (protocol v2). `new_shoe` no longer exists on `Table` — this
+                // is a compile-only no-op shim until that lands.
+                ClientMsg::NewShoe => Ok(()),
                 _ => unreachable!("non-table commands handled above"),
             };
             match result {
@@ -747,6 +750,7 @@ mod squeeze_clock_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb);
@@ -781,6 +785,7 @@ mod squeeze_clock_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta);
             g.seat(b, tb.clone());
@@ -908,6 +913,7 @@ mod rail_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let (ta, ra) = mpsc::channel(OUT_QUEUE);
             std::mem::forget(ra); // keep alice's queue open without draining it
             g.seat(a, ta);
@@ -973,6 +979,9 @@ mod rail_tests {
             let mut g = room.lock().await;
             for i in 0..rooms::MAX_SEATS {
                 let pid = g.table.join(&format!("p{i}"), 50_000).unwrap();
+                if i == 0 {
+                    g.table.cut_shoe(pid, 500).unwrap();
+                }
                 let (t, r) = mpsc::channel(OUT_QUEUE);
                 std::mem::forget(r);
                 g.seat(pid, t);
@@ -1090,6 +1099,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());
@@ -1154,6 +1164,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             g.seat(a, ta.clone());
             a
         };
@@ -1177,6 +1188,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             // bob is seated but hasn't decided, so alice alone never triggers
             // an auto-deal — this test is about the ready flag flipping back.
             let b = g.table.join("bob", buy_in).unwrap();
@@ -1224,6 +1236,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());
@@ -1271,6 +1284,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             let c = g.table.join("carol", buy_in).unwrap();
             g.seat(a, ta.clone());
@@ -1312,6 +1326,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());

@@ -246,8 +246,11 @@ impl WasmTable {
         self.view()
     }
 
-    pub fn new_shoe(&mut self) -> Result<TableView, JsValue> {
-        self.inner.new_shoe().map_err(table_err)?;
+    // TODO(Task 4): full shoe-lifecycle bindings (cut_shoe, propose/vote_new_shoe,
+    // vote_expire). This is a compile-only shim so the wasm crate builds after
+    // Task 2 removed `Table::new_shoe`.
+    pub fn cut_shoe(&mut self, position: u16) -> Result<TableView, JsValue> {
+        self.inner.cut_shoe(self.me, position).map_err(table_err)?;
         self.view()
     }
 
