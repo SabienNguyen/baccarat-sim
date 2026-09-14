@@ -30,6 +30,7 @@ import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
 import { playSfx } from "./audio/sfx";
 import { installSleepOnHide } from "./audio/sleep";
+import { autoAdvanceMs, isRecentlyTouched } from "./autoAdvance";
 import { getPortal } from "./portal";
 import { createPortalTracker, type PortalView } from "./portal/signals";
 import { adBreak } from "./portal/adBreak";
@@ -257,20 +258,56 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   // Keep the bonus notice up until the player closes it or bets — don't sweep it.
   const showNudge = hasNudge && dismissedNudgeSeq !== settleSeq;
 
+  // P14: a thumb finishing a squeeze or mid-scroll shouldn't have the felt
+  // swept out from under it. One document-level listener for the table's
+  // lifetime tracks the last touch pointerdown; the auto-advance effect below
+  // polls it before it fires (see isRecentlyTouched).
+  const lastTouchAt = useRef<number | null>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") lastTouchAt.current = Date.now();
+    };
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+
   useEffect(() => {
     if (seats !== null) return;
     if (snapshot.phase !== "Settled" || busted || goalReached) return;
     // Every settled hand auto-advances; the bonus notice just rides along on the
     // settled window and clears with it (the player can also close it early).
-    // In the last stretch the cards muck away, then the felt clears.
-    const sweep = setTimeout(() => setSweeping(true), AUTO_ADVANCE_MS - SWEEP_MS);
-    const clear = setTimeout(() => {
-      newHand();
-      setSweeping(false);
-    }, AUTO_ADVANCE_MS);
+    // In the last stretch the cards muck away, then the felt clears. On a
+    // coarse pointer the whole window is longer (autoAdvanceMs), and each of
+    // the two timers below defers itself in short polls while a touch is
+    // still active or was within the last second, instead of firing under it.
+    const advanceMs = autoAdvanceMs(AUTO_ADVANCE_MS);
+    const DEFER_POLL_MS = 250;
+    let sweepTimer: ReturnType<typeof setTimeout>;
+    let clearTimer: ReturnType<typeof setTimeout>;
+    const armSweep = (delay: number) => {
+      sweepTimer = setTimeout(() => {
+        if (isRecentlyTouched(lastTouchAt.current, Date.now())) {
+          armSweep(DEFER_POLL_MS);
+          return;
+        }
+        setSweeping(true);
+      }, delay);
+    };
+    const armClear = (delay: number) => {
+      clearTimer = setTimeout(() => {
+        if (isRecentlyTouched(lastTouchAt.current, Date.now())) {
+          armClear(DEFER_POLL_MS);
+          return;
+        }
+        newHand();
+        setSweeping(false);
+      }, delay);
+    };
+    armSweep(Math.max(0, advanceMs - SWEEP_MS));
+    armClear(advanceMs);
     return () => {
-      clearTimeout(sweep);
-      clearTimeout(clear);
+      clearTimeout(sweepTimer);
+      clearTimeout(clearTimer);
       // The sweep belongs to THIS settled hand. If the hand ends early — a
       // chip tapped mid-muck opens the next hand through `stake` — the `clear`
       // timer above never fires, and a stranded `sweeping` would keep mucking
@@ -301,12 +338,20 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             watchers={watchers}
           />
         )}
-        <DealerLine
-          snapshot={snapshot}
-          lastError={lastError}
-          lastFlip={lastFlip}
-          announcement={announcement}
-        />
+        {/* Wrapping the two together (P14) lets the win/loss popup anchor to
+            the dealer line's own box on phones — see winpopup.css — instead
+            of a viewport-percentage `top` that landed on the cards. The
+            wrapper only matters at that breakpoint; the popup stays
+            `position: fixed` (ignoring its DOM position) everywhere else. */}
+        <div className="dealer-slot">
+          <DealerLine
+            snapshot={snapshot}
+            lastError={lastError}
+            lastFlip={lastFlip}
+            announcement={announcement}
+          />
+          <WinPopup key={settleSeq} amount={lastDelta} />
+        </div>
         <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
           <Hand
             side="Player"
@@ -377,7 +422,6 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
         />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
-      <WinPopup key={settleSeq} amount={lastDelta} />
       {cutting && (
         <CutDeckModal
           onCut={() => {

@@ -79,6 +79,16 @@
 .hud-box--outcome .hud-box-value--small {
   color: var(--gold);
 }
+/* Outcome/payouts are always mounted now (P14, see Hud.tsx) so the phone
+   media query below can reserve their space up front; off the phone they
+   still hide exactly like the old conditional mount when there's nothing to
+   show. */
+.hud-box--outcome[data-has-outcome="false"] {
+  display: none;
+}
+.hud-payouts[data-has-payouts="false"] {
+  display: none;
+}
 
 .hud-payouts {
   list-style: none;
@@ -209,5 +219,39 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+}
+
+/* --- P14: no HUD growth at settle ---
+   `.hud-box--outcome` and `.hud-payouts` are always mounted now (Hud.tsx) so
+   they can hold a FIXED height here from the very first Betting frame —
+   empty (data-has-*="false") or full, the box is the same size, so the felt
+   below never moves when the coup settles. `overflow-y: auto` on the payouts
+   list is the safety valve for a hand with more bets than the reserved slot
+   can show at once (rare — the probe's single-Player-bet run never needs it)
+   instead of growing the box, which would defeat the whole point. */
+@media (max-width: 700px) {
+  .app > .hud .hud-box--outcome,
+  .app > .hud .hud-payouts {
+    display: flex;
+  }
+  .app > .hud .hud-box--outcome {
+    height: 34px;
+    overflow: hidden;
+  }
+  .app > .hud .hud-box--outcome[data-has-outcome="false"] {
+    visibility: hidden;
+  }
+  .app > .hud .hud-payouts {
+    height: 40px;
+    overflow-y: auto;
+    gap: 4px;
+  }
+  .app > .hud .hud-payouts[data-has-payouts="false"] {
+    visibility: hidden;
+  }
+  .app > .hud .hud-payouts li {
+    font-size: 12px;
+    padding: 3px 8px;
   }
 }
