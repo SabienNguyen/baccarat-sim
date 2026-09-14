@@ -46,6 +46,26 @@ pub struct BetPayout {
     pub net: i64,
 }
 
+/// Collapse one `BetPayout` per placed chip into one per distinct `BetKind`,
+/// summing stakes and nets, in first-placement order. Each chip's net must
+/// already be computed against its own stake (commission rounding, side-bet
+/// payout tables, etc.) — this only sums those results, it never recomputes
+/// a payout from the combined amount. Shared by both `Session::settle` and
+/// `Table::settle` so solo and multiplayer payouts read the same way.
+pub(crate) fn aggregate_payouts(payouts: Vec<BetPayout>) -> Vec<BetPayout> {
+    let mut out: Vec<BetPayout> = Vec::with_capacity(payouts.len());
+    for p in payouts {
+        match out.iter_mut().find(|o| o.bet.kind == p.bet.kind) {
+            Some(existing) => {
+                existing.bet.amount += p.bet.amount;
+                existing.net += p.net;
+            }
+            None => out.push(p),
+        }
+    }
+    out
+}
+
 /// The corner-squeeze hint: only the card's suit shows first.
 /// What a squeeze exposes. The full identity rides along so the front-end can
 /// draw the real card face under the fold (pip edges, "legs", the index) the
@@ -363,7 +383,8 @@ impl Session {
             player: vec![CardStatus::FaceUp; round.player.cards.len()],
             banker: vec![CardStatus::FaceUp; round.banker.cards.len()],
         };
-        let snapshot = self.render_round(PhaseTag::Settled, &round, &reveal, &bets, Some(payouts));
+        let snapshot =
+            self.render_round(PhaseTag::Settled, &round, &reveal, &bets, Some(aggregate_payouts(payouts)));
         self.phase = Phase::Betting { bets: Vec::new() };
         Ok(snapshot)
     }
@@ -672,6 +693,44 @@ mod tests {
         assert!(snap.banker.total.is_some());
         assert_eq!(s.snapshot().phase, PhaseTag::Betting);
         assert!(s.snapshot().bets.is_empty());
+    }
+
+    #[test]
+    fn settle_aggregates_same_kind_chips_into_one_payout() {
+        // Four 500 chips on Player, all won at once, must render as one
+        // BetPayout for 2,000 — not four separate +500 lines.
+        let mut seed = 0u64;
+        loop {
+            let mut s = Session::new(SessionConfig { seed, ..cfg() });
+            for _ in 0..4 {
+                s.place_bet(BetKind::Main(BetSpot::Player), 500).unwrap();
+            }
+            s.deal_round().unwrap();
+            let snap = s.settle().unwrap();
+            if snap.outcome == Some(crate::round::Outcome::PlayerWin) {
+                let payouts = snap.payouts.unwrap();
+                assert_eq!(payouts.len(), 1);
+                assert_eq!(payouts[0].bet.kind, BetKind::Main(BetSpot::Player));
+                assert_eq!(payouts[0].bet.amount, 2_000);
+                assert_eq!(payouts[0].net, 2_000);
+                break;
+            }
+            seed += 1;
+            assert!(seed < 2_000, "no Player win found in seed range");
+        }
+    }
+
+    #[test]
+    fn settle_keeps_separate_entries_for_different_kinds_in_placement_order() {
+        let mut s = Session::new(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.place_bet(BetKind::Side(SideBet::PlayerPair), 500).unwrap();
+        s.deal_round().unwrap();
+        let snap = s.settle().unwrap();
+        let payouts = snap.payouts.unwrap();
+        assert_eq!(payouts.len(), 2);
+        assert_eq!(payouts[0].bet.kind, BetKind::Main(BetSpot::Player));
+        assert_eq!(payouts[1].bet.kind, BetKind::Side(SideBet::PlayerPair));
     }
 
     #[test]
