@@ -7,6 +7,14 @@
 // Pig grids: no cut column at the left edge, the grid actually starts
 // scrolled (there is more shoe than fits), and a plain mouse wheel pans it
 // back to the very first column.
+//
+// Half-size derived roads (scoreboard.css `.roads-modal .road.derived
+// .road-grid`): also reports, per derived grid, whether every column now
+// fits with no horizontal scroll at all (scrollWidth <= clientWidth) plus
+// the rendered --road-cell in px for Big Road and each derived grid — Big
+// Road's should be unchanged, the derived ones about half. Checked at both
+// 1440x900 (the acceptance viewport) and 1024x768 (smaller — may still need
+// the HEAD scroll behaviour; reported either way, not asserted).
 import { chromium } from "playwright-core";
 
 const PORT = process.env.PORT ?? 5185;
@@ -14,9 +22,38 @@ const SHOT = process.env.SHOT ?? "roads-replay.png";
 const SHOT2 =
   process.env.SHOT2 ??
   "/tmp/claude-1000/-home-sabien-Dev-personal-baccarat-simulator/a2618aa5-a407-408d-92cd-5b175678efd4/scratchpad/roads-replay-2.png";
+const SHOT3 =
+  process.env.SHOT3 ??
+  "/tmp/claude-1000/-home-sabien-Dev-personal-baccarat-simulator/a2618aa5-a407-408d-92cd-5b175678efd4/scratchpad/roads-replay-3.png";
 const SEQ =
   process.env.SEQ ??
   "BPBBPBBBBPBPBBPPPBBBPPBPPPBBPPBPBBBPPPBBPPBPBBBPBBPBBBPBBBBPBPBPPPBP";
+
+// Per-grid column-fit + cell-size report, reused at both viewports.
+const sizeCheckFn = () => {
+  const cellPx = (grid) => {
+    const raw = getComputedStyle(grid).getPropertyValue("--road-cell").trim();
+    return raw.endsWith("px") ? Number.parseFloat(raw) : null;
+  };
+  const gridInfo = (label) => {
+    const grid = document.querySelector(`[aria-label="${label}"] .road-grid`);
+    if (!grid) return null;
+    return {
+      scrollWidth: grid.scrollWidth,
+      clientWidth: grid.clientWidth,
+      noHorizontalScroll: grid.scrollWidth <= grid.clientWidth + 0.5,
+      overflowLeftShadow: grid.getAttribute("data-overflow-left") === "true",
+      cellPx: cellPx(grid),
+      columns: grid.querySelectorAll(":scope > ul").length,
+    };
+  };
+  return {
+    "Big Road": gridInfo("Big Road"),
+    "Big Eye Boy": gridInfo("Big Eye Boy"),
+    "Small Road": gridInfo("Small Road"),
+    "Cockroach Pig": gridInfo("Cockroach Pig"),
+  };
+};
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -27,6 +64,10 @@ await page.getByRole("dialog", { name: "All roads" }).waitFor({ state: "visible"
 await page.waitForTimeout(300);
 
 await page.screenshot({ path: SHOT, fullPage: false });
+
+// Acceptance numbers at 1440x900, before anything scrolls the board.
+const sizeReport1440 = await page.evaluate(sizeCheckFn);
+await page.screenshot({ path: SHOT3, fullPage: false });
 
 const report = await page.evaluate(() => {
   const cols = (label) =>
@@ -111,6 +152,30 @@ checks["Small Road"].afterWheel = {
 
 await page.screenshot({ path: SHOT2, fullPage: false });
 
-console.log(JSON.stringify({ screenshot: SHOT, screenshot2: SHOT2, ...report, checks }, null, 2));
+// Same acceptance numbers at 1024x768: a smaller viewport that the task
+// says is fine to still fall back to the HEAD scroll behaviour on — this is
+// reported, not asserted.
+const ctx1024 = await browser.newContext({ viewport: { width: 1024, height: 768 } });
+const page1024 = await ctx1024.newPage();
+await page1024.goto(`http://localhost:${PORT}/?roads=${SEQ}`, { waitUntil: "networkidle" });
+await page1024.getByRole("dialog", { name: "All roads" }).waitFor({ state: "visible" });
+await page1024.waitForTimeout(300);
+const sizeReport1024 = await page1024.evaluate(sizeCheckFn);
+await ctx1024.close();
+
+console.log(
+  JSON.stringify(
+    {
+      screenshot: SHOT,
+      screenshot2: SHOT2,
+      screenshot3: SHOT3,
+      ...report,
+      checks,
+      sizeReport: { "1440x900": sizeReport1440, "1024x768": sizeReport1024 },
+    },
+    null,
+    2,
+  ),
+);
 
 await browser.close();

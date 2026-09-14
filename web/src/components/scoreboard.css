@@ -307,6 +307,62 @@
   height: calc(var(--road-cell) * 24 / 27);
 }
 
+/* Registering these two as typed lengths makes the browser resolve their
+   round()/calc() at computed-value time instead of leaving it as literal
+   text: a plain custom property's getComputedStyle() value keeps its
+   round()/calc() UNEVALUATED (e.g. "round(down, calc(27px / 2), 1px)"), so
+   useFollowLatest's whole-column sizing hook (roads.tsx, parsePx() off
+   getComputedStyle(grid).getPropertyValue("--road-cell")) would silently
+   bail on a derived grid and leave it at the CSS default width. Once
+   --derived-cell/--derived-gap are registered, --road-cell: var(--derived-
+   cell) on the grid inherits their already-resolved "13px" instead of the
+   raw expression, so the JS hook reads a real, parseable px value. */
+@property --derived-cell {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+@property --derived-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+/* Full-roads window only: a real Macau pit display runs Big Eye Boy, Small
+   Road and Cockroach Pig at about half the Big Road's cell — that's how 40+
+   columns fit a fixed-width display with no scrolling. Every size in this
+   file (grid rows/columns, li width/height, the pair/bonus tokens, the food
+   glyphs) already keys off --road-cell, so shrinking that one variable for
+   just these three grids is enough — the least invasive way to do that
+   without a self-reference cycle (`--road-cell: calc(var(--road-cell) / 2)`
+   on the same element is circular and gets thrown out) is to compute the
+   halved size on the ANCESTOR .road.derived as its own property, then have
+   the descendant .road-grid adopt it as --road-cell. --road-gap and
+   --road-pitch (the background rule-line pitch) are halved the same way so
+   the paper's grid lines still land on the (smaller) cell boundaries;
+   round(down, …) keeps every size an integer px (crisp pixel art) and
+   spends every spare px on columns rather than rounding up past what Small
+   Road / Cockroach Pig's half-width row (.roads-bottom) can actually fit.
+   Right-rail Scoreboard is untouched: this only matches inside
+   .roads-modal. */
+.roads-modal .road.derived {
+  --derived-cell: round(down, calc(var(--road-cell) / 2), 1px);
+  --derived-gap: round(down, calc(var(--road-gap) / 2), 1px);
+}
+.roads-modal .road.derived .road-grid {
+  --road-cell: var(--derived-cell);
+  --road-gap: var(--derived-gap);
+  --road-pitch: calc(var(--road-cell) + var(--road-gap));
+  /* Small Road / Cockroach Pig share a half-width row and need every spare
+     px for their 40+ columns; the base grid's own edge padding (normally
+     one --road-gap per side, to land the follow-latest width flush on a
+     column boundary) is not needed here for that same reason — the edge
+     shadow/scroll only ever appears on the *inside* boundary of a scrolled
+     column, not the grid's own frame — so it is dropped for the derived
+     grids, freeing 2px, and the background grid-line offset follows it. */
+  padding: 0;
+  background-position: 0 0;
+}
+
 /* win counters, like the pit display footer */
 .road-tally {
   display: flex;
