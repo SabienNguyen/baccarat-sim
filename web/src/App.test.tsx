@@ -227,6 +227,35 @@ test("mounts the ShoeCutStage on a phone-like and desktop device when the phase 
   expect(screen.getByLabelText("Cut card")).toBeInTheDocument();
 });
 
+test("keeps the ShoeCutStage mounted through the cut animation when shoe.number increases", () => {
+  vi.useFakeTimers();
+  try {
+    const store = createGameStore(fakeSession(shoeCutSnapshot()));
+    render(<App store={store} />);
+    act(() =>
+      store.setState({
+        snapshot: bettingSnapshot({
+          shoe: {
+            number: 1,
+            cut_card_out: false,
+            cut_reason: null,
+            cutter: null,
+            last_cut: { position: 600, turned: { rank: "Nine", suit: "Hearts" }, burned: 2 },
+            vote: null,
+          },
+        }),
+      }),
+    );
+    expect(screen.getByRole("dialog", { name: "Shoe cut" })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(2600);
+    });
+    expect(screen.queryByRole("dialog", { name: "Shoe cut" })).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("single-player shows no Settle or Next-hand buttons", () => {
   const store = createGameStore(fakeSession(dealingSnapshot()));
   render(<App store={store} />);

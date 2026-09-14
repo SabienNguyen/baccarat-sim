@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ShoeCutStage } from "./ShoeCutStage";
-import type { ShoeView } from "../engine/types";
+import { ShoeCutStage, SHOE_CUT_ANIM_MS } from "./ShoeCutStage";
+import type { CutReveal, ShoeView } from "../engine/types";
 
 function shoe(overrides: Partial<ShoeView> = {}): ShoeView {
   return {
@@ -15,16 +15,41 @@ function shoe(overrides: Partial<ShoeView> = {}): ShoeView {
   };
 }
 
+function cutReveal(overrides: Partial<CutReveal> = {}): CutReveal {
+  return {
+    position: 600,
+    turned: { rank: "Nine", suit: "Hearts" },
+    burned: 3,
+    ...overrides,
+  };
+}
+
 test("renders nothing unless the phase is ShoeCut", () => {
   const { container } = render(
-    <ShoeCutStage shoe={shoe()} phase="Betting" canCut onCut={vi.fn()} cutterName={null} />,
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="Betting"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
   );
   expect(container).toBeEmptyDOMElement();
 });
 
 test("the cutter sees the cut card and Cut here is disabled until placed", () => {
   render(
-    <ShoeCutStage shoe={shoe()} phase="ShoeCut" canCut onCut={vi.fn()} cutterName={null} />,
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
   );
   expect(screen.getByLabelText("Cut card")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Cut here" })).toBeDisabled();
@@ -33,7 +58,15 @@ test("the cutter sees the cut card and Cut here is disabled until placed", () =>
 test("a pointer drag to 60% of the stack then Cut here calls onCut(600)", async () => {
   const onCut = vi.fn();
   render(
-    <ShoeCutStage shoe={shoe()} phase="ShoeCut" canCut onCut={onCut} cutterName={null} />,
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut
+      onCut={onCut}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
   );
   const stack = screen.getByLabelText("Shoe");
   vi.spyOn(stack, "getBoundingClientRect").mockReturnValue({
@@ -63,7 +96,15 @@ test("a pointer drag to 60% of the stack then Cut here calls onCut(600)", async 
 test("keyboard End then Enter calls onCut(950)", async () => {
   const onCut = vi.fn();
   render(
-    <ShoeCutStage shoe={shoe()} phase="ShoeCut" canCut onCut={onCut} cutterName={null} />,
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut
+      onCut={onCut}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
   );
   const cutCard = screen.getByLabelText("Cut card");
   cutCard.focus();
@@ -80,6 +121,8 @@ test("a non-cutter sees the waiting copy and no cut card", () => {
       canCut={false}
       onCut={vi.fn()}
       cutterName="Alice"
+      animating={null}
+      onAnimationEnd={vi.fn()}
     />,
   );
   expect(screen.getByText("Waiting for Alice to cut the shoe")).toBeInTheDocument();
@@ -95,7 +138,125 @@ test("the reason copy follows shoe.cut_reason", () => {
       canCut
       onCut={vi.fn()}
       cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
     />,
   );
   expect(screen.getByText("The table voted for a new shoe.")).toBeInTheDocument();
+});
+
+describe("the reveal animation", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("stays mounted while animating and calls onAnimationEnd after 2600ms", () => {
+    const onAnimationEnd = vi.fn();
+    render(
+      <ShoeCutStage
+        shoe={shoe({ number: 3 })}
+        phase="Betting"
+        canCut={false}
+        onCut={vi.fn()}
+        cutterName={null}
+        animating={cutReveal()}
+        onAnimationEnd={onAnimationEnd}
+      />,
+    );
+    expect(screen.getByRole("dialog", { name: "Shoe cut" })).toBeInTheDocument();
+    expect(onAnimationEnd).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(SHOE_CUT_ANIM_MS);
+    });
+    expect(onAnimationEnd).toHaveBeenCalledOnce();
+  });
+
+  test("the banner shows the new shoe number", () => {
+    render(
+      <ShoeCutStage
+        shoe={shoe({ number: 7 })}
+        phase="Betting"
+        canCut={false}
+        onCut={vi.fn()}
+        cutterName={null}
+        animating={cutReveal()}
+        onAnimationEnd={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("SHOE 7")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(2200);
+    });
+    expect(screen.getByText("SHOE 7")).toBeInTheDocument();
+  });
+
+  test("the burn counter reaches the burned count", () => {
+    render(
+      <ShoeCutStage
+        shoe={shoe()}
+        phase="Betting"
+        canCut={false}
+        onCut={vi.fn()}
+        cutterName={null}
+        animating={cutReveal({ burned: 3 })}
+        onAnimationEnd={vi.fn()}
+      />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(2200);
+    });
+    expect(screen.getByText("Burned 3")).toBeInTheDocument();
+  });
+
+  test("reduced motion ends the animation immediately", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue({
+      matches: true,
+      media: "(prefers-reduced-motion: reduce)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      onchange: null,
+    } as unknown as MediaQueryList);
+    const onAnimationEnd = vi.fn();
+    render(
+      <ShoeCutStage
+        shoe={shoe({ number: 5 })}
+        phase="Betting"
+        canCut={false}
+        onCut={vi.fn()}
+        cutterName={null}
+        animating={cutReveal()}
+        onAnimationEnd={onAnimationEnd}
+      />,
+    );
+    expect(screen.getByText("SHOE 5")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(onAnimationEnd).toHaveBeenCalledOnce();
+  });
+
+  test("the turned card is rendered face up", () => {
+    render(
+      <ShoeCutStage
+        shoe={shoe()}
+        phase="Betting"
+        canCut={false}
+        onCut={vi.fn()}
+        cutterName={null}
+        animating={cutReveal({ turned: { rank: "King", suit: "Spades" } })}
+        onAnimationEnd={vi.fn()}
+      />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    const turned = screen.getByLabelText("Turned card");
+    expect(turned.textContent).toContain("K");
+  });
 });

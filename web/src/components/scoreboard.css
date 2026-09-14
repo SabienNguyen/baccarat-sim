@@ -1,3 +1,25 @@
+/* Task 8: a fresh shoe remounts the Scoreboard (App keys it on
+   `shoe.number`), which replays this entrance animation — a quick fade
+   that reads as the roads wiping clean for the new shoe. */
+@keyframes road-wipe {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.board,
+.roads-board {
+  animation: road-wipe 300ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board,
+  .roads-board {
+    animation: none;
+  }
+}
+
 .board {
   display: flex;
   flex-direction: column;
