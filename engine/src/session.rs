@@ -1,7 +1,7 @@
 use crate::card::{Card, Rank, Suit};
 use crate::hand::Hand;
 use crate::round::{play_round, Outcome, RoundResult};
-use crate::shoe::{CutReveal, Shoe};
+use crate::shoe::{CutReveal, Shoe, CUT_CARD};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::settle::{settle_with, Bet, BetSpot, Ruleset};
 use crate::sidebets::{settle_side, SideBet};
@@ -193,6 +193,7 @@ pub struct RoundSnapshot {
     pub events: Vec<Event>,
     pub scoreboard: ScoreboardSnapshot,
     pub explain: Vec<String>,
+    pub shoe: ShoeView,
 }
 
 /// A command that could not be applied. The session is unchanged on `Err`.
@@ -224,55 +225,130 @@ pub(crate) struct RevealState {
 
 /// In-flight round state.
 enum Phase {
+    /// Before betting can open: waiting on the player to cut a fresh shoe.
+    ShoeCut { reason: ShoeCutReason },
     Betting { bets: Vec<PlacedBet> },
     Dealing { round: RoundResult, reveal: RevealState, bets: Vec<PlacedBet> },
 }
 
 /// The stateful baccarat game session.
 pub struct Session {
+    /// Incremented on every cut; 0 until the first one. Also seeds the next
+    /// shoe (`seed.wrapping_add(shoe_number)`), so the sequence is
+    /// reproducible from the session seed alone.
+    shoe_number: u32,
     shoe: Shoe,
-    shoes_dealt: u64,
     bankroll: i64,
     config: SessionConfig,
     history: Vec<RoundRecord>,
     phase: Phase,
-    /// Memoized scoreboard keyed on history length; `history` is append-only,
-    /// so this skips recomputing all five roads on every snapshot (built after
-    /// every command). Same behavior as `derive_scoreboard`.
-    sb_cache: std::cell::RefCell<Option<(usize, ScoreboardSnapshot)>>,
+    /// True once a hand has been dealt with the shoe at or below `CUT_CARD`
+    /// remaining; one more hand is played, then the shoe ends.
+    cut_card_out: bool,
+    /// The most recent cut's ceremony, for clients to replay the animation.
+    /// Cleared whenever the phase enters `ShoeCut` again.
+    last_cut: Option<CutReveal>,
+    /// Memoized scoreboard, keyed on `(shoe_number, history.len())` so a cut
+    /// (which clears history back to an empty, previously-seen length) still
+    /// invalidates the cache. `history` is otherwise append-only within a
+    /// shoe — this skips recomputing all five roads on every snapshot (built
+    /// after every command). Same behavior as `derive_scoreboard`.
+    sb_cache: std::cell::RefCell<Option<((u32, usize), ScoreboardSnapshot)>>,
 }
 
 impl Session {
-    /// Start a fresh session in the betting phase.
+    /// Start a fresh session waiting on the first cut.
     pub fn new(config: SessionConfig) -> Self {
         // A malformed config doesn't error later — it silently rejects every
         // bet (min>max fails one bound or the other). Catch it at the source.
         debug_assert!(config.table_min >= 0, "negative table_min");
         debug_assert!(config.table_min <= config.table_max, "table_min above table_max");
         debug_assert!(config.starting_bankroll >= 0, "negative starting bankroll");
+        // Placeholder shoe — never dealt from until the first cut.
         let shoe = Shoe::new_seeded(config.seed);
         Session {
+            shoe_number: 0,
             shoe,
-            shoes_dealt: 0,
             bankroll: config.starting_bankroll,
             history: Vec::new(),
-            phase: Phase::Betting { bets: Vec::new() },
+            phase: Phase::ShoeCut { reason: ShoeCutReason::NewTable },
+            cut_card_out: false,
+            last_cut: None,
             config,
             sb_cache: std::cell::RefCell::new(None),
         }
     }
 
-    /// The scoreboard, recomputed only when `history` grew since the last call.
+    /// The current phase, as the client-visible tag.
+    fn phase_tag(&self) -> PhaseTag {
+        match &self.phase {
+            Phase::ShoeCut { .. } => PhaseTag::ShoeCut,
+            Phase::Betting { .. } => PhaseTag::Betting,
+            Phase::Dealing { .. } => PhaseTag::Dealing,
+        }
+    }
+
+    /// 0 until the first cut, then incremented on every cut.
+    pub fn shoe_number(&self) -> u32 {
+        self.shoe_number
+    }
+
+    fn shoe_view(&self) -> ShoeView {
+        ShoeView {
+            number: self.shoe_number,
+            cut_card_out: self.cut_card_out,
+            cut_reason: match &self.phase {
+                Phase::ShoeCut { reason } => Some(*reason),
+                _ => None,
+            },
+            // Solo has no cutter or vote to show — the player is the cutter.
+            cutter: None,
+            last_cut: self.last_cut,
+            vote: None,
+        }
+    }
+
+    /// The scoreboard, recomputed only when `(shoe_number, history.len())`
+    /// changed since the last call (see `sb_cache`). Behavior-identical to
+    /// `derive_scoreboard`.
     fn scoreboard(&self) -> ScoreboardSnapshot {
-        let len = self.history.len();
-        if let Some((cached_len, snap)) = self.sb_cache.borrow().as_ref() {
-            if *cached_len == len {
+        let key = (self.shoe_number, self.history.len());
+        if let Some((cached_key, snap)) = self.sb_cache.borrow().as_ref() {
+            if *cached_key == key {
                 return snap.clone();
             }
         }
         let snap = derive_scoreboard(&self.history);
-        *self.sb_cache.borrow_mut() = Some((len, snap.clone()));
+        *self.sb_cache.borrow_mut() = Some((key, snap.clone()));
         snap
+    }
+
+    /// Cut the shoe. `position` is a fraction of the shoe in `0..=1000`
+    /// (clamped by the engine to `50..=950`). Bankroll persists; the roads,
+    /// staged bets and cut-card state all reset for the fresh shoe.
+    pub fn cut_shoe(&mut self, position: u16) -> Result<RoundSnapshot, CommandError> {
+        if !matches!(self.phase, Phase::ShoeCut { .. }) {
+            return Err(CommandError::WrongPhase { expected: PhaseTag::ShoeCut, found: self.phase_tag() });
+        }
+        self.shoe_number += 1;
+        let (shoe, reveal) = Shoe::new_cut(self.config.seed.wrapping_add(self.shoe_number as u64), position);
+        self.shoe = shoe;
+        self.last_cut = Some(reveal);
+        self.history.clear();
+        self.cut_card_out = false;
+        self.phase = Phase::Betting { bets: Vec::new() };
+        Ok(self.current_snapshot())
+    }
+
+    /// Ask for a fresh shoe from the betting phase. Solo has no vote — this
+    /// goes straight to the cutting ceremony.
+    pub fn request_new_shoe(&mut self) -> Result<RoundSnapshot, CommandError> {
+        if !matches!(self.phase, Phase::Betting { .. }) {
+            return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: self.phase_tag() });
+        }
+        self.phase = Phase::ShoeCut { reason: ShoeCutReason::Requested };
+        self.last_cut = None;
+        Ok(self.current_snapshot())
     }
 
     /// The current state as a snapshot.
@@ -290,6 +366,9 @@ impl Session {
             Phase::Betting { bets } => bets,
             Phase::Dealing { .. } => {
                 return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
+            }
+            Phase::ShoeCut { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut })
             }
         };
 
@@ -323,6 +402,9 @@ impl Session {
             Phase::Dealing { .. } => {
                 return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
             }
+            Phase::ShoeCut { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut })
+            }
         }
         Ok(self.current_snapshot())
     }
@@ -353,12 +435,8 @@ impl Session {
             // Gated like `outcome` above: the trace names the cards outright, so
             // it can't be sent while any card is still face down.
             explain: if fully_revealed { round.trace.clone() } else { Vec::new() },
+            shoe: self.shoe_view(),
         }
-    }
-
-    fn reshuffle(&mut self) {
-        self.shoes_dealt += 1;
-        self.shoe = Shoe::new_seeded(self.config.seed.wrapping_add(self.shoes_dealt));
     }
 
     /// Deal a full round face-down. Requires at least one staged bet.
@@ -369,12 +447,10 @@ impl Session {
             Phase::Dealing { .. } => {
                 return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
             }
+            Phase::ShoeCut { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut })
+            }
         };
-
-        // Past the cut card: this shoe is done, the coup comes from a fresh one.
-        if self.shoe.remaining() <= crate::shoe::CUT_CARD {
-            self.reshuffle();
-        }
 
         let round = play_round(&mut self.shoe);
         let reveal = RevealState {
@@ -413,17 +489,24 @@ impl Session {
             Phase::Betting { .. } => {
                 return Err(CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting })
             }
+            Phase::ShoeCut { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut })
+            }
         }
         Ok(self.current_snapshot())
     }
 
     /// Resolve the dealt round: auto-reveal, pay bets, update bankroll/history,
-    /// and return to the betting phase. The returned snapshot is tagged `Settled`.
+    /// and return to the betting phase (or, past the cut card, to `ShoeCut`).
+    /// The returned snapshot is tagged `Settled`.
     pub fn settle(&mut self) -> Result<RoundSnapshot, CommandError> {
         let (round, bets) = match &self.phase {
             Phase::Dealing { round, bets, .. } => (round.clone(), bets.clone()),
             Phase::Betting { .. } => {
                 return Err(CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting })
+            }
+            Phase::ShoeCut { .. } => {
+                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut })
             }
         };
 
@@ -439,22 +522,23 @@ impl Session {
             player: vec![CardStatus::FaceUp; round.player.cards.len()],
             banker: vec![CardStatus::FaceUp; round.banker.cards.len()],
         };
+        // Realistic cut-card-end: the coup that pushed the shoe past the cut
+        // card finishes, one more hand is dealt, and only THEN does the shoe
+        // end — never mid-coup. `was_cut_card_out` (the flag going into this
+        // hand) decides the transition; the flag itself is updated first so
+        // the returned Settled snapshot's shoe view is up to date.
+        let was_cut_card_out = self.cut_card_out;
+        if !was_cut_card_out && self.shoe.remaining() <= CUT_CARD {
+            self.cut_card_out = true;
+        }
         let snapshot =
             self.render_round(PhaseTag::Settled, &round, &reveal, &bets, Some(aggregate_payouts(payouts)));
-        self.phase = Phase::Betting { bets: Vec::new() };
+        self.phase = if was_cut_card_out {
+            Phase::ShoeCut { reason: ShoeCutReason::CutCardOut }
+        } else {
+            Phase::Betting { bets: Vec::new() }
+        };
         Ok(snapshot)
-    }
-
-    /// Replace the shoe with a fresh shuffle. Bankroll and history persist.
-    pub fn new_shoe(&mut self) -> Result<RoundSnapshot, CommandError> {
-        match &self.phase {
-            Phase::Betting { .. } => {}
-            Phase::Dealing { .. } => {
-                return Err(CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing })
-            }
-        }
-        self.reshuffle();
-        Ok(self.current_snapshot())
     }
 
     fn payout_for(&self, bet: &PlacedBet, round: &RoundResult) -> i64 {
@@ -466,6 +550,21 @@ impl Session {
 
     fn current_snapshot(&self) -> RoundSnapshot {
         match &self.phase {
+            Phase::ShoeCut { .. } => RoundSnapshot {
+                phase: PhaseTag::ShoeCut,
+                player: HandView { cards: Vec::new(), total: None },
+                banker: HandView { cards: Vec::new(), total: None },
+                bets: Vec::new(),
+                bankroll: self.bankroll,
+                table_min: self.config.table_min,
+                table_max: self.config.table_max,
+                outcome: None,
+                payouts: None,
+                events: Vec::new(),
+                scoreboard: self.scoreboard(),
+                explain: Vec::new(),
+                shoe: self.shoe_view(),
+            },
             Phase::Betting { bets } => RoundSnapshot {
                 phase: PhaseTag::Betting,
                 player: HandView { cards: Vec::new(), total: None },
@@ -479,6 +578,7 @@ impl Session {
                 events: Vec::new(),
                 scoreboard: self.scoreboard(),
                 explain: Vec::new(),
+                shoe: self.shoe_view(),
             },
             Phase::Dealing { round, reveal, bets } => {
                 self.render_round(PhaseTag::Dealing, round, reveal, bets, None)
@@ -576,11 +676,19 @@ mod tests {
         }
     }
 
+    /// A session past its first cut, ready to bet. Most tests don't care
+    /// about the cutting ceremony itself — they just need Betting.
+    fn open_session(cfg: SessionConfig) -> Session {
+        let mut s = Session::new(cfg);
+        s.cut_shoe(500).unwrap();
+        s
+    }
+
     #[test]
-    fn new_session_starts_in_betting() {
+    fn a_new_session_starts_in_shoe_cut() {
         let s = Session::new(cfg());
         let snap = s.snapshot();
-        assert_eq!(snap.phase, PhaseTag::Betting);
+        assert_eq!(snap.phase, PhaseTag::ShoeCut);
         assert_eq!(snap.bankroll, 100_000);
         assert_eq!(snap.table_min, 500);
         assert!(snap.bets.is_empty());
@@ -589,11 +697,113 @@ mod tests {
         assert_eq!(snap.outcome, None);
         assert!(snap.payouts.is_none());
         assert!(snap.scoreboard.bead_plate.cells.is_empty());
+        assert_eq!(snap.shoe.number, 0);
+        assert_eq!(snap.shoe.cut_reason, Some(ShoeCutReason::NewTable));
+        assert!(snap.shoe.cutter.is_none());
+        assert!(snap.shoe.last_cut.is_none());
+        assert!(snap.shoe.vote.is_none());
+    }
+
+    #[test]
+    fn cut_opens_betting_and_records_the_burn() {
+        let mut s = Session::new(cfg());
+        let snap = s.cut_shoe(500).unwrap();
+        assert_eq!(snap.phase, PhaseTag::Betting);
+        assert_eq!(snap.shoe.number, 1);
+        assert!(snap.shoe.cut_reason.is_none());
+        assert!(snap.shoe.last_cut.is_some());
+        assert_eq!(s.shoe_number(), 1);
+
+        let err = s.cut_shoe(500).unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::ShoeCut, found: PhaseTag::Betting });
+    }
+
+    #[test]
+    fn request_new_shoe_goes_to_shoe_cut_from_betting_only() {
+        let mut s = open_session(cfg());
+        let snap = s.request_new_shoe().unwrap();
+        assert_eq!(snap.phase, PhaseTag::ShoeCut);
+        assert_eq!(snap.shoe.cut_reason, Some(ShoeCutReason::Requested));
+
+        let mut fresh = Session::new(cfg());
+        let err = fresh.request_new_shoe().unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut });
+
+        let mut dealing = open_session(cfg());
+        dealing.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        dealing.deal_round().unwrap();
+        let err = dealing.request_new_shoe().unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
+    }
+
+    #[test]
+    fn cut_card_out_then_one_more_hand_then_shoe_cut() {
+        let mut s = open_session(cfg());
+        let mut hands = 0;
+        loop {
+            s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            s.deal_round().unwrap();
+            s.settle().unwrap();
+            hands += 1;
+            assert!(hands < 300, "cut card never came out");
+            if s.snapshot().shoe.cut_card_out {
+                break;
+            }
+        }
+        // The shoe is flagged, but the coup that set it finishes in Betting —
+        // one more hand is still allowed.
+        assert_eq!(s.snapshot().phase, PhaseTag::Betting);
+
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let settled = s.settle().unwrap();
+        assert_eq!(settled.phase, PhaseTag::Settled);
+        assert!(settled.shoe.cut_card_out);
+
+        let snap = s.snapshot();
+        assert_eq!(snap.phase, PhaseTag::ShoeCut);
+        assert_eq!(snap.shoe.cut_reason, Some(ShoeCutReason::CutCardOut));
+
+        let err = s.deal_round().unwrap_err();
+        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut });
+    }
+
+    #[test]
+    fn cut_clears_history_and_keeps_bankroll() {
+        let mut s = open_session(cfg());
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        let settled = s.settle().unwrap();
+        let bankroll_after = settled.bankroll;
+        assert_eq!(s.snapshot().scoreboard.bead_plate.cells.len(), 1);
+
+        s.request_new_shoe().unwrap();
+        let snap = s.cut_shoe(500).unwrap();
+        assert_eq!(snap.phase, PhaseTag::Betting);
+        assert_eq!(snap.bankroll, bankroll_after);
+        assert!(snap.bets.is_empty());
+        assert!(snap.scoreboard.bead_plate.cells.is_empty());
+        assert_eq!(snap.shoe.number, 2);
+        assert_eq!(s.shoe_number(), 2);
+    }
+
+    #[test]
+    fn commands_are_refused_in_shoe_cut() {
+        let mut s = open_session(cfg());
+        s.request_new_shoe().unwrap();
+        assert_eq!(s.snapshot().phase, PhaseTag::ShoeCut);
+        let expected = CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut };
+        assert_eq!(s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap_err(), expected);
+        assert_eq!(s.clear_bets().unwrap_err(), expected);
+        assert_eq!(s.deal_round().unwrap_err(), expected);
+        assert_eq!(s.peek(Side::Player, 0).unwrap_err(), expected);
+        assert_eq!(s.reveal(Side::Player, 0).unwrap_err(), expected);
+        assert_eq!(s.settle().unwrap_err(), expected);
     }
 
     #[test]
     fn place_valid_bet_stages_it() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let snap = s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         assert_eq!(snap.bets.len(), 1);
         assert_eq!(snap.bets[0].amount, 1_000);
@@ -602,7 +812,7 @@ mod tests {
 
     #[test]
     fn bet_below_minimum_rejected_and_state_unchanged() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.place_bet(BetKind::Main(BetSpot::Player), 100).unwrap_err();
         assert_eq!(err, CommandError::BetBelowMinimum { min: 500, got: 100 });
         assert!(s.snapshot().bets.is_empty());
@@ -610,7 +820,7 @@ mod tests {
 
     #[test]
     fn bet_above_maximum_rejected() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.place_bet(BetKind::Main(BetSpot::Banker), 60_000).unwrap_err();
         assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
     }
@@ -619,7 +829,7 @@ mod tests {
     fn absurd_bet_amount_cannot_overflow_the_limit_check() {
         // A client-supplied i64 near the max must be rejected as over-limit,
         // not wrap the `on_spot + amount` sum negative and slip past the guard.
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.place_bet(BetKind::Main(BetSpot::Player), i64::MAX).unwrap_err();
         assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: i64::MAX });
         // and it must not corrupt state — no bet landed
@@ -629,7 +839,7 @@ mod tests {
     #[test]
     fn stacked_bets_on_one_spot_cannot_pass_the_table_max() {
         // chips placed one at a time still answer to the posted limit
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 30_000).unwrap();
         let err = s.place_bet(BetKind::Main(BetSpot::Player), 30_000).unwrap_err();
         assert_eq!(err, CommandError::BetAboveMaximum { max: 50_000, got: 60_000 });
@@ -639,7 +849,7 @@ mod tests {
 
     #[test]
     fn bets_exceeding_bankroll_rejected() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 50_000).unwrap();
         s.place_bet(BetKind::Side(SideBet::PlayerPair), 50_000).unwrap();
         let err = s.place_bet(BetKind::Side(SideBet::BankerPair), 500).unwrap_err();
@@ -648,7 +858,7 @@ mod tests {
 
     #[test]
     fn clear_bets_empties_the_table() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Tie), 1_000).unwrap();
         let snap = s.clear_bets().unwrap();
         assert!(snap.bets.is_empty());
@@ -656,7 +866,7 @@ mod tests {
 
     #[test]
     fn deal_round_enters_dealing_with_hidden_cards() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         let snap = s.deal_round().unwrap();
         assert_eq!(snap.phase, PhaseTag::Dealing);
@@ -670,14 +880,14 @@ mod tests {
 
     #[test]
     fn deal_without_bets_is_rejected() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.deal_round().unwrap_err();
         assert_eq!(err, CommandError::NoBetsPlaced);
     }
 
     #[test]
     fn place_bet_in_dealing_is_wrong_phase() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.deal_round().unwrap();
         let err = s.place_bet(BetKind::Main(BetSpot::Banker), 1_000).unwrap_err();
@@ -686,7 +896,7 @@ mod tests {
 
     #[test]
     fn peek_shows_only_a_sliver() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.deal_round().unwrap();
         let snap = s.peek(Side::Player, 0).unwrap();
@@ -696,7 +906,7 @@ mod tests {
 
     #[test]
     fn reveal_turns_a_card_face_up() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.deal_round().unwrap();
         let snap = s.reveal(Side::Player, 0).unwrap();
@@ -705,7 +915,7 @@ mod tests {
 
     #[test]
     fn total_appears_only_when_all_cards_are_face_up() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         let dealt = s.deal_round().unwrap();
         let n = dealt.player.cards.len();
@@ -719,7 +929,7 @@ mod tests {
 
     #[test]
     fn bad_card_index_is_rejected() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.deal_round().unwrap();
         let err = s.reveal(Side::Player, 99).unwrap_err();
@@ -728,14 +938,14 @@ mod tests {
 
     #[test]
     fn peek_in_betting_is_wrong_phase() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.peek(Side::Player, 0).unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
     }
 
     #[test]
     fn settle_pays_updates_bankroll_and_records_history() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.deal_round().unwrap();
         let snap = s.settle().unwrap();
@@ -757,7 +967,7 @@ mod tests {
         // BetPayout for 2,000 — not four separate +500 lines.
         let mut seed = 0u64;
         loop {
-            let mut s = Session::new(SessionConfig { seed, ..cfg() });
+            let mut s = open_session(SessionConfig { seed, ..cfg() });
             for _ in 0..4 {
                 s.place_bet(BetKind::Main(BetSpot::Player), 500).unwrap();
             }
@@ -778,7 +988,7 @@ mod tests {
 
     #[test]
     fn settle_keeps_separate_entries_for_different_kinds_in_placement_order() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
         s.place_bet(BetKind::Side(SideBet::PlayerPair), 500).unwrap();
         s.deal_round().unwrap();
@@ -791,38 +1001,15 @@ mod tests {
 
     #[test]
     fn settle_in_betting_is_wrong_phase() {
-        let mut s = Session::new(cfg());
+        let mut s = open_session(cfg());
         let err = s.settle().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Dealing, found: PhaseTag::Betting });
     }
 
     #[test]
-    fn new_shoe_resets_cards_but_keeps_bankroll_and_history() {
-        let mut s = Session::new(cfg());
-        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
-        s.deal_round().unwrap();
-        let settled = s.settle().unwrap();
-        let bankroll_after = settled.bankroll;
-
-        let snap = s.new_shoe().unwrap();
-        assert_eq!(snap.phase, PhaseTag::Betting);
-        assert_eq!(snap.bankroll, bankroll_after);
-        assert_eq!(snap.scoreboard.bead_plate.cells.len(), 1);
-    }
-
-    #[test]
-    fn new_shoe_in_dealing_is_wrong_phase() {
-        let mut s = Session::new(cfg());
-        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
-        s.deal_round().unwrap();
-        let err = s.new_shoe().unwrap_err();
-        assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::Dealing });
-    }
-
-    #[test]
     fn round_snapshot_serde_round_trips() {
         // Play a full round so the snapshot is richly populated.
-        let mut session = Session::new(SessionConfig {
+        let mut session = open_session(SessionConfig {
             starting_bankroll: 100_000,
             table_min: 100,
             table_max: 10_000,

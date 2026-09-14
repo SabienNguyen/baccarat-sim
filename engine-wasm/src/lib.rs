@@ -69,8 +69,15 @@ impl WasmSession {
         self.inner.settle().map_err(to_js_err)
     }
 
-    pub fn new_shoe(&mut self) -> Result<RoundSnapshot, JsValue> {
-        self.inner.new_shoe().map_err(to_js_err)
+    /// Cut the shoe: `position` is a fraction of the shoe in `0..=1000`
+    /// (clamped by the engine to `50..=950`).
+    pub fn cut_shoe(&mut self, position: u16) -> Result<RoundSnapshot, JsValue> {
+        self.inner.cut_shoe(position).map_err(to_js_err)
+    }
+
+    /// Ask for a fresh shoe from the betting phase.
+    pub fn request_new_shoe(&mut self) -> Result<RoundSnapshot, JsValue> {
+        self.inner.request_new_shoe().map_err(to_js_err)
     }
 }
 
@@ -95,7 +102,7 @@ mod tests {
     use wasm_bindgen_test::*;
 
     #[wasm_bindgen_test]
-    fn new_session_starts_in_betting() {
+    fn new_session_starts_in_shoe_cut() {
         let session = WasmSession::new(SessionConfig {
             starting_bankroll: 100_000,
             table_min: 100,
@@ -104,12 +111,12 @@ mod tests {
             seed: 7,
         });
         let snap = session.snapshot();
-        assert_eq!(snap.phase, PhaseTag::Betting);
+        assert_eq!(snap.phase, PhaseTag::ShoeCut);
         assert_eq!(snap.bankroll, 100_000);
     }
 
     #[wasm_bindgen_test]
-    fn full_round_reaches_settled() {
+    fn cut_then_full_round_reaches_settled() {
         let mut session = WasmSession::new(SessionConfig {
             starting_bankroll: 100_000,
             table_min: 100,
@@ -117,6 +124,8 @@ mod tests {
             ruleset: Ruleset::Commission,
             seed: 7,
         });
+        let cut = session.cut_shoe(500).expect("cut");
+        assert_eq!(cut.phase, PhaseTag::Betting);
         session
             .place_bet(BetKind::Main(BetSpot::Player), 500)
             .expect("bet accepted");
@@ -246,11 +255,28 @@ impl WasmTable {
         self.view()
     }
 
-    // TODO(Task 4): full shoe-lifecycle bindings (cut_shoe, propose/vote_new_shoe,
-    // vote_expire). This is a compile-only shim so the wasm crate builds after
-    // Task 2 removed `Table::new_shoe`.
+    /// Only the host may cut. `position` is a fraction of the shoe in
+    /// `0..=1000` (clamped by the engine to `50..=950`).
     pub fn cut_shoe(&mut self, position: u16) -> Result<TableView, JsValue> {
         self.inner.cut_shoe(self.me, position).map_err(table_err)?;
+        self.view()
+    }
+
+    /// Propose a fresh shoe. The proposer counts as an immediate yes vote.
+    pub fn propose_new_shoe(&mut self) -> Result<TableView, JsValue> {
+        self.inner.propose_new_shoe(self.me).map_err(table_err)?;
+        self.view()
+    }
+
+    /// Cast a vote on the open New Shoe proposal.
+    pub fn vote_new_shoe(&mut self, yes: bool) -> Result<TableView, JsValue> {
+        self.inner.vote_new_shoe(self.me, yes).map_err(table_err)?;
+        self.view()
+    }
+
+    /// Expire an open New Shoe vote (server-driven 30s timeout). No-op without one.
+    pub fn vote_expire(&mut self) -> Result<TableView, JsValue> {
+        self.inner.vote_expire();
         self.view()
     }
 
