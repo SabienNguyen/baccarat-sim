@@ -625,3 +625,22 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* --- short laptops (#18): 1280x720 / 1366x768 --- */
+@media (min-width: 701px) and (max-height: 800px) {
+  .board {
+    /* the 460px floor (there to mirror the HUD column) was taller than the
+       shrunk felt column needed and forced extra document height */
+    min-height: 0;
+    gap: 8px;
+    justify-content: flex-start;
+    /* .board is the first child of the now-scrollable .board-dock (see
+       theme.css) — sticking it to the top keeps Big Road + the tally +
+       "Full roads" always visible while only an open Explain panel, below
+       it, scrolls out of view */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    --road-cell: 20px;
+  }
+}

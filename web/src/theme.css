@@ -185,6 +185,30 @@ body {
   }
 }
 
+/* --- short laptops (#18): 1280x720 / 1366x768 overflowed the viewport by
+       100-190px (dealer bubble + roads header scrolled off the top, or the
+       chip row + third-card table fell below the fold), and clicking a spot
+       auto-scrolled the page to bring it back into view. Tighten the rhythm
+       further than the 880px step, and stop the roads dock from being able
+       to grow past the viewport at all. --- */
+@media (min-width: 701px) and (max-height: 800px) {
+  .app {
+    padding: 4px 16px;
+    gap: 10px;
+  }
+  .app > .stage {
+    gap: 6px;
+  }
+  /* the roads dock (Scoreboard + Explain, when open) can outgrow the felt's
+     column once both are showing — cap it to the viewport and let it scroll
+     internally instead of pushing the document taller than the screen */
+  .app > .board-dock {
+    max-height: calc(100vh - 8px);
+    max-height: calc(100dvh - 8px);
+    overflow-y: auto;
+  }
+}
+
 /* --- responsive: shrink the side columns first --- */
 @media (max-width: 1340px) {
   .app {

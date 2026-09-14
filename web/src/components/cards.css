@@ -392,6 +392,34 @@
   }
 }
 
+/* --- short laptops (#18): 1280x720 / 1366x768 ---
+   Card size here was width-gated only (steps at 1240/840/520px), so a wide
+   but short laptop viewport still rendered full 100x143 cards — the single
+   biggest contributor to the stage overflowing the viewport. Height-gate a
+   step of its own so it applies at 1280/1366 wide too. */
+@media (min-width: 701px) and (max-height: 800px) {
+  .card {
+    width: 76px;
+    height: 109px;
+  }
+  .card-stage {
+    gap: 28px;
+    min-height: 190px;
+  }
+  .card-pip {
+    font-size: 13px;
+  }
+  .card-pip--ace {
+    font-size: 38px;
+  }
+  .card-court-half {
+    font-size: 24px;
+  }
+  .hand-total-num {
+    font-size: 28px;
+  }
+}
+
 /* --- phones --- */
 @media (max-width: 520px) {
   .card {
