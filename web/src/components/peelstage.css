@@ -1,20 +1,59 @@
-/* T8b: the peel stage — once the bets are in, only the cards matter. A
-   fixed, full-viewport overlay that sits UNDER the pinned action bar
-   (z-index 45 in theme.css's phone block) so Reveal/Explain/Settle stay
-   reachable while it's up. */
+/* T8b (revised — owner direction 2026-09-13): "instead of going to a
+   different view ... just a slightly faded and darkened background and the
+   cards come back to the front". This is an OVERLAY over the still-mounted
+   page (HUD, bet rail, roads all sit behind it, dimmed) — not a separate
+   view — and it sits UNDER the pinned action bar (z-index 45 in theme.css's
+   phone block) so Reveal/Explain/Settle stay reachable while it's up. */
 .peel-stage {
   position: fixed;
   inset: 0;
   z-index: 40;
+  /* the stage's own box must not swallow taps meant for the felt beneath
+     it anywhere it isn't actually painting something on top — only the
+     backdrop and the content block (both explicit children below) opt back
+     into pointer-events. */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  --peel-card: 112px;
+}
+
+.peel-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 200ms ease;
+}
+/* A cheap blur only when motion is welcome — backdrop-filter is not free on
+   every phone GPU, and reduced-motion already asks for calmer chrome. */
+@media (prefers-reduced-motion: no-preference) {
+  .peel-backdrop {
+    backdrop-filter: blur(2px);
+  }
+}
+.peel-stage--visible .peel-backdrop {
+  opacity: 1;
+}
+.peel-stage--leaving .peel-backdrop {
+  transition-duration: 150ms;
+  opacity: 0;
+}
+
+.peel-stage-content {
+  position: relative;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
   padding: 12px;
-  background: var(--felt-deep, #0b3d2e);
-  overflow: hidden;
-  --peel-card: 112px;
+  width: 100%;
+  height: 100%;
 }
 
 .peel-stage .dealer-line {
@@ -30,6 +69,35 @@
   justify-content: center;
   gap: 16px;
   width: 100%;
+  /* "the cards come back to the front": the hands scale in from just under
+     full size as the backdrop fades, reading as the cards approaching the
+     viewer rather than the view simply changing. */
+  transform: scale(0.85);
+  opacity: 0;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
+}
+.peel-stage--visible .peel-stage-hands {
+  transform: scale(1);
+  opacity: 1;
+}
+.peel-stage--leaving .peel-stage-hands {
+  transition-duration: 150ms;
+  transform: scale(0.85);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .peel-stage-hands {
+    transition: opacity 150ms ease;
+    transform: none;
+  }
+  .peel-stage--visible .peel-stage-hands {
+    transform: none;
+  }
+  .peel-stage--leaving .peel-stage-hands {
+    transform: none;
+  }
 }
 
 .peel-stage .hand {

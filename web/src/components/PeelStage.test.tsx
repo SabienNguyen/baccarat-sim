@@ -33,6 +33,29 @@ test("renders the compact dealer line and both hands", () => {
   expect(screen.getByLabelText("Banker hand")).toBeInTheDocument();
 });
 
+test("renders as an overlay: a backdrop is present alongside the hands", () => {
+  const { snapshot, player, banker } = stageHands();
+  const { container } = render(<PeelStage snapshot={snapshot} player={player} banker={banker} />);
+  expect(container.querySelector(".peel-backdrop")).not.toBeNull();
+});
+
+test("starts without the visible class, then flips to it (the entrance fade/scale)", async () => {
+  const { snapshot, player, banker } = stageHands();
+  const { container } = render(<PeelStage snapshot={snapshot} player={player} banker={banker} />);
+  const stage = container.querySelector(".peel-stage")!;
+  await vi.waitFor(() => expect(stage).toHaveClass("peel-stage--visible"));
+});
+
+test("a leaving stage carries the leaving class instead of the visible one", () => {
+  const { snapshot, player, banker } = stageHands();
+  const { container } = render(
+    <PeelStage snapshot={snapshot} player={player} banker={banker} leaving />,
+  );
+  const stage = container.querySelector(".peel-stage")!;
+  expect(stage).toHaveClass("peel-stage--leaving");
+  expect(stage).not.toHaveClass("peel-stage--visible");
+});
+
 test("locks scroll on body and html while mounted, restores both on unmount", () => {
   const prevBody = document.body.style.overflow;
   const prevHtml = document.documentElement.style.overflow;

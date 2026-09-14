@@ -55,6 +55,11 @@ export const SWEEP_MS = 400;
  *  stage doesn't need to wait for the LAST pixel of the animation, only for
  *  the cards to have visibly arrived. */
 export const DEAL_SETTLE_MS = 700;
+/** T8b (overlay revision): how long the peel overlay's backdrop + hands take
+ *  to fade out once the phase leaves Dealing — the component stays mounted
+ *  this long after that so peelstage.css's leaving transition can actually
+ *  play, instead of the overlay vanishing mid-fade. */
+export const PEEL_EXIT_MS = 150;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -177,6 +182,32 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.phase]);
   const showPeelStage = phoneLike && snapshot.phase === "Dealing" && dealSettled;
+  // The overlay stays in the DOM a little longer than `showPeelStage` so its
+  // fade-out (peelstage.css, PEEL_EXIT_MS) can actually play instead of the
+  // component disappearing mid-transition; `peelStageLeaving` tells it to
+  // start that exit right away.
+  const [peelStageMounted, setPeelStageMounted] = useState(false);
+  const [peelStageLeaving, setPeelStageLeaving] = useState(false);
+  useEffect(() => {
+    if (showPeelStage) {
+      setPeelStageMounted(true);
+      setPeelStageLeaving(false);
+      return;
+    }
+    setPeelStageMounted((was) => {
+      if (!was) return false;
+      setPeelStageLeaving(true);
+      return was;
+    });
+  }, [showPeelStage]);
+  useEffect(() => {
+    if (!peelStageLeaving) return;
+    const t = setTimeout(() => {
+      setPeelStageMounted(false);
+      setPeelStageLeaving(false);
+    }, PEEL_EXIT_MS);
+    return () => clearTimeout(t);
+  }, [peelStageLeaving]);
 
   // Game-portal gameplay signals (start on the first deal, stop under a
   // modal, resume when it closes) ride the store the same way. Without a
@@ -374,60 +405,64 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             of a viewport-percentage `top` that landed on the cards. The
             wrapper only matters at that breakpoint; the popup stays
             `position: fixed` (ignoring its DOM position) everywhere else.
-            Hidden while the peel stage is up (T8b) — its own compact dealer
-            line takes over the narration so it isn't announced twice. */}
-        {!showPeelStage && (
-          <div className="dealer-slot">
-            <DealerLine
-              snapshot={snapshot}
-              lastError={lastError}
-              lastFlip={lastFlip}
-              announcement={announcement}
-            />
-            <WinPopup key={settleSeq} amount={lastDelta} />
-          </div>
-        )}
-        <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
-          {!showPeelStage && (
-            <>
-              <Hand
-                side="Player"
-                hand={snapshot.player}
-                phase={snapshot.phase}
-                visibleCount={playerVisible}
-                winner={snapshot.outcome === "PlayerWin"}
-                squeezable={canSqueeze("Player", squeezers, me)}
-                onPeek={(i) => peek("Player", i)}
-                onReveal={(i) => reveal("Player", i)}
-                actions={flipControls("Player")}
-              />
-              <Hand
-                side="Banker"
-                hand={snapshot.banker}
-                phase={snapshot.phase}
-                visibleCount={bankerVisible}
-                winner={snapshot.outcome === "BankerWin"}
-                squeezable={canSqueeze("Banker", squeezers, me)}
-                onPeek={(i) => {
-                  // A shared table holds the peek to the ritual too (the server
-                  // refuses it as out of order); hold it silently, like the flip.
-                  // Solo keeps its peek-ahead while the dealer turns Player.
-                  if (seats === null || !bankerLocked) peek("Banker", i);
-                }}
-                onReveal={(i) => {
-                  if (!bankerLocked) reveal("Banker", i);
-                }}
-                actions={flipControls("Banker")}
-              />
-            </>
-          )}
+            Always mounted, even while the peel overlay is up (T8b): the
+            overlay sits ON TOP of the ordinary felt, it doesn't replace it,
+            so the normal dealer line stays live (if dimmed) behind the
+            backdrop. */}
+        <div className="dealer-slot">
+          <DealerLine
+            snapshot={snapshot}
+            lastError={lastError}
+            lastFlip={lastFlip}
+            announcement={announcement}
+          />
+          <WinPopup key={settleSeq} amount={lastDelta} />
         </div>
-        {showPeelStage && (
+        {/* T8b (overlay revision): the inline hands stay mounted (and hold
+            the one real squeeze state) whether or not the peel overlay is
+            up — only their pixels are hidden (visibility, not display, so
+            layout never shifts) while the overlay's own Hand instances
+            render the large, up-front cards on top of the backdrop. */}
+        <div
+          className={`card-stage${sweeping ? " sweeping" : ""}${peelStageMounted ? " card-stage--peeling" : ""}`}
+        >
+          <Hand
+            side="Player"
+            hand={snapshot.player}
+            phase={snapshot.phase}
+            visibleCount={playerVisible}
+            winner={snapshot.outcome === "PlayerWin"}
+            squeezable={canSqueeze("Player", squeezers, me)}
+            onPeek={(i) => peek("Player", i)}
+            onReveal={(i) => reveal("Player", i)}
+            actions={flipControls("Player")}
+          />
+          <Hand
+            side="Banker"
+            hand={snapshot.banker}
+            phase={snapshot.phase}
+            visibleCount={bankerVisible}
+            winner={snapshot.outcome === "BankerWin"}
+            squeezable={canSqueeze("Banker", squeezers, me)}
+            onPeek={(i) => {
+              // A shared table holds the peek to the ritual too (the server
+              // refuses it as out of order); hold it silently, like the flip.
+              // Solo keeps its peek-ahead while the dealer turns Player.
+              if (seats === null || !bankerLocked) peek("Banker", i);
+            }}
+            onReveal={(i) => {
+              if (!bankerLocked) reveal("Banker", i);
+            }}
+            actions={flipControls("Banker")}
+          />
+        </div>
+        {peelStageMounted && (
           <PeelStage
             snapshot={snapshot}
             lastError={lastError}
             lastFlip={lastFlip}
             announcement={announcement}
+            leaving={peelStageLeaving}
             player={{
               hand: snapshot.player,
               visibleCount: playerVisible,

@@ -43,20 +43,6 @@ interface Rect {
   height: number;
 }
 
-/** Peel reach (T8b): a grab that starts outside the card's own face (within
- *  its hit-expander) is treated as if it started at the nearest point ON the
- *  card — independent-axis clamping, which lands on the nearest corner for a
- *  diagonal excursion and the nearest edge point for an axis-aligned one.
- *  Everything downstream (gripFrom, foldFrom, the peek/reveal thresholds)
- *  then runs unmodified from that point, so a reach-started gesture drives
- *  exactly the same fold maths as one that grabbed the card itself. */
-export function clampToRect(x: number, y: number, rect: Rect): { x: number; y: number } {
-  return {
-    x: Math.min(Math.max(x, rect.left), rect.left + rect.width),
-    y: Math.min(Math.max(y, rect.top), rect.top + rect.height),
-  };
-}
-
 interface Point {
   x: number;
   y: number;

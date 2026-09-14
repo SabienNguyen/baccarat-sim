@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, DEAL_SETTLE_MS } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, DEAL_SETTLE_MS, PEEL_EXIT_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
@@ -523,7 +523,7 @@ describe("T8b: the peel stage", () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof matchMedia;
   }
 
-  test("mounts once Dealing has settled on a phone-like device", () => {
+  test("mounts once Dealing has settled on a phone-like device, as an overlay over the inline felt", () => {
     setPhoneLike();
     vi.useFakeTimers();
     try {
@@ -533,6 +533,12 @@ describe("T8b: the peel stage", () => {
       expect(container.querySelector(".peel-stage")).toBeNull();
       act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
       expect(container.querySelector(".peel-stage")).not.toBeNull();
+      expect(container.querySelector(".peel-backdrop")).not.toBeNull();
+      // the ordinary felt (HUD, inline hands) stays mounted underneath —
+      // this is an overlay, not a view swap
+      expect(container.querySelector(".hud")).not.toBeNull();
+      expect(container.querySelector(".card-stage")).not.toBeNull();
+      expect(container.querySelector(".card-stage--peeling")).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -551,7 +557,7 @@ describe("T8b: the peel stage", () => {
     }
   });
 
-  test("unmounts once the phase leaves Dealing", () => {
+  test("unmounts once the phase leaves Dealing (after its fade-out)", () => {
     setPhoneLike();
     vi.useFakeTimers();
     try {
@@ -563,7 +569,11 @@ describe("T8b: the peel stage", () => {
       snap = settledSnapshot();
       store.setState({ snapshot: snap });
       rerender(<App store={store} />);
+      // still fading out
+      expect(container.querySelector(".peel-stage")).not.toBeNull();
+      act(() => vi.advanceTimersByTime(PEEL_EXIT_MS));
       expect(container.querySelector(".peel-stage")).toBeNull();
+      expect(container.querySelector(".card-stage--peeling")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
