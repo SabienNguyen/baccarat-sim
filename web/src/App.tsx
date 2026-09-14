@@ -47,14 +47,14 @@ export const AUTO_ADVANCE_MS = 3000;
 /** The dealer's sweep: the cards muck away over this window at the end of the
  *  linger, so the felt clears with a gesture instead of the cards blinking out. */
 export const SWEEP_MS = 400;
-/** T8b: the peel stage waits this long after the phase flips to Dealing
- *  before it mounts — the deal-in fly (cards.css) is still landing. The
- *  last of the initial four cards (Banker's second) starts its 340ms
- *  deal-in animation at a 420ms `--deal-delay` (Hand.tsx), finishing at
- *  760ms; a fixed 700ms lands just before that without a visible stall — the
- *  stage doesn't need to wait for the LAST pixel of the animation, only for
- *  the cards to have visibly arrived. */
-export const DEAL_SETTLE_MS = 700;
+/** T8b (P14c revision — owner direction 2026-09-13): "the user can still see
+ *  the cards being dealt on the board before we go into the peel overlay;
+ *  instead just have the dealing happen in this peel overlay". The overlay
+ *  now mounts the instant the phase flips to Dealing — no wait for the
+ *  inline deal-in fly to settle first — so the fly-in (cards.css) plays
+ *  inside the overlay's own `Hand`s instead of on the felt behind the
+ *  backdrop. The inline hands are hidden (`.card-stage--peeling`) from the
+ *  same render, so nothing dealing is ever visible underneath. */
 /** T8b (overlay revision): how long the peel overlay's backdrop + hands take
  *  to fade out once the phase leaves Dealing — the component stays mounted
  *  this long after that so peelstage.css's leaving transition can actually
@@ -167,21 +167,11 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   useGameSounds(active);
 
   // T8b: peel stage. Whether this device handles like a phone doesn't change
-  // mid-session, so it's read once. The stage itself waits out the deal
-  // fly-in before it mounts (see DEAL_SETTLE_MS) so the cards don't teleport
-  // into it mid-animation.
+  // mid-session, so it's read once. The stage mounts the instant the phase
+  // becomes Dealing — the deal-in fly-in plays inside its own Hands, not on
+  // the inline felt (P14c).
   const [phoneLike] = useState(() => isPhoneLike());
-  const [dealSettled, setDealSettled] = useState(false);
-  useEffect(() => {
-    if (snapshot.phase !== "Dealing") {
-      setDealSettled(false);
-      return;
-    }
-    const t = setTimeout(() => setDealSettled(true), DEAL_SETTLE_MS);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot.phase]);
-  const showPeelStage = phoneLike && snapshot.phase === "Dealing" && dealSettled;
+  const showPeelStage = phoneLike && snapshot.phase === "Dealing";
   // The overlay stays in the DOM a little longer than `showPeelStage` so its
   // fade-out (peelstage.css, PEEL_EXIT_MS) can actually play instead of the
   // component disappearing mid-transition; `peelStageLeaving` tells it to

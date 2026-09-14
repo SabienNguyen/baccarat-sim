@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, DEAL_SETTLE_MS, PEEL_EXIT_MS } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, PEEL_EXIT_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
@@ -523,38 +523,27 @@ describe("T8b: the peel stage", () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof matchMedia;
   }
 
-  test("mounts once Dealing has settled on a phone-like device, as an overlay over the inline felt", () => {
+  test("mounts synchronously the instant Dealing starts on a phone-like device, as an overlay over the inline felt", () => {
     setPhoneLike();
-    vi.useFakeTimers();
-    try {
-      const store = createGameStore(fakeSession(dealingSnapshot()));
-      const { container } = render(<App store={store} />);
-      // the deal fly-in hasn't finished yet
-      expect(container.querySelector(".peel-stage")).toBeNull();
-      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
-      expect(container.querySelector(".peel-stage")).not.toBeNull();
-      expect(container.querySelector(".peel-backdrop")).not.toBeNull();
-      // the ordinary felt (HUD, inline hands) stays mounted underneath —
-      // this is an overlay, not a view swap
-      expect(container.querySelector(".hud")).not.toBeNull();
-      expect(container.querySelector(".card-stage")).not.toBeNull();
-      expect(container.querySelector(".card-stage--peeling")).not.toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    const store = createGameStore(fakeSession(dealingSnapshot()));
+    const { container } = render(<App store={store} />);
+    // no timer advance — the overlay is up on the very first render of the
+    // Dealing phase, so the deal fly-in plays inside it, not on the felt
+    expect(container.querySelector(".peel-stage")).not.toBeNull();
+    expect(container.querySelector(".peel-backdrop")).not.toBeNull();
+    // the ordinary felt (HUD, inline hands) stays mounted underneath —
+    // this is an overlay, not a view swap
+    expect(container.querySelector(".hud")).not.toBeNull();
+    expect(container.querySelector(".card-stage")).not.toBeNull();
+    // ...but hidden from the same instant, so nothing dealing shows through
+    expect(container.querySelector(".card-stage--peeling")).not.toBeNull();
   });
 
   test("never mounts on a desktop (fine pointer, wide viewport)", () => {
     setDesktop();
-    vi.useFakeTimers();
-    try {
-      const store = createGameStore(fakeSession(dealingSnapshot()));
-      const { container } = render(<App store={store} />);
-      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
-      expect(container.querySelector(".peel-stage")).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    const store = createGameStore(fakeSession(dealingSnapshot()));
+    const { container } = render(<App store={store} />);
+    expect(container.querySelector(".peel-stage")).toBeNull();
   });
 
   test("unmounts once the phase leaves Dealing (after its fade-out)", () => {
@@ -564,7 +553,6 @@ describe("T8b: the peel stage", () => {
       let snap = dealingSnapshot();
       const store = createGameStore(fakeSession(snap, { snapshot: () => snap }));
       const { container, rerender } = render(<App store={store} />);
-      act(() => vi.advanceTimersByTime(DEAL_SETTLE_MS));
       expect(container.querySelector(".peel-stage")).not.toBeNull();
       snap = settledSnapshot();
       store.setState({ snapshot: snap });
