@@ -534,6 +534,9 @@ impl Session {
         let snapshot =
             self.render_round(PhaseTag::Settled, &round, &reveal, &bets, Some(aggregate_payouts(payouts)));
         self.phase = if was_cut_card_out {
+            // Entering ShoeCut: the previous cut's ceremony has been shown —
+            // clear it so a client doesn't replay a stale animation.
+            self.last_cut = None;
             Phase::ShoeCut { reason: ShoeCutReason::CutCardOut }
         } else {
             Phase::Betting { bets: Vec::new() }
@@ -766,6 +769,26 @@ mod tests {
 
         let err = s.deal_round().unwrap_err();
         assert_eq!(err, CommandError::WrongPhase { expected: PhaseTag::Betting, found: PhaseTag::ShoeCut });
+    }
+
+    #[test]
+    fn shoe_end_clears_last_cut() {
+        let mut s = open_session(cfg());
+        let mut hands = 0;
+        loop {
+            s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+            s.deal_round().unwrap();
+            s.settle().unwrap();
+            hands += 1;
+            assert!(hands < 300, "cut card never came out");
+            if s.snapshot().shoe.cut_card_out {
+                break;
+            }
+        }
+        s.place_bet(BetKind::Main(BetSpot::Player), 1_000).unwrap();
+        s.deal_round().unwrap();
+        s.settle().unwrap();
+        assert!(s.snapshot().shoe.last_cut.is_none(), "entering ShoeCut clears the prior cut");
     }
 
     #[test]

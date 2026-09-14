@@ -80,6 +80,7 @@ fn seeded_session_plays_rounds_deterministically() {
             seed: 77,
         };
         let mut s = Session::new(cfg);
+        s.cut_shoe(500).unwrap();
         for _ in 0..10 {
             s.place_bet(BetKind::Main(BetSpot::Banker), 1_000).unwrap();
             s.deal_round().unwrap();

@@ -1016,6 +1016,9 @@ impl Table {
         // card finishes, one more hand is dealt, and only THEN does the shoe
         // end — never mid-coup.
         if self.cut_card_out {
+            // Entering ShoeCut: the previous cut's ceremony has been shown —
+            // clear it so a client doesn't replay a stale animation.
+            self.last_cut = None;
             self.phase = Phase::ShoeCut { reason: ShoeCutReason::CutCardOut };
         } else {
             self.phase = Phase::Betting;
@@ -3071,6 +3074,14 @@ mod shoe_lifecycle_tests {
                 found: PhaseTag::ShoeCut,
             }))
         ));
+    }
+
+    #[test]
+    fn shoe_end_clears_last_cut() {
+        let (mut t, a) = open_table(3);
+        play_until_cut_card_out(&mut t, a);
+        play_one_hand(&mut t, a); // the one more hand — the shoe now ends
+        assert!(t.view_for(a).unwrap().shoe.last_cut.is_none(), "entering ShoeCut clears the prior cut");
     }
 
     #[test]
