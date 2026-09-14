@@ -10,7 +10,7 @@
 }
 .hud-title {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: round(calc(14px * var(--ui-scale)), 1px);
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--ink);
   margin: 0 0 6px;
@@ -32,19 +32,19 @@
 }
 .hud-box-label {
   font-family: var(--font-display);
-  font-size: 8px;
+  font-size: round(calc(8px * var(--ui-scale)), 1px);
   letter-spacing: 1px;
   color: var(--accent-2);
   text-transform: uppercase;
 }
 .hud-box-value {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: round(calc(17px * var(--ui-scale)), 1px);
   color: #fff;
   text-shadow: 2px 2px 0 var(--ink);
 }
 .hud-box-value--small {
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   line-height: 1.6;
   text-align: center;
 }
@@ -61,11 +61,11 @@
 /* the money is the star */
 .hud-box--bankroll .hud-box-value {
   color: var(--gold);
-  font-size: 19px;
+  font-size: round(calc(19px * var(--ui-scale)), 1px);
 }
 /* phase reads as a status light */
 .hud-box-value--phase {
-  font-size: 12px;
+  font-size: round(calc(12px * var(--ui-scale)), 1px);
 }
 .hud-box[data-phase="Betting"] .hud-box-value--phase {
   color: #7ec8ff;
@@ -98,7 +98,7 @@
   border-radius: 6px;
   padding: 5px 10px;
   font-family: var(--font-text);
-  font-size: 17px;
+  font-size: round(calc(17px * var(--ui-scale)), 1px);
 }
 .hud-payout-bet {
   color: #f3eede;
@@ -112,7 +112,7 @@
 
 .hud-error {
   color: var(--chip-red);
-  font-size: 16px;
+  font-size: round(calc(16px * var(--ui-scale)), 1px);
   margin: 0;
   font-family: var(--font-text);
 }
@@ -123,7 +123,7 @@
 }
 .hud-action {
   font-family: var(--font-display);
-  font-size: 8px;
+  font-size: round(calc(8px * var(--ui-scale)), 1px);
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 2px solid var(--ink);
@@ -140,7 +140,7 @@
 }
 .hud-seat {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #1a1208;
   background: var(--gold);
   border: 2px solid var(--ink);
@@ -173,7 +173,7 @@
 }
 .hud-goal-pct {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: var(--gold);
 }
 

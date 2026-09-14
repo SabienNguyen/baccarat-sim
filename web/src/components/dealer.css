@@ -10,7 +10,7 @@
   left: 18px;
   z-index: 1;
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   letter-spacing: 1px;
   color: #1a1208;
   background: var(--gold);
@@ -22,7 +22,7 @@
 .dealer-line p {
   margin: 0;
   font-family: var(--font-text);
-  font-size: 26px;
+  font-size: round(calc(26px * var(--ui-scale)), 1px);
   line-height: 1.25;
   /* two lines' worth of height, reserved — the stage never re-centers
      when his line wraps or shortens */

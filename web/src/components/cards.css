@@ -1,8 +1,10 @@
 .card {
   display: inline-block;
   touch-action: none;
-  width: 100px;
-  height: 143px;
+  /* Large screens (#20): grows with --ui-scale (theme.css); round() keeps
+     whole pixels so the pixel art stays crisp at the 1.25/1.5 steps. */
+  width: round(calc(100px * var(--ui-scale)), 1px);
+  height: round(calc(143px * var(--ui-scale)), 1px);
   border: 3px solid var(--ink);
   border-radius: 9px;
   margin: 4px;
@@ -56,10 +58,10 @@
   transform: rotate(180deg);
 }
 .card-rank {
-  font-size: 14px;
+  font-size: round(calc(14px * var(--ui-scale)), 1px);
 }
 .card-index-suit {
-  font-size: 13px;
+  font-size: round(calc(13px * var(--ui-scale)), 1px);
   font-family: var(--font-text);
 }
 
@@ -75,14 +77,14 @@
   position: absolute;
   transform: translate(-50%, -50%);
   font-family: var(--font-text);
-  font-size: 17px;
+  font-size: round(calc(17px * var(--ui-scale)), 1px);
   line-height: 1;
 }
 .card-pip--flip {
   transform: translate(-50%, -50%) rotate(180deg);
 }
 .card-pip--ace {
-  font-size: 50px;
+  font-size: round(calc(50px * var(--ui-scale)), 1px);
 }
 
 /* --- court cards: double-ended figures, like a real deck --- */
@@ -109,7 +111,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: round(calc(30px * var(--ui-scale)), 1px);
   line-height: 1;
 }
 .card-court-half--flip {
@@ -272,7 +274,7 @@
 .hand h3 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: round(calc(13px * var(--ui-scale)), 1px);
   letter-spacing: 2px;
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--ink);
@@ -295,14 +297,14 @@
 }
 .hand-total-label {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   letter-spacing: 2px;
   color: var(--accent-2);
   text-shadow: 1px 1px 0 var(--ink);
 }
 .hand-total-num {
   font-family: var(--font-display);
-  font-size: 38px;
+  font-size: round(calc(38px * var(--ui-scale)), 1px);
   line-height: 1;
   color: #fff;
   text-shadow:
