@@ -51,6 +51,24 @@
      reads as "&") and Pixelify Sans too (its "5" reads as "S"). */
   --font-display: "Silkscreen", ui-monospace, monospace;
   --font-text: "VT323", ui-monospace, monospace;
+  /* Large-screen scale (#20): 1560px felt on a 2560/3440-wide monitor fills
+     ~25% of the screen with 8-9px labels. Rather than raise the max-width cap
+     alone (which just adds dead felt), --ui-scale grows the cards and pixel
+     type together in whole-pixel steps so the art stays crisp — applied via
+     calc()/round() on the card, road-cell, and type-size variables in
+     cards.css, hud.css, betrail.css, controls.css and dealer.css. */
+  --ui-scale: 1;
+}
+
+@media (min-width: 1920px) and (min-height: 1000px) {
+  :root {
+    --ui-scale: 1.25;
+  }
+}
+@media (min-width: 2560px) and (min-height: 1300px) {
+  :root {
+    --ui-scale: 1.5;
+  }
 }
 
 * {
@@ -145,8 +163,10 @@ body {
     max(16px, env(safe-area-inset-right))
     max(16px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
-  /* keep the table, HUD, and roads clustered on big screens */
-  max-width: 1560px;
+  /* keep the table, HUD, and roads clustered on big screens; the cap itself
+     grows with --ui-scale so the extra room goes to a bigger table, not dead
+     felt (see the --ui-scale block above and its media queries below) */
+  max-width: round(calc(1560px * var(--ui-scale)), 1px);
   margin: 0 auto;
   /* center each column vertically so the table doesn't pool at the top */
   align-items: center;

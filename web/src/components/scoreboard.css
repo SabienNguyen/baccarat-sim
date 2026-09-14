@@ -9,13 +9,13 @@
   /* Road geometry. Every cell, glyph, ring, dot and board heading derives
      from --road-cell so the full board can shrink as one piece; the full
      roads window sets it from useFitCells(), the right rail keeps 27px. */
-  --road-cell: 27px;
+  --road-cell: round(calc(27px * var(--ui-scale)), 1px);
   --road-gap: 3px;
   --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
 .board h4 {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   color: var(--gold);
   margin: 0 0 10px;
   letter-spacing: 1px;
@@ -37,7 +37,7 @@
 }
 .road-title-trad {
   font-family: var(--font-text);
-  font-size: 15px;
+  font-size: round(calc(15px * var(--ui-scale)), 1px);
   letter-spacing: 0;
   color: var(--accent-2);
   text-shadow: 1px 1px 0 var(--ink);
@@ -282,7 +282,7 @@
 }
 .tally {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   color: #fff;
   border: 2px solid var(--ink);
   border-radius: 6px;
@@ -303,7 +303,7 @@
 .full-roads-btn {
   align-self: center;
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
