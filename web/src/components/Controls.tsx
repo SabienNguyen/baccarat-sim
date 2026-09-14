@@ -13,6 +13,12 @@ interface ControlsProps {
   onToggleExplain?: () => void;
   /** Skip this coup (multiplayer tables). */
   onSitOut?: () => void;
+  /** Declare ready to deal (multiplayer tables) — replaces Deal there. */
+  onReady?: () => void;
+  /** Take back a ready declaration (multiplayer tables). */
+  onUnready?: () => void;
+  /** This seat's own ready flag (multiplayer tables). */
+  myReady?: boolean;
   /** Deal a coup with nothing staked, to watch the shoe (single player). */
   onWatch?: () => void;
   /** At the rail: nothing here moves the game, so only Explain is offered. */
@@ -29,6 +35,9 @@ export function Controls({
   explainOn,
   onToggleExplain,
   onSitOut,
+  onReady,
+  onUnready,
+  myReady = false,
   onWatch,
   spectating = false,
 }: ControlsProps) {
@@ -54,9 +63,20 @@ export function Controls({
 
   return (
     <section aria-label="Controls" className="controls">
-      <button type="button" className="btn" disabled={!betting || !hasBets} onClick={onDeal}>
-        Deal
-      </button>
+      {onSitOut ? (
+        <button
+          type="button"
+          className="btn"
+          disabled={!betting || !hasBets}
+          onClick={myReady ? onUnready : onReady}
+        >
+          {myReady ? "Unready" : "Ready"}
+        </button>
+      ) : (
+        <button type="button" className="btn" disabled={!betting || !hasBets} onClick={onDeal}>
+          Deal
+        </button>
+      )}
       {onSitOut && (
         <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onSitOut}>
           Sit out

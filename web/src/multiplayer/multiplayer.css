@@ -395,6 +395,14 @@
   color: #7ec8ff;
 }
 
+.seat-ready {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: #6ee7a0;
+  line-height: 1;
+}
+
 .seat-status {
   font-family: var(--font-display);
   font-size: 9px;

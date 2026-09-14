@@ -9,6 +9,7 @@ const seat = (id: number, name: string): SeatView => ({
   bankroll: 1_000_000,
   staked: 0,
   sitting_out: false,
+  ready: false,
   decided: false,
 });
 
@@ -65,4 +66,12 @@ test("the rail shows as one more chip, only when someone is standing at it", () 
   expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
   rerender(<SeatsStrip seats={seats} squeezers={null} betting />);
   expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
+});
+
+test("a ready seat shows its mark, only in Betting", () => {
+  const ready = [{ ...seat(0, "alice"), ready: true }, seat(1, "bob")];
+  const { rerender } = render(<SeatsStrip seats={ready} squeezers={null} betting />);
+  expect(screen.getAllByLabelText("ready")).toHaveLength(1);
+  rerender(<SeatsStrip seats={ready} squeezers={null} betting={false} />);
+  expect(screen.queryByLabelText("ready")).not.toBeInTheDocument();
 });

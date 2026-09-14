@@ -50,6 +50,12 @@ export interface GameState {
   requestDealerFlip: (count: FlipRequest) => void;
   /** Skip this coup (multiplayer); no-op alone at a single-player table. */
   sitOut: () => void;
+  /** Declare ready to deal (multiplayer); no-op alone at a single-player table. */
+  ready: () => void;
+  /** Take back a ready declaration (multiplayer); no-op alone. */
+  unready: () => void;
+  /** This seat's own ready flag (multiplayer); always false at a single-player table. */
+  myReady: boolean;
   /** The card that just turned, for the dealer's call. */
   lastFlip: Flip | null;
   /** The dealer's between-flips voice (multiplayer pacing). */
@@ -153,6 +159,9 @@ export function createGameStore(
       me: 0, // the sole seat at a single-player table
       rename: () => {},
       sitOut: () => {},
+      ready: () => {},
+      unready: () => {},
+      myReady: false,
       lastFlip: null,
       announcement: null,
       lastDelta: null,
