@@ -379,3 +379,105 @@ body {
      flex-basis, font floor, short-label swap) — this file only owns the bar's
      position, background and the taps-fall-through behaviour above. */
 }
+
+/* --- landscape phones: 844x390 / 780x360 get their own two-column layout,
+       not the width-gated desktop stack above. A landscape phone is short,
+       not narrow — height is the scarce axis here, so this block is gated on
+       orientation + max-height, independent of the width breakpoints above,
+       and comes last so it wins the cascade over both the >=1041px 3-column
+       grid and (on a genuinely narrow-and-short phone) the <=700px stack.
+       Left column (~58%): dealer line, both hands, the action bar INLINE
+       under the felt (not fixed — there's no room to reserve a fixed bar's
+       height twice). Right column (~42%): the compact HUD (hud.css) above
+       the bet rail (spots one row, chips one row — betrail.css). Roads/board
+       run full width below and scroll with the page. --- */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    /* No fixed bar here, so no phantom clearance reserved for one. */
+    --controls-bar-clearance: 0px;
+  }
+  html {
+    scroll-padding-bottom: 0;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+    grid-template-areas:
+      "seats seats"
+      "dealer hud"
+      "cards rail"
+      "controls rail"
+      "board board";
+    align-items: start;
+    min-height: 0;
+    gap: 6px;
+    padding:
+      max(6px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+  /* .stage is a flex column in the DOM (dealer-slot, card-stage, controls,
+     bet-rail as siblings) but the two-column split above needs the bet rail
+     in the right column while the felt stays left — `display: contents`
+     un-boxes .stage so its own children become direct grid items of .app,
+     placeable by the areas above. */
+  .app > .stage {
+    display: contents;
+  }
+  .app > .stage > .seats-strip {
+    grid-area: seats;
+  }
+  .app > .stage > .dealer-slot {
+    grid-area: dealer;
+  }
+  .app > .stage > .card-stage {
+    grid-area: cards;
+  }
+  .app > .stage > .controls {
+    grid-area: controls;
+  }
+  .app > .stage > .bet-rail {
+    grid-area: rail;
+  }
+  /* The bonus nudge has no home in this split (it isn't part of the task's
+     core loop) — park it with the rail rather than let it auto-place into a
+     random implicit cell. */
+  .app > .stage > .bonus-nudge {
+    grid-area: rail;
+  }
+  .app > .hud {
+    grid-area: hud;
+  }
+  .app > .board-dock {
+    grid-area: board;
+  }
+  .app .hud,
+  .app .board {
+    min-height: 0;
+    justify-content: flex-start;
+  }
+
+  /* Action bar: inline under the felt, not pinned — a fixed bar would eat a
+     chunk of the ~340px of height this layout can't spare twice over (once
+     for its own row, once for the fixed bar's reserved clearance). */
+  .app > .stage > .controls {
+    position: static;
+    width: 100%;
+    padding: 0;
+    background: none;
+    border-top: none;
+    box-shadow: none;
+    pointer-events: auto;
+  }
+  /* cards.css reserves a tall `.card-stage` (196px in this width range) so a
+     dealt card never shifts the page — this layout has no page to shift
+     (the felt sits in a fixed-height row of its own), so that reserve is
+     pure dead space between the hands and the action bar. Cards stay 84x120
+     at this width (cards.css, max-width:1240px step); a plain hand measures
+     ~128px including its label and total badge. */
+  .app > .stage > .card-stage {
+    min-height: 132px;
+  }
+}
+

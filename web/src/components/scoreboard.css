@@ -577,6 +577,19 @@
   background: var(--road-paper);
 }
 
+/* Tablets (T5, #19): the "half-screen" 2-column layout (theme.css,
+   max-width: 1040px) puts the board in its own column beside the HUD, but at
+   the fixed 27px cell the Big Road grid stays its desktop width and leaves a
+   dead band beside it in the wider tablet column. Scale the cell up so the
+   road actually fills the column instead of floating in it — every road,
+   the bead plate and the tally derive from --road-cell already, so this is
+   a one-line fix. */
+@media (min-width: 701px) and (max-width: 1040px) {
+  .board {
+    --road-cell: 34px;
+  }
+}
+
 /* phones: the board stacks and scrolls instead of fitting (useFitCells
    stands down under 700px), the three cards share a row where they fit */
 @media (max-width: 700px) {
