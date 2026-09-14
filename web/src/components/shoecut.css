@@ -1,0 +1,128 @@
+/* The cut ceremony: a full-viewport stage in the peel-overlay style (see
+   peelstage.css) — a dim/blurred backdrop over the still-mounted felt, sat
+   UNDER the pinned action bar (z-index 45 in theme.css's phone block) so
+   nothing else needs to move while it's up. */
+.shoe-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.shoe-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shoe-backdrop {
+    backdrop-filter: blur(2px);
+  }
+}
+
+.shoe-stage-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  justify-content: center;
+  /* Clears the pinned bottom bar the way peelstage.css does. */
+  padding: 16px 16px calc(var(--controls-bar-clearance, 0px) + 12px);
+}
+
+.shoe-title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 20px;
+  text-align: center;
+  color: #f3eede;
+}
+
+.shoe-subline {
+  margin: 0;
+  text-align: center;
+  opacity: 0.8;
+  color: #f3eede;
+}
+
+/* The shoe drawn edge-on: a long stack of card slivers. `grid-auto-columns:
+   1fr` divides the available width evenly across all 104 columns instead of
+   each sliver carrying its own fixed width, so the stack always fills
+   `min(100% - 32px, 720px)` exactly regardless of viewport. */
+.shoe-stack {
+  position: relative;
+  width: min(calc(100% - 32px), 720px);
+  height: 96px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  touch-action: none;
+}
+
+.sliver {
+  background: linear-gradient(180deg, #f2e9d8, #d8cdb4);
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+/* Non-cutters (and spectators): a slow shimmer says the shoe is alive
+   without implying anyone but the cutter can touch it. */
+@keyframes shoe-idle {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.shoe-stack--idle .sliver {
+  animation: shoe-idle 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shoe-stack--idle .sliver {
+    animation: none;
+  }
+}
+
+.cut-card {
+  position: absolute;
+  top: -14px;
+  bottom: -14px;
+  width: 28px;
+  margin-left: -14px;
+  border: none;
+  border-radius: 4px;
+  background: #f5c518;
+  color: #241c00;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.cut-card:active {
+  cursor: grabbing;
+}
+
+.shoe-cut-confirm {
+  min-height: 44px;
+}
+
+/* Phone: fit 390x664 without scrolling — a shorter stack, a smaller title,
+   the confirm button stays a full 44px touch target. */
+@media (max-width: 480px), (max-height: 700px) {
+  .shoe-stack {
+    height: 72px;
+  }
+  .shoe-title {
+    font-size: 14px;
+  }
+}

@@ -27,7 +27,7 @@ import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
-import { CutDeckModal } from "./components/CutDeckModal";
+import { ShoeCutStage } from "./components/ShoeCutStage";
 import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
@@ -139,7 +139,6 @@ interface GameTableProps {
 }
 
 export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }: GameTableProps) {
-  const [cutting, setCutting] = useState(false);
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
   // the settle the player closed the bonus notice on, so it stays up otherwise
@@ -163,6 +162,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const settle = useStore(active, (s) => s.settle);
   const newHand = useStore(active, (s) => s.newHand);
   const requestNewShoe = useStore(active, (s) => s.requestNewShoe);
+  const cutShoe = useStore(active, (s) => s.cutShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
@@ -502,7 +502,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           onRevealAll={seats === null ? revealAll : undefined}
           onSettle={seats !== null ? settle : undefined}
           onNewHand={seats !== null ? newHand : undefined}
-          onNewShoe={() => setCutting(true)}
+          onNewShoe={requestNewShoe}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
@@ -538,17 +538,21 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
         />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
-      {cutting && (
-        <CutDeckModal
-          onCut={() => {
+      {snapshot.phase === "ShoeCut" && (
+        <ShoeCutStage
+          shoe={snapshot.shoe}
+          phase={snapshot.phase}
+          canCut={seats === null ? true : me != null && snapshot.shoe.cutter === me}
+          cutterName={
+            seats === null ? null : (seats.find((s) => s.id === snapshot.shoe.cutter)?.name ?? null)
+          }
+          onCut={(position) => {
             // a fresh shoe is invisible in the store diff — riffle it here
             playSfx("shuffle");
-            requestNewShoe();
-            setCutting(false);
+            cutShoe(position);
             // between shoes is the natural break for a portal's midgame ad
             void adBreak(getPortal());
           }}
-          onCancel={() => setCutting(false)}
         />
       )}
       {goalReached && goal !== null && (
