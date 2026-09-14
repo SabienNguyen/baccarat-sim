@@ -169,9 +169,26 @@ async function runProbe(width, height, { shot } = {}) {
   // make mid-squeeze.
   const flipOneBtn = page.locator(".peel-stage .dealer-flip-btn", { hasText: "Flip one" });
   out.flipOneOffered = (await flipOneBtn.count()) > 0;
+  out.maxBankerBadgeBottomDuringSlam = null;
   if (out.flipOneOffered) {
     await flipOneBtn.tap();
-    await page.waitForTimeout(500);
+    // The Banker total-slam keyframe (cards.css) overshoots to scale(1.5) at
+    // its 55% mark before settling — the badge's PAINTED bottom edge during
+    // that overshoot can sit well below its resting layout-box bottom. Sample
+    // every 16ms for 600ms (comfortably past the 480ms animation) and keep
+    // the deepest bottom seen, so the clearance assertion below is checked
+    // against the worst frame, not just the at-rest position.
+    let maxBottom = null;
+    for (let i = 0; i < 38; i++) {
+      const bottom = await page.evaluate(() => {
+        const bankerHand = document.querySelectorAll(".peel-stage .hand")[1] ?? null;
+        const badge = bankerHand?.querySelector(".hand-total-badge") ?? null;
+        return badge ? badge.getBoundingClientRect().bottom : null;
+      });
+      if (bottom !== null && (maxBottom === null || bottom > maxBottom)) maxBottom = bottom;
+      await page.waitForTimeout(16);
+    }
+    out.maxBankerBadgeBottomDuringSlam = maxBottom;
   }
 
   // The clearance assertions below only mean anything measured from a
@@ -221,10 +238,19 @@ async function runProbe(width, height, { shot } = {}) {
     clearance.controlsTop !== null &&
     clearance.flipBtns.length > 0 &&
     clearance.flipBtns.every((b) => b.bottom < clearance.controlsTop);
+  // 8px = the badge's 6px drop text-shadow (cards.css: `6px 6px 0
+  // rgba(0,0,0,.45)`) plus a 2px margin so the shadow itself never touches
+  // the bar. Checked both at rest and (via maxBankerBadgeBottomDuringSlam
+  // above) at the deepest point of the slam overshoot.
+  const CLEARANCE_MARGIN = 8;
   out.bankerBadgeClearsControls =
     clearance.controlsTop !== null &&
     clearance.bankerBadgeBottom !== null &&
-    clearance.bankerBadgeBottom < clearance.controlsTop;
+    clearance.bankerBadgeBottom + CLEARANCE_MARGIN < clearance.controlsTop;
+  out.bankerBadgeSlamPeakClearsControls =
+    clearance.controlsTop !== null &&
+    out.maxBankerBadgeBottomDuringSlam !== null &&
+    out.maxBankerBadgeBottomDuringSlam + CLEARANCE_MARGIN < clearance.controlsTop;
 
   // Reveal all -> Settled removes the backdrop
   const revealBtn = page.getByRole("button", { name: "Reveal all" });
@@ -279,7 +305,11 @@ for (const r of results) {
     );
   if (!r.bankerBadgeClearsControls)
     failures.push(
-      `${r.viewport}: Banker's total badge bottom (${r.bankerBadgeBottom}) is not above .controls's top (${r.controlsTop})`,
+      `${r.viewport}: Banker's total badge bottom (${r.bankerBadgeBottom}) + 8 is not above .controls's top (${r.controlsTop})`,
+    );
+  if (!r.bankerBadgeSlamPeakClearsControls)
+    failures.push(
+      `${r.viewport}: Banker's total badge slam-peak bottom (${r.maxBankerBadgeBottomDuringSlam}) + 8 is not above .controls's top (${r.controlsTop})`,
     );
   if (!r.settledReached) failures.push(`${r.viewport}: never reached Settled`);
   if (!r.backdropGoneAfterSettle) failures.push(`${r.viewport}: backdrop still present after Settled`);

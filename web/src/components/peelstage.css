@@ -68,8 +68,13 @@
      (theme.css's --controls-bar-clearance) on the bottom so the last thing
      in the column — the Banker hand's total and "Ask the dealer" — never
      ends up under the bar. Falls back to 0 where the bar isn't fixed (the
-     var is only set inside theme.css's phone/landscape-phone blocks). */
-  padding: 12px 12px calc(var(--controls-bar-clearance, 0px) + 12px);
+     var is only set inside theme.css's phone/landscape-phone blocks).
+     +24px on top of that (not the usual +12px): the Banker total's
+     `.hand-total-num` (cards.css) carries a 6px drop text-shadow and its
+     `.hand-total-badge` plays a `total-slam` keyframe that overshoots to
+     scale(1.5) at its 55% mark — both push painted pixels well past the
+     badge's own layout box, past what a flat 12px reserve covers. */
+  padding: 12px 12px calc(var(--controls-bar-clearance, 0px) + 24px);
   width: 100%;
   /* When the column is taller than the box (a short phone, or a hand that
      grew a third card) let IT scroll instead of clipping under the fixed
@@ -163,22 +168,31 @@
     --peel-card: 104px;
   }
 }
-/* Height governs over width: on a short-AND-narrow phone (e.g. 360x640) the
-   overlay must shrink to fit above the pinned bar even though the 3-card
-   width step above would otherwise leave it at 104px. `.peel-stage.peel-
+/* Height governs over width: on a short phone the overlay must shrink to
+   leave real headroom above the pinned bar for the Banker total badge's
+   painted overflow (drop shadow + slam overshoot — see
+   `.peel-stage-content`'s padding-bottom above), even where the 3-card
+   width step above would otherwise leave it larger. `.peel-stage.peel-
    stage` is a doubled-class selector purely to match the width rule's
    specificity (0,2,0 either way, from one class + one attribute vs. two
    classes) — with specificity tied, the cascade falls back to source order,
    and these rules are declared after the width rule above, so they win
-   whenever both apply. */
-@media (max-height: 760px) {
+   whenever both apply. Steps confirmed against phone-probe-p14b.mjs at
+   390x844 (112, no step applies), 390x664 (96 -> 84 after this revision),
+   360x640 (84 -> 72), and 412x915 (112, no step applies). */
+@media (max-height: 800px) {
   .peel-stage.peel-stage {
     --peel-card: 96px;
   }
 }
-@media (max-height: 660px) {
+@media (max-height: 700px) {
   .peel-stage.peel-stage {
     --peel-card: 84px;
+  }
+}
+@media (max-height: 600px) {
+  .peel-stage.peel-stage {
+    --peel-card: 72px;
   }
 }
 
@@ -190,4 +204,19 @@
    700px) — it does nothing today, verified by phone-probe-p14b.mjs. */
 .peel-stage .dealer-flip-btn {
   min-height: 44px;
+}
+
+/* The Banker total badge's `total-slam` keyframe (cards.css) scales up to
+   1.5x at its 55% mark. cards.css doesn't set a transform-origin, so it
+   defaults to the box's own center — meaning the overshoot pushes the
+   badge's PAINTED bottom edge (already extended past its layout box by the
+   38px number's 6px drop text-shadow) further down again, past the extra
+   reserve above on a short phone (measured via phone-probe-p14b.mjs: at
+   390x664 the resting badge bottom was already only 5px above `.controls`,
+   and the slam peak pushed it another ~20px past that). Anchoring the scale
+   at the badge's own bottom edge instead means growing it only pushes the
+   top upward — the bottom stays put through the whole animation, so the
+   overshoot can never add to what the fixed reserve below has to cover. */
+.peel-stage .hand-total-badge {
+  transform-origin: 50% 100%;
 }
