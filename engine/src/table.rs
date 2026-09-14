@@ -7,7 +7,7 @@ use crate::round::{play_round, RoundResult};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::session::{
     aggregate_payouts, derive_events, fully_revealed, hand_view, BetKind, CardStatus, CommandError,
-    Event, HandView, PhaseTag, PlacedBet, RevealState, ShoeCutReason, ShoeView,
+    Event, HandView, PhaseTag, PlacedBet, RevealState, ShoeCutReason, ShoeView, VoteView,
 };
 use crate::settle::{settle_with, Bet, Ruleset};
 use crate::shoe::{Shoe, CUT_CARD};
@@ -48,6 +48,10 @@ pub enum TableError {
     NothingToTurn,
     /// The cut belongs to the host — someone else tried to cut the shoe.
     NotYourCut,
+    /// A New Shoe vote is already open.
+    VoteOpen,
+    /// No New Shoe vote is open to vote on.
+    NoVote,
     Command(CommandError),
 }
 
@@ -110,6 +114,13 @@ impl Player {
     fn broke(&self, table_min: i64) -> bool {
         self.bankroll < table_min
     }
+}
+
+/// An in-progress New Shoe vote. Only possible in `Phase::Betting`.
+struct Vote {
+    proposer: PlayerId,
+    yes: Vec<PlayerId>,
+    no: Vec<PlayerId>,
 }
 
 enum Phase {
@@ -209,6 +220,8 @@ pub struct Table {
     /// (a view is built after every command, ~8-10× per coup, but the
     /// scoreboard only changes once per settled round).
     sb_cache: std::cell::RefCell<Option<((u32, usize), ScoreboardSnapshot)>>,
+    /// An open New Shoe vote, if any. Only possible during `Phase::Betting`.
+    vote: Option<Vote>,
 }
 
 impl Table {
@@ -235,6 +248,7 @@ impl Table {
             last_round: None,
             settled_on_felt: false,
             sb_cache: std::cell::RefCell::new(None),
+            vote: None,
         }
     }
 
@@ -304,6 +318,95 @@ impl Table {
         Ok(())
     }
 
+    /// Open a New Shoe vote: Betting only, one vote at a time, proposer must
+    /// be seated. The proposer counts as an immediate yes, so a lone seat
+    /// (or any table where that alone is already a majority) passes on the
+    /// spot.
+    pub fn propose_new_shoe(&mut self, pid: PlayerId) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: self.phase_tag(),
+            }
+            .into());
+        }
+        if self.vote.is_some() {
+            return Err(TableError::VoteOpen);
+        }
+        // seated check
+        if !self.players.iter().any(|p| p.id == pid) {
+            return Err(TableError::NoSuchPlayer);
+        }
+        self.vote = Some(Vote { proposer: pid, yes: vec![pid], no: Vec::new() });
+        self.resolve_vote();
+        Ok(())
+    }
+
+    /// Cast (or change) a vote on the open New Shoe proposal. Seated players
+    /// only; a player may switch their vote as many times as they like until
+    /// the vote resolves.
+    pub fn vote_new_shoe(&mut self, pid: PlayerId, yes: bool) -> Result<(), TableError> {
+        if self.vote.is_none() {
+            return Err(TableError::NoVote);
+        }
+        if !self.players.iter().any(|p| p.id == pid) {
+            return Err(TableError::NoSuchPlayer);
+        }
+        let vote = self.vote.as_mut().expect("checked above");
+        vote.yes.retain(|&p| p != pid);
+        vote.no.retain(|&p| p != pid);
+        if yes {
+            vote.yes.push(pid);
+        } else {
+            vote.no.push(pid);
+        }
+        self.resolve_vote();
+        Ok(())
+    }
+
+    /// The server's 30 s timer calls this when an open vote's window elapses
+    /// without a resolution: it fails, same as a decisive "no". A no-op when
+    /// nothing is open (the vote may have already resolved).
+    pub fn vote_expire(&mut self) {
+        self.vote = None;
+    }
+
+    /// Whether a New Shoe vote is currently open.
+    pub fn vote_open(&self) -> bool {
+        self.vote.is_some()
+    }
+
+    /// Resolve the open vote against the current seat count, if any: pass on
+    /// a strict majority yes, fail once a majority can no longer be reached.
+    /// Otherwise the vote stays open. Called after every vote change and
+    /// after a leave.
+    fn resolve_vote(&mut self) {
+        let Some(vote) = &self.vote else { return };
+        let seats = self.players.len();
+        if seats == 0 {
+            // Nobody left to vote — nothing to resolve.
+            self.vote = None;
+            return;
+        }
+        if vote.yes.len() * 2 > seats {
+            // Pass: every seat's staged bets are cleared. Bets are only
+            // staged (not yet drawn from the bankroll), so `bets.clear()`
+            // alone conserves money — there is nothing to refund.
+            for p in &mut self.players {
+                p.bets.clear();
+                p.ready = false;
+                p.payouts = None;
+            }
+            self.phase = Phase::ShoeCut { reason: ShoeCutReason::Vote };
+            self.last_cut = None;
+            self.vote = None;
+        } else if vote.no.len() * 2 >= seats {
+            // Fail: a majority yes can no longer be reached.
+            self.vote = None;
+        }
+        // else: still open, waiting on more votes.
+    }
+
     pub fn seats(&self) -> usize {
         self.players.len()
     }
@@ -367,6 +470,15 @@ impl Table {
         // touches the shoe, history or phase.
         if self.host == Some(pid) {
             self.host = self.players.first().map(|p| p.id);
+        }
+        // An open vote loses the leaver's tally (whether they were the
+        // proposer, a yes or a no — the proposer leaving does not cancel the
+        // vote) and re-resolves against the smaller seat count. If nobody is
+        // left at all, `resolve_vote` clears it.
+        if let Some(vote) = &mut self.vote {
+            vote.yes.retain(|&p| p != pid);
+            vote.no.retain(|&p| p != pid);
+            self.resolve_vote();
         }
         Ok(())
     }
@@ -559,6 +671,12 @@ impl Table {
         let player_squeezer = self.biggest_bettor(crate::settle::BetSpot::Player);
         let banker_squeezer = self.biggest_bettor(crate::settle::BetSpot::Banker);
         self.phase = Phase::Dealing { round, reveal, player_squeezer, banker_squeezer };
+        // An open vote does not block dealing — Betting only waits on
+        // `all_ready`, not on a vote. But the coup dealing while a vote is
+        // open makes the vote moot (its resolution targets Betting), so it
+        // is silently cleared rather than left to resolve into a phase that
+        // has already moved on.
+        self.vote = None;
         Ok(())
     }
 
@@ -968,8 +1086,12 @@ impl Table {
                 _ => None,
             },
             last_cut: self.last_cut,
-            // Filled in by the New Shoe vote (Task 3).
-            vote: None,
+            vote: self.vote.as_ref().map(|v| VoteView {
+                proposer: v.proposer,
+                yes: v.yes.clone(),
+                no: v.no.clone(),
+                needed: (self.players.len() / 2 + 1) as u8,
+            }),
         };
         let viewer_id = viewer.map(|p| p.id);
         // A seat's settled display closes the moment THEY re-bet or sit out
@@ -2984,5 +3106,167 @@ mod shoe_lifecycle_tests {
             assert_eq!(t.shoe_number(), before);
         }
         assert_eq!(t.shoe_number(), cuts);
+    }
+}
+
+#[cfg(test)]
+mod vote_tests {
+    //! The New Shoe majority vote: propose, vote, expire, and the effect of
+    //! a pass on the table.
+    use super::tests::open_table;
+    use super::*;
+    use crate::settle::BetSpot;
+
+    #[test]
+    fn proposer_counts_as_yes_and_a_lone_seat_passes_immediately() {
+        let (mut t, host) = open_table(1);
+        t.propose_new_shoe(host).unwrap();
+        assert!(!t.vote_open());
+        let v = t.view_for(host).unwrap();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::Vote));
+    }
+
+    #[test]
+    fn majority_of_three_passes_on_the_second_yes() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        // 1 yes of 3 seats: 1*2 == 2, not > 3 — still open.
+        assert!(t.vote_open());
+        t.vote_new_shoe(b, true).unwrap();
+        // 2 yes of 3 seats: 2*2 == 4 > 3 — passes.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut);
+    }
+
+    #[test]
+    fn two_nos_of_three_fail() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        let c = t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        t.vote_new_shoe(b, false).unwrap();
+        // 1 no of 3 seats: 1*2 == 2, not >= 3 — still open.
+        assert!(t.vote_open());
+        t.vote_new_shoe(c, false).unwrap();
+        // 2 no of 3 seats: 2*2 == 4 >= 3 — fails.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Betting);
+    }
+
+    #[test]
+    fn expire_fails_an_open_vote() {
+        let (mut t, a) = open_table(1);
+        t.join("b", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        t.vote_expire();
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Betting);
+        // a no-op without an open vote
+        t.vote_expire();
+        assert!(!t.vote_open());
+    }
+
+    #[test]
+    fn a_vote_needs_betting_phase() {
+        let mut t = Table::new(
+            TableConfig { table_min: 100, table_max: 1_000_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            1,
+        );
+        let a = t.join("a", 100_000).unwrap();
+        assert!(matches!(
+            t.propose_new_shoe(a),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut
+            }))
+        ));
+        t.cut_shoe(a, 500).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(a).unwrap();
+        t.deal().unwrap();
+        assert!(matches!(
+            t.propose_new_shoe(a),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing
+            }))
+        ));
+    }
+
+    #[test]
+    fn voter_leaving_recounts() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        let c = t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        t.leave(b).unwrap();
+        // 1 yes of 2 seats: 1*2 == 2, not > 2 — not yet a majority.
+        assert!(t.vote_open(), "1 yes of 2 seats is not yet a majority");
+        t.vote_new_shoe(c, true).unwrap();
+        // 2 yes of 2 seats: 2*2 == 4 > 2 — passes.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut);
+    }
+
+    #[test]
+    fn pass_returns_staged_bets_and_moves_to_shoe_cut() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        let bankroll_before = t.view_for(a).unwrap().bankroll;
+        t.propose_new_shoe(a).unwrap();
+        // 1 yes of 2 seats — not yet a majority.
+        assert!(t.vote_open());
+        t.vote_new_shoe(b, true).unwrap();
+        assert!(!t.vote_open());
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.bankroll, bankroll_before, "bets are staged only — bankroll is untouched");
+        assert!(v.bets.is_empty(), "staged bets are cleared, not settled");
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::Vote));
+        assert_eq!(v.shoe.cutter, Some(a), "the host holds the cut");
+    }
+
+    #[test]
+    fn changing_a_vote_is_allowed_until_resolved() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.join("c", 100_000).unwrap();
+        t.join("d", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        t.vote_new_shoe(b, true).unwrap();
+        // 2 yes of 4 seats: 2*2 == 4, not > 4 — still open.
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a, b]);
+        assert!(v.no.is_empty());
+
+        // b changes their mind to no.
+        t.vote_new_shoe(b, false).unwrap();
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a]);
+        assert_eq!(v.no, vec![b]);
+
+        // and back to yes again.
+        t.vote_new_shoe(b, true).unwrap();
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a, b]);
+        assert!(v.no.is_empty());
+    }
+
+    #[test]
+    fn second_proposal_while_open_is_refused() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        assert_eq!(t.propose_new_shoe(b), Err(TableError::VoteOpen));
     }
 }
