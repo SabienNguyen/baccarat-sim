@@ -191,3 +191,4 @@ test("Clear bets is disabled when nothing is staged", () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   expect(screen.getByRole("button", { name: "Clear bets" })).toBeDisabled();
 });
+

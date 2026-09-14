@@ -1,6 +1,25 @@
 import type { RoundSnapshot } from "../engine/types";
 import "./controls.css";
 
+/**
+ * A button's label as two texts: the full one (always the accessible name —
+ * `aria-hidden` never applies to it, so `getByRole({ name })` and screen
+ * readers keep seeing "Watch hand"/"Reveal all"/etc regardless of viewport)
+ * and a short one (`aria-hidden`, so it never becomes the name) that a phone
+ * media query swaps to visually so the pinned bar's five-plus buttons fit one
+ * row without a label ever losing meaning for anyone but a sighted phone user.
+ */
+function BtnLabel({ full, short }: { full: string; short: string }) {
+  return (
+    <>
+      <span className="btn-label-full">{full}</span>
+      <span className="btn-label-short" aria-hidden="true">
+        {short}
+      </span>
+    </>
+  );
+}
+
 interface ControlsProps {
   snapshot: RoundSnapshot;
   onDeal: () => void;
@@ -13,6 +32,12 @@ interface ControlsProps {
   onToggleExplain?: () => void;
   /** Skip this coup (multiplayer tables). */
   onSitOut?: () => void;
+  /** Declare ready to deal (multiplayer tables) — replaces Deal there. */
+  onReady?: () => void;
+  /** Take back a ready declaration (multiplayer tables). */
+  onUnready?: () => void;
+  /** This seat's own ready flag (multiplayer tables). */
+  myReady?: boolean;
   /** Deal a coup with nothing staked, to watch the shoe (single player). */
   onWatch?: () => void;
   /** At the rail: nothing here moves the game, so only Explain is offered. */
@@ -29,6 +54,9 @@ export function Controls({
   explainOn,
   onToggleExplain,
   onSitOut,
+  onReady,
+  onUnready,
+  myReady = false,
   onWatch,
   spectating = false,
 }: ControlsProps) {
@@ -54,9 +82,20 @@ export function Controls({
 
   return (
     <section aria-label="Controls" className="controls">
-      <button type="button" className="btn" disabled={!betting || !hasBets} onClick={onDeal}>
-        Deal
-      </button>
+      {onSitOut ? (
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={!betting || !hasBets}
+          onClick={myReady ? onUnready : onReady}
+        >
+          {myReady ? "Unready" : "Ready"}
+        </button>
+      ) : (
+        <button type="button" className="btn btn--primary" disabled={!betting || !hasBets} onClick={onDeal}>
+          Deal
+        </button>
+      )}
       {onSitOut && (
         <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onSitOut}>
           Sit out
@@ -66,12 +105,12 @@ export function Controls({
           Only offered while the felt is empty — once you've bet, Deal is the move. */}
       {onWatch && !hasBets && (
         <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onWatch}>
-          Watch hand
+          <BtnLabel full="Watch hand" short="Watch" />
         </button>
       )}
       {onRevealAll && (
         <button type="button" className="btn" disabled={!dealing} onClick={onRevealAll}>
-          Reveal all
+          <BtnLabel full="Reveal all" short="Reveal" />
         </button>
       )}
       {onSettle && (
@@ -81,11 +120,11 @@ export function Controls({
       )}
       {onNewHand && (
         <button type="button" className="btn" disabled={!settled} onClick={onNewHand}>
-          Next hand
+          <BtnLabel full="Next hand" short="Next" />
         </button>
       )}
       <button type="button" className="btn" disabled={dealing} onClick={onNewShoe}>
-        New Shoe
+        <BtnLabel full="New Shoe" short="Shoe" />
       </button>
       <button
         type="button"

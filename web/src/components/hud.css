@@ -10,7 +10,7 @@
 }
 .hud-title {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: round(calc(14px * var(--ui-scale)), 1px);
   color: var(--gold);
   text-shadow: 2px 2px 0 var(--ink);
   margin: 0 0 6px;
@@ -32,19 +32,19 @@
 }
 .hud-box-label {
   font-family: var(--font-display);
-  font-size: 8px;
+  font-size: round(calc(8px * var(--ui-scale)), 1px);
   letter-spacing: 1px;
   color: var(--accent-2);
   text-transform: uppercase;
 }
 .hud-box-value {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: round(calc(17px * var(--ui-scale)), 1px);
   color: #fff;
   text-shadow: 2px 2px 0 var(--ink);
 }
 .hud-box-value--small {
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   line-height: 1.6;
   text-align: center;
 }
@@ -61,11 +61,11 @@
 /* the money is the star */
 .hud-box--bankroll .hud-box-value {
   color: var(--gold);
-  font-size: 19px;
+  font-size: round(calc(19px * var(--ui-scale)), 1px);
 }
 /* phase reads as a status light */
 .hud-box-value--phase {
-  font-size: 12px;
+  font-size: round(calc(12px * var(--ui-scale)), 1px);
 }
 .hud-box[data-phase="Betting"] .hud-box-value--phase {
   color: #7ec8ff;
@@ -78,6 +78,16 @@
 }
 .hud-box--outcome .hud-box-value--small {
   color: var(--gold);
+}
+/* Outcome/payouts are always mounted now (P14, see Hud.tsx) so the phone
+   media query below can reserve their space up front; off the phone they
+   still hide exactly like the old conditional mount when there's nothing to
+   show. */
+.hud-box--outcome[data-has-outcome="false"] {
+  display: none;
+}
+.hud-payouts[data-has-payouts="false"] {
+  display: none;
 }
 
 .hud-payouts {
@@ -98,7 +108,7 @@
   border-radius: 6px;
   padding: 5px 10px;
   font-family: var(--font-text);
-  font-size: 17px;
+  font-size: round(calc(17px * var(--ui-scale)), 1px);
 }
 .hud-payout-bet {
   color: #f3eede;
@@ -112,7 +122,7 @@
 
 .hud-error {
   color: var(--chip-red);
-  font-size: 16px;
+  font-size: round(calc(16px * var(--ui-scale)), 1px);
   margin: 0;
   font-family: var(--font-text);
 }
@@ -123,7 +133,7 @@
 }
 .hud-action {
   font-family: var(--font-display);
-  font-size: 8px;
+  font-size: round(calc(8px * var(--ui-scale)), 1px);
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 2px solid var(--ink);
@@ -140,7 +150,7 @@
 }
 .hud-seat {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #1a1208;
   background: var(--gold);
   border: 2px solid var(--ink);
@@ -173,6 +183,126 @@
 }
 .hud-goal-pct {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: var(--gold);
+}
+
+/* --- phone type floor + 44px tap targets (P12) ---
+   Nothing in the pixel display font renders below 10px here: 8px labels go to
+   10px, the 9px goal percentage to 11px. Reset bank / Lobby measured 89x30 and
+   59x30 (tap targets, not just type) — min-height plus taller padding gets both
+   to 44px without widening the row past what the two-column phone HUD has. */
+/* --- short laptops (#18): 1280x720 / 1366x768 ---
+   The 460px floor (there to mirror the roads dock) plus roomy box padding
+   cost more height than a shrunk stage column needed. */
+@media (min-width: 701px) and (max-height: 800px) {
+  .hud {
+    min-height: 0;
+    gap: 8px;
+  }
+  .hud-box {
+    padding: 6px 10px;
+    gap: 4px;
+  }
+  .hud-payouts {
+    gap: 4px;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .hud-box-label {
+    font-size: 10px;
+  }
+  .hud-goal-pct {
+    font-size: 11px;
+  }
+  .hud-action {
+    font-size: 10px;
+    min-height: 44px;
+    /* tight horizontal padding: Reset bank + Lobby have to share the HUD's
+       narrow second column beside the volume control without wrapping (which
+       would stretch that whole grid row to two lines' worth of height) */
+    padding: 10px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hud-actions {
+    gap: 5px;
+  }
+  .hud-seat {
+    font-size: 10px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* --- P14: no HUD growth at settle ---
+   `.hud-box--outcome` and `.hud-payouts` are always mounted now (Hud.tsx) so
+   they can hold a FIXED height here from the very first Betting frame —
+   empty (data-has-*="false") or full, the box is the same size, so the felt
+   below never moves when the coup settles. `overflow-y: auto` on the payouts
+   list is the safety valve for a hand with more bets than the reserved slot
+   can show at once (rare — the probe's single-Player-bet run never needs it)
+   instead of growing the box, which would defeat the whole point. */
+@media (max-width: 700px) {
+  .app > .hud .hud-box--outcome,
+  .app > .hud .hud-payouts {
+    display: flex;
+  }
+  .app > .hud .hud-box--outcome {
+    height: 34px;
+    overflow: hidden;
+  }
+  .app > .hud .hud-box--outcome[data-has-outcome="false"] {
+    visibility: hidden;
+  }
+  .app > .hud .hud-payouts {
+    height: 40px;
+    overflow-y: auto;
+    gap: 4px;
+  }
+  .app > .hud .hud-payouts[data-has-payouts="false"] {
+    visibility: hidden;
+  }
+  .app > .hud .hud-payouts li {
+    font-size: 12px;
+    padding: 3px 8px;
+  }
+}
+
+/* --- landscape phones (T5, #19): compact HUD ---
+   Only three boxes worth their space at ~340px tall: bankroll, phase, table
+   limits. Goal/outcome/payouts/volume/reset-lobby all collapse — the rail
+   below needs the room more than they do. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app > .hud {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 6px;
+    justify-content: flex-start;
+  }
+  .app > .hud .hud-title,
+  .app > .hud .hud-box--goal,
+  .app > .hud .hud-box--outcome,
+  .app > .hud .hud-payouts,
+  .app > .hud .volume,
+  .app > .hud .hud-actions {
+    display: none;
+  }
+  .app > .hud .hud-box {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+  }
+  .app > .hud .hud-box--bankroll .hud-box-value {
+    font-size: 15px;
+  }
 }

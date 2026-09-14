@@ -3,7 +3,7 @@ import { derivedRoad, nextMarks } from "./roadForecast";
 import type { BigRoad, BigRoadCell, Side } from "./engine/types";
 
 function cell(side: Side): BigRoadCell {
-  return { side, ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false };
+  return { side, ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false };
 }
 
 /** Build a Big Road from a win sequence the way the engine does (ties aside). */

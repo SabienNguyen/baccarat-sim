@@ -308,6 +308,7 @@ export function SqueezeCard({ card, onPeek, onReveal }: SqueezeCardProps) {
     <div
       ref={wrapperRef}
       role="button"
+      className="squeeze-wrapper"
       // a folding card rises above its neighbors — the wrapper must carry
       // the z-order, since the card's own z-index can't escape it
       style={{

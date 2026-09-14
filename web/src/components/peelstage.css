@@ -1,0 +1,222 @@
+/* T8b (revised — owner direction 2026-09-13): "instead of going to a
+   different view ... just a slightly faded and darkened background and the
+   cards come back to the front". This is an OVERLAY over the still-mounted
+   page (HUD, bet rail, roads all sit behind it, dimmed) — not a separate
+   view — and it sits UNDER the pinned action bar (z-index 45 in theme.css's
+   phone block) so Reveal/Explain/Settle stay reachable while it's up. */
+.peel-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  /* the stage's own box must not swallow taps meant for the felt beneath
+     it anywhere it isn't actually painting something on top — only the
+     backdrop and the content block (both explicit children below) opt back
+     into pointer-events. */
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  --peel-card: 112px;
+}
+
+.peel-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 200ms ease;
+}
+/* A cheap blur only when motion is welcome — backdrop-filter is not free on
+   every phone GPU, and reduced-motion already asks for calmer chrome. */
+@media (prefers-reduced-motion: no-preference) {
+  .peel-backdrop {
+    backdrop-filter: blur(2px);
+  }
+}
+.peel-stage--visible .peel-backdrop {
+  opacity: 1;
+}
+.peel-stage--leaving .peel-backdrop {
+  transition-duration: 150ms;
+  opacity: 0;
+}
+
+.peel-stage-content {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* `center` alone clips whichever end overflows once the column has to
+     scroll (see the overflow rules below) — Chromium's `safe center` keeps
+     centring the common case that fits, but falls back to start-alignment
+     the moment content is taller than the box, so both the top (dealer
+     line) and the bottom (Ask the dealer / Banker total) stay reachable by
+     scrolling instead of one end being permanently cropped. */
+  justify-content: safe center;
+  gap: 12px;
+  box-sizing: border-box;
+  /* `100vh` first as a fallback for engines without dvh support; `100dvh`
+     overrides it so the box tracks the *visible* viewport once a mobile
+     browser's chrome (address bar) collapses, instead of leaving a gap or
+     an overflow sized for the tallest possible viewport. */
+  height: 100vh;
+  height: 100dvh;
+  /* 12px on every side, plus the pinned action bar's own reserved height
+     (theme.css's --controls-bar-clearance) on the bottom so the last thing
+     in the column — the Banker hand's total and "Ask the dealer" — never
+     ends up under the bar. Falls back to 0 where the bar isn't fixed (the
+     var is only set inside theme.css's phone/landscape-phone blocks).
+     +24px on top of that (not the usual +12px): the Banker total's
+     `.hand-total-num` (cards.css) carries a 6px drop text-shadow and its
+     `.hand-total-badge` plays a `total-slam` keyframe that overshoots to
+     scale(1.5) at its 55% mark — both push painted pixels well past the
+     badge's own layout box, past what a flat 12px reserve covers. */
+  padding: 12px 12px calc(var(--controls-bar-clearance, 0px) + 24px);
+  width: 100%;
+  /* When the column is taller than the box (a short phone, or a hand that
+     grew a third card) let IT scroll instead of clipping under the fixed
+     bar. `overscroll-behavior: contain` keeps that scroll from chaining
+     into the locked page scroll behind the overlay. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.peel-stage .dealer-line {
+  flex: 0 0 auto;
+}
+
+.peel-stage-hands {
+  /* `0 1 auto` (not `1 1 auto`): this column must not stretch to fill and
+     then get squashed by the flex algorithm — it should sit at its natural
+     (content) height so `.peel-stage-content`'s own overflow/scroll above
+     is what handles a too-tall column, not a flex-basis fight. `min-height:
+     0` still matters so a flex child is even allowed to shrink below its
+     content size when a browser's default `auto` minimum would refuse to. */
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  /* "the cards come back to the front": the hands scale in from just under
+     full size as the backdrop fades, reading as the cards approaching the
+     viewer rather than the view simply changing. */
+  transform: scale(0.85);
+  opacity: 0;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
+}
+.peel-stage--visible .peel-stage-hands {
+  transform: scale(1);
+  opacity: 1;
+}
+.peel-stage--leaving .peel-stage-hands {
+  transition-duration: 150ms;
+  transform: scale(0.85);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .peel-stage-hands {
+    transition: opacity 150ms ease;
+    transform: none;
+  }
+  .peel-stage--visible .peel-stage-hands {
+    transform: none;
+  }
+  .peel-stage--leaving .peel-stage-hands {
+    transform: none;
+  }
+}
+
+.peel-stage .hand {
+  width: 100%;
+  /* Reserve the total badge's footprint up front so the layout doesn't jump
+     the instant a card turns face-up and `.hand-total-badge` (Hand.tsx)
+     mounts — without this the Banker hand (and the "Ask the dealer" group
+     that sits right above its badge) visibly shifts down under the pinned
+     action bar the moment the total appears. 57px = the badge's own
+     measured height (49px, phone-probe-p14b.mjs @ 390x844, tier=mid, first
+     card revealed) plus the 8px of gap/margin between the card row and the
+     badge (.hand's 4px flex gap + .hand-total-badge's 4px margin-top, both
+     in cards.css) — i.e. everything below the card row, so the reservation
+     holds regardless of which card step (below) is active. */
+  min-height: calc(var(--peel-card) * 1.43 + 57px);
+}
+
+.peel-stage .hand-cards {
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Card sizing: 112px fits three cards a side down to a 376px-wide phone
+   (3 * 112 + 2 * 8px gap = 352px <= viewport(376) - 2 * 12px padding = 352).
+   Narrower than that (e.g. 360/375px) a 3-card hand steps down to 104px
+   (3 * 104 + 16 = 328 <= 336). A 2-card hand never needs the smaller step —
+   2 * 112 + 8 = 232 fits any phone width. */
+.peel-stage .card {
+  width: var(--peel-card);
+  height: calc(var(--peel-card) * 1.43);
+}
+@media (max-width: 375px) {
+  .peel-stage[data-cards="3"] {
+    --peel-card: 104px;
+  }
+}
+/* Height governs over width: on a short phone the overlay must shrink to
+   leave real headroom above the pinned bar for the Banker total badge's
+   painted overflow (drop shadow + slam overshoot — see
+   `.peel-stage-content`'s padding-bottom above), even where the 3-card
+   width step above would otherwise leave it larger. `.peel-stage.peel-
+   stage` is a doubled-class selector purely to match the width rule's
+   specificity (0,2,0 either way, from one class + one attribute vs. two
+   classes) — with specificity tied, the cascade falls back to source order,
+   and these rules are declared after the width rule above, so they win
+   whenever both apply. Steps confirmed against phone-probe-p14b.mjs at
+   390x844 (112, no step applies), 390x664 (96 -> 84 after this revision),
+   360x640 (84 -> 72), and 412x915 (112, no step applies). */
+@media (max-height: 800px) {
+  .peel-stage.peel-stage {
+    --peel-card: 96px;
+  }
+}
+@media (max-height: 700px) {
+  .peel-stage.peel-stage {
+    --peel-card: 84px;
+  }
+}
+@media (max-height: 600px) {
+  .peel-stage.peel-stage {
+    --peel-card: 72px;
+  }
+}
+
+/* "Ask the dealer" inside the overlay: dealerflip.css already floors the
+   buttons at 44px tall under its own `max-width: 700px` phone rule, which
+   covers every viewport the peel overlay itself ever renders at (it only
+   mounts when `isPhoneLike()`). This rule is a belt-and-braces backstop in
+   case that assumption ever drifts (e.g. a coarse-pointer tablet wider than
+   700px) — it does nothing today, verified by phone-probe-p14b.mjs. */
+.peel-stage .dealer-flip-btn {
+  min-height: 44px;
+}
+
+/* The Banker total badge's `total-slam` keyframe (cards.css) scales up to
+   1.5x at its 55% mark. cards.css doesn't set a transform-origin, so it
+   defaults to the box's own center — meaning the overshoot pushes the
+   badge's PAINTED bottom edge (already extended past its layout box by the
+   38px number's 6px drop text-shadow) further down again, past the extra
+   reserve above on a short phone (measured via phone-probe-p14b.mjs: at
+   390x664 the resting badge bottom was already only 5px above `.controls`,
+   and the slam peak pushed it another ~20px past that). Anchoring the scale
+   at the badge's own bottom edge instead means growing it only pushes the
+   top upward — the bottom stays put through the whole animation, so the
+   overshoot can never add to what the fixed reserve below has to cover. */
+.peel-stage .hand-total-badge {
+  transform-origin: 50% 100%;
+}

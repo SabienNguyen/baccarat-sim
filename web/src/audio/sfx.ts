@@ -62,7 +62,10 @@ function ensureContext(): AudioContext | null {
       return null;
     }
   }
-  if (ctx.state === "suspended") void ctx.resume().catch(() => {});
+  // Muted means idle: resuming here would undo the suspend setMuted(true)
+  // (or a hidden-tab suspend) just did. Only an audible level may wake the
+  // context; setMuted(false) resumes explicitly once it flips the setting.
+  if (ctx.state === "suspended" && masterLevel() > 0) void ctx.resume().catch(() => {});
   return ctx;
 }
 
@@ -76,6 +79,29 @@ export function setMuted(muted: boolean): void {
   ensureSettings();
   settings = { ...settings, muted };
   applyLevel();
+  // Zeroing the gain still leaves the whole graph (noise buffers, LFOs,
+  // the lounge loop's setTimeout chain) rendering silently. Suspend the
+  // context too so muted really means idle, not just quiet.
+  if (muted) suspendAudio();
+  else resumeAudio();
+}
+
+/** Stop the AudioContext from rendering at all (mute, or the tab going to
+ *  the background). A no-op without a context or already suspended. */
+export function suspendAudio(): void {
+  if (ctx && ctx.state === "running") void ctx.suspend().catch(() => {});
+}
+
+/** Bring the context back so sound can resume (unmute, or the tab coming
+ *  back to the foreground). A no-op without a context or already running. */
+export function resumeAudio(): void {
+  ensureSettings();
+  // A no-op while muted: resuming would leave a silent context rendering,
+  // which is exactly the "muted only zeroed the gain" bug this exists to
+  // close. setMuted(false) updates the setting before calling this, so
+  // unmuting still resumes.
+  if (masterLevel() === 0) return;
+  if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => {});
 }
 
 /**
@@ -338,4 +364,10 @@ export function stopAmbience(): void {
   stopLounge();
   ambience?.stop();
   ambience = null;
+}
+
+/** Whether the casino-floor bed is currently running — so a caller (the
+ *  visibility handler) knows whether to restart it after a suspend. */
+export function isAmbiencePlaying(): boolean {
+  return ambience !== null;
 }

@@ -9,13 +9,13 @@
   /* Road geometry. Every cell, glyph, ring, dot and board heading derives
      from --road-cell so the full board can shrink as one piece; the full
      roads window sets it from useFitCells(), the right rail keeps 27px. */
-  --road-cell: 27px;
+  --road-cell: round(calc(27px * var(--ui-scale)), 1px);
   --road-gap: 3px;
   --road-pitch: calc(var(--road-cell) + var(--road-gap));
 }
 .board h4 {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   color: var(--gold);
   margin: 0 0 10px;
   letter-spacing: 1px;
@@ -37,7 +37,7 @@
 }
 .road-title-trad {
   font-family: var(--font-text);
-  font-size: 15px;
+  font-size: round(calc(15px * var(--ui-scale)), 1px);
   letter-spacing: 0;
   color: var(--accent-2);
   text-shadow: 1px 1px 0 var(--ink);
@@ -211,7 +211,8 @@
 /* --- marks a real pit display stamps on a Big Road cell ---
    Pair dots keep the traditional positions (Player top-left in blue, Banker
    bottom-right in red); square rather than round so they sit with the game's
-   pixel look. The animal token takes the free bottom-left corner. */
+   pixel look. The animal token takes the free bottom-left corner, which
+   leaves the top-right corner free for the natural's gold dot. */
 .pair-dot {
   position: absolute;
   width: calc(var(--road-cell) * 6 / 27);
@@ -242,6 +243,18 @@
   pointer-events: none;
   filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.35));
 }
+/* natural: the Macau-board convention is a gold dot. Same square pip as the
+   pair dots, in the one corner they and the bonus token leave free. */
+.natural-dot {
+  position: absolute;
+  top: calc(var(--road-cell) * -3 / 27);
+  right: calc(var(--road-cell) * -3 / 27);
+  width: calc(var(--road-cell) * 6 / 27);
+  height: calc(var(--road-cell) * 6 / 27);
+  border: 1px solid var(--ink);
+  background: var(--gold);
+  pointer-events: none;
+}
 
 /* derived roads: the red/blue mark is now a food icon sitting straight on the
    paper — no ring, no disc — but the cell keeps its footprint so the columns
@@ -269,7 +282,7 @@
 }
 .tally {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   color: #fff;
   border: 2px solid var(--ink);
   border-radius: 6px;
@@ -290,7 +303,7 @@
 .full-roads-btn {
   align-self: center;
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
@@ -504,6 +517,14 @@
   height: calc(var(--road-cell) * 8 / 27);
   margin: 0 auto;
 }
+/* same treatment for the natural's gold dot, in the tally panel */
+.natural-dot--inline {
+  position: static;
+  display: block;
+  width: calc(var(--road-cell) * 8 / 27);
+  height: calc(var(--road-cell) * 8 / 27);
+  margin: 0 auto;
+}
 .board-card .board-value {
   text-align: right;
   color: var(--gold);
@@ -556,9 +577,36 @@
   background: var(--road-paper);
 }
 
+/* Tablets (T5, #19): the "half-screen" 2-column layout (theme.css,
+   max-width: 1040px) puts the board in its own column beside the HUD, but at
+   the fixed 27px cell the Big Road grid stays its desktop width and leaves a
+   dead band beside it in the wider tablet column. Scale the cell up so the
+   road actually fills the column instead of floating in it — every road,
+   the bead plate and the tally derive from --road-cell already, so this is
+   a one-line fix. */
+@media (min-width: 701px) and (max-width: 1040px) {
+  .board {
+    --road-cell: 34px;
+  }
+}
+
 /* phones: the board stacks and scrolls instead of fitting (useFitCells
    stands down under 700px), the three cards share a row where they fit */
 @media (max-width: 700px) {
+  /* Type floor (P12): road headings and win-count tallies were 11px. */
+  .board h4 {
+    font-size: 12px;
+  }
+  .tally {
+    font-size: 12px;
+  }
+  /* "Full roads" measured 102x35 at 9px text — 44px tap target via
+     min-height/padding, not a wider button than the dock needs. */
+  .full-roads-btn {
+    font-size: 11px;
+    min-height: 44px;
+    padding: 10px 14px;
+  }
   .roads-backdrop {
     padding: 8px;
   }
@@ -588,5 +636,24 @@
   }
   .roads-bottom {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- short laptops (#18): 1280x720 / 1366x768 --- */
+@media (min-width: 701px) and (max-height: 800px) {
+  .board {
+    /* the 460px floor (there to mirror the HUD column) was taller than the
+       shrunk felt column needed and forced extra document height */
+    min-height: 0;
+    gap: 8px;
+    justify-content: flex-start;
+    /* .board is the first child of the now-scrollable .board-dock (see
+       theme.css) — sticking it to the top keeps Big Road + the tally +
+       "Full roads" always visible while only an open Explain panel, below
+       it, scrolls out of view */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    --road-cell: 20px;
   }
 }

@@ -51,6 +51,24 @@
      reads as "&") and Pixelify Sans too (its "5" reads as "S"). */
   --font-display: "Silkscreen", ui-monospace, monospace;
   --font-text: "VT323", ui-monospace, monospace;
+  /* Large-screen scale (#20): 1560px felt on a 2560/3440-wide monitor fills
+     ~25% of the screen with 8-9px labels. Rather than raise the max-width cap
+     alone (which just adds dead felt), --ui-scale grows the cards and pixel
+     type together in whole-pixel steps so the art stays crisp — applied via
+     calc()/round() on the card, road-cell, and type-size variables in
+     cards.css, hud.css, betrail.css, controls.css and dealer.css. */
+  --ui-scale: 1;
+}
+
+@media (min-width: 1920px) and (min-height: 1000px) {
+  :root {
+    --ui-scale: 1.25;
+  }
+}
+@media (min-width: 2560px) and (min-height: 1300px) {
+  :root {
+    --ui-scale: 1.5;
+  }
 }
 
 * {
@@ -71,7 +89,16 @@ body {
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04), transparent 60%);
   background-attachment: fixed;
   background-size: 140% 140%, 160% 160%, 200% 200%;
-  animation: felt-swirl 40s ease-in-out infinite alternate;
+}
+
+/* The drift is a fine-pointer, real-estate-to-spare treat: on a phone/tablet
+ * (coarse pointer, or a narrow viewport) it re-rasterises three full-viewport
+ * gradients every frame for no informational payoff, so the felt is static
+ * there instead. */
+@media (pointer: fine) and (min-width: 701px) {
+  body {
+    animation: felt-swirl 40s ease-in-out infinite alternate;
+  }
 }
 
 /* Touch devices only: kill the iOS rubber-band / pull-to-refresh bounce so the
@@ -98,6 +125,13 @@ body {
   body {
     animation: none;
   }
+}
+
+/* Backgrounded tab / locked phone: installSleepOnHide (audio/sleep.ts) toggles
+ * this on <html> from a `visibilitychange` listener. Freeze every animation
+ * in one shot rather than hunt down each one individually. */
+.hidden * {
+  animation-play-state: paused !important;
 }
 
 /* Shared beveled panel look used by the HUD and scoreboard docks. */
@@ -129,8 +163,10 @@ body {
     max(16px, env(safe-area-inset-right))
     max(16px, env(safe-area-inset-bottom))
     max(16px, env(safe-area-inset-left));
-  /* keep the table, HUD, and roads clustered on big screens */
-  max-width: 1560px;
+  /* keep the table, HUD, and roads clustered on big screens; the cap itself
+     grows with --ui-scale so the extra room goes to a bigger table, not dead
+     felt (see the --ui-scale block above and its media queries below) */
+  max-width: round(calc(1560px * var(--ui-scale)), 1px);
   margin: 0 auto;
   /* center each column vertically so the table doesn't pool at the top */
   align-items: center;
@@ -169,6 +205,30 @@ body {
   }
 }
 
+/* --- short laptops (#18): 1280x720 / 1366x768 overflowed the viewport by
+       100-190px (dealer bubble + roads header scrolled off the top, or the
+       chip row + third-card table fell below the fold), and clicking a spot
+       auto-scrolled the page to bring it back into view. Tighten the rhythm
+       further than the 880px step, and stop the roads dock from being able
+       to grow past the viewport at all. --- */
+@media (min-width: 701px) and (max-height: 800px) {
+  .app {
+    padding: 4px 16px;
+    gap: 10px;
+  }
+  .app > .stage {
+    gap: 6px;
+  }
+  /* the roads dock (Scoreboard + Explain, when open) can outgrow the felt's
+     column once both are showing — cap it to the viewport and let it scroll
+     internally instead of pushing the document taller than the screen */
+  .app > .board-dock {
+    max-height: calc(100vh - 8px);
+    max-height: calc(100dvh - 8px);
+    overflow-y: auto;
+  }
+}
+
 /* --- responsive: shrink the side columns first --- */
 @media (max-width: 1340px) {
   .app {
@@ -198,6 +258,18 @@ body {
        core loop — see your roll, place chips, act — and lets the roads and the
        Explain panel scroll below as reference. --- */
 @media (max-width: 700px) {
+  :root {
+    /* P12 made the bar one row in every phase (short labels + a tighter,
+       nowrap flex layout in controls.css) — measured 62px in Betting (5
+       buttons), Dealing and Settled alike, at both 390 and 360 wide. The old
+       114px here was reserved for Betting's now-eliminated second row. */
+    --controls-bar-clearance: calc(62px + env(safe-area-inset-bottom));
+  }
+  /* The document (not `.app`) is what actually scrolls here, so this is
+     where `scrollIntoView`/`:target` need to stop short of the fixed bar. */
+  html {
+    scroll-padding-bottom: var(--controls-bar-clearance);
+  }
   .app {
     grid-template-columns: 1fr;
     /* HUD first: the bankroll is the one number you must never scroll for. */
@@ -213,7 +285,7 @@ body {
     padding:
       max(10px, env(safe-area-inset-top))
       max(10px, env(safe-area-inset-right))
-      calc(64px + env(safe-area-inset-bottom))
+      var(--controls-bar-clearance)
       max(10px, env(safe-area-inset-left));
   }
   .app .hud,
@@ -242,6 +314,7 @@ body {
   /* bankroll spans the full width — it's the headline number */
   .app > .hud .hud-box--bankroll,
   .app > .hud .hud-box--goal,
+  .app > .hud .hud-box--outcome,
   .app > .hud .hud-payouts,
   .app > .hud .hud-actions {
     grid-column: 1 / -1;
@@ -289,10 +362,122 @@ body {
     background: rgba(11, 61, 46, 0.94);
     border-top: 2px solid var(--ink);
     box-shadow: 0 -3px 0 rgba(0, 0, 0, 0.35);
+    /* The bar's own box only ever has buttons and gaps in it, but its
+       bounding box always spans the full width — including the gaps
+       between buttons and any margin the bar has over the felt below.
+       Without this, a tap that lands in that dead space (or on content
+       the bar happens to be sitting over) is swallowed by the bar div
+       instead of falling through to the felt underneath. */
+    pointer-events: none;
   }
-  /* comfortable thumb targets on the pinned bar */
+  /* ...and restore it on the actual interactive children so the buttons
+     themselves still take taps. */
   .app > .stage > .controls .btn {
-    min-height: 44px;
-    flex: 1 1 auto;
+    pointer-events: auto;
+  }
+  /* Sizing/one-row layout itself lives in controls.css (min-width/height,
+     flex-basis, font floor, short-label swap) — this file only owns the bar's
+     position, background and the taps-fall-through behaviour above. */
+}
+
+/* --- landscape phones: 844x390 / 780x360 get their own two-column layout,
+       not the width-gated desktop stack above. A landscape phone is short,
+       not narrow — height is the scarce axis here, so this block is gated on
+       orientation + max-height, independent of the width breakpoints above,
+       and comes last so it wins the cascade over both the >=1041px 3-column
+       grid and (on a genuinely narrow-and-short phone) the <=700px stack.
+       Left column (~58%): dealer line, both hands, the action bar INLINE
+       under the felt (not fixed — there's no room to reserve a fixed bar's
+       height twice). Right column (~42%): the compact HUD (hud.css) above
+       the bet rail (spots one row, chips one row — betrail.css). Roads/board
+       run full width below and scroll with the page. --- */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    /* No fixed bar here, so no phantom clearance reserved for one. */
+    --controls-bar-clearance: 0px;
+  }
+  html {
+    scroll-padding-bottom: 0;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+    grid-template-areas:
+      "seats seats"
+      "dealer hud"
+      "cards rail"
+      "controls rail"
+      "board board";
+    align-items: start;
+    min-height: 0;
+    gap: 6px;
+    padding:
+      max(6px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      max(6px, env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+  }
+  /* .stage is a flex column in the DOM (dealer-slot, card-stage, controls,
+     bet-rail as siblings) but the two-column split above needs the bet rail
+     in the right column while the felt stays left — `display: contents`
+     un-boxes .stage so its own children become direct grid items of .app,
+     placeable by the areas above. */
+  .app > .stage {
+    display: contents;
+  }
+  .app > .stage > .seats-strip {
+    grid-area: seats;
+  }
+  .app > .stage > .dealer-slot {
+    grid-area: dealer;
+  }
+  .app > .stage > .card-stage {
+    grid-area: cards;
+  }
+  .app > .stage > .controls {
+    grid-area: controls;
+  }
+  .app > .stage > .bet-rail {
+    grid-area: rail;
+  }
+  /* The bonus nudge has no home in this split (it isn't part of the task's
+     core loop) — park it with the rail rather than let it auto-place into a
+     random implicit cell. */
+  .app > .stage > .bonus-nudge {
+    grid-area: rail;
+  }
+  .app > .hud {
+    grid-area: hud;
+  }
+  .app > .board-dock {
+    grid-area: board;
+  }
+  .app .hud,
+  .app .board {
+    min-height: 0;
+    justify-content: flex-start;
+  }
+
+  /* Action bar: inline under the felt, not pinned — a fixed bar would eat a
+     chunk of the ~340px of height this layout can't spare twice over (once
+     for its own row, once for the fixed bar's reserved clearance). */
+  .app > .stage > .controls {
+    position: static;
+    width: 100%;
+    padding: 0;
+    background: none;
+    border-top: none;
+    box-shadow: none;
+    pointer-events: auto;
+  }
+  /* cards.css reserves a tall `.card-stage` (196px in this width range) so a
+     dealt card never shifts the page — this layout has no page to shift
+     (the felt sits in a fixed-height row of its own), so that reserve is
+     pure dead space between the hands and the action bar. Cards stay 84x120
+     at this width (cards.css, max-width:1240px step); a plain hand measures
+     ~128px including its label and total badge. */
+  .app > .stage > .card-stage {
+    min-height: 132px;
   }
 }
+

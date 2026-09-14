@@ -94,7 +94,8 @@ the biggest Banker bettor holds the Banker cards, and the house dealer turns any
 hand nobody bet — one card per beat, announced. Only the holder gets the squeeze
 gesture, peeks follow the ritual order, and the Player squeezer's flip request
 is validated by the server before the table hears it. Every coup is opt-in: bet
-or sit out, and the deal waits for the table.
+or sit out, and everyone at the table readies up before the dealer deals — the
+coup goes as soon as the last seat is ready, no separate Deal press needed.
 
 Nobody can freeze the table: a squeezer whose connection drops has 8 seconds to
 come back before the dealer turns that hand himself, and one who simply stops
@@ -181,6 +182,10 @@ For multiplayer, run the table server alongside the dev server (Vite proxies
 cargo run -p baccarat-server   # listens on PORT (default 8788)
 ```
 
+`npm run phones` opens several phone-emulated browser windows against your
+local server for manual multiplayer testing — see
+[`docs/TESTING.md`](docs/TESTING.md).
+
 <details>
 <summary><b>Deploying the table service</b></summary>
 
@@ -221,8 +226,9 @@ with the table service on Fly at `table.baccarat-sim.com`. **Single player** —
 three tables, win goals, bust-outs, persistent bankrolls, dealer flip requests,
 the full roads board — and **multiplayer** — public/private rooms, authentic
 squeeze rights, a paced house dealer, seats held through a disconnect, a squeeze
-grace and clock so no one seat can stall a hand, and a table that deals on past
-anyone out of chips.
+grace and clock so no one seat can stall a hand, a table that deals on past
+anyone out of chips, and every seat's bets visible to the whole table as
+tokens under their name in the seat strip.
 
 As of 2026-09-10: `cargo test` 216 passed (5 ignored: informational tables and
 a microbenchmark), `vitest` 435 passed. The site plays single player with no

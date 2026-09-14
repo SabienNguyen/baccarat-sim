@@ -40,10 +40,20 @@ function fakeSession(result: CommandResult, initial?: RoundSnapshot): GameSessio
   };
 }
 
-test("starts with the smallest denomination armed and no error", () => {
+test("starts with the smallest playable denomination armed and no error", () => {
+  // the fake table posts a $5 minimum; the $1 top-up chip must not be the first armed (F18)
   const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
-  expect(store.getState().selectedChip).toBe(100);
+  expect(store.getState().selectedChip).toBe(500);
   expect(store.getState().lastError).toBeNull();
+});
+
+test("a mid-tier rack arms the $25 chip, not the $5 top-up chip below the minimum", () => {
+  const snap = snapshotWith({ table_min: 2500, table_max: 500_000 });
+  const store = createGameStore(
+    fakeSession({ ok: true, snapshot: snap }, snap),
+    [500, 2500, 10000, 50000, 100000, 500000],
+  );
+  expect(store.getState().selectedChip).toBe(2500);
 });
 
 test("selectChip arms a denomination", () => {

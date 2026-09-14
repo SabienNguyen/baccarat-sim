@@ -6,7 +6,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { RoundSnapshot } from "../engine/types";
 import type { GameState } from "../store/gameStore";
-import { tableSpec, type TableTier } from "../tables";
+import { tableSpec, defaultChip, type TableTier } from "../tables";
 import { lastFlipBetween } from "../cards";
 import { trackFirstHand } from "../analytics";
 import type { ClientMsg, ServerMsg, TableViewMsg } from "./protocol";
@@ -58,6 +58,9 @@ export function createRemoteStore(opts: {
     lastFlip: null,
     announcement: null,
     sitOut: () => send({ type: "sit_out" }),
+    ready: () => send({ type: "ready" }),
+    unready: () => send({ type: "unready" }),
+    myReady: opts.view.seats.find((s) => s.id === me)?.ready ?? false,
     lastDelta: null,
     settleSeq: 0,
     explainOn: false,
@@ -69,7 +72,8 @@ export function createRemoteStore(opts: {
     // than waiting (F6). The UI uses this to offer a rebuy or a way out.
     busted: false,
     denoms,
-    selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
+    // smallest chip that clears the table minimum — the rack's top-up chip below it would be refused (F18)
+    selectedChip: defaultChip(denoms, tableSpec(tier).table_min),
 
     toggleExplain: () => set({ explainOn: !get().explainOn }),
 
@@ -165,6 +169,7 @@ export function createRemoteStore(opts: {
       // `joined` carries no count; the broadcast right behind it does
       watchers: msg.type === "joined" ? get().watchers : (msg.watchers ?? get().watchers),
       busted: mySeat?.broke ?? false,
+      myReady: mySeat?.ready ?? false,
       squeezers: squeezersOf(view),
       ...(flip ? { lastFlip: flip } : next.phase === "Betting" ? { lastFlip: null } : {}),
       lastDelta,

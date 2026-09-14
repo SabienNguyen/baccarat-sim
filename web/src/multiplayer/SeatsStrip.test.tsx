@@ -8,7 +8,9 @@ const seat = (id: number, name: string): SeatView => ({
   name,
   bankroll: 1_000_000,
   staked: 0,
+  bets: [],
   sitting_out: false,
+  ready: false,
   decided: false,
 });
 
@@ -65,4 +67,33 @@ test("the rail shows as one more chip, only when someone is standing at it", () 
   expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
   rerender(<SeatsStrip seats={seats} squeezers={null} betting />);
   expect(screen.queryByLabelText("Watching")).not.toBeInTheDocument();
+});
+
+test("a ready seat shows its mark, only in Betting", () => {
+  const ready = [{ ...seat(0, "alice"), ready: true }, seat(1, "bob")];
+  const { rerender } = render(<SeatsStrip seats={ready} squeezers={null} betting />);
+  expect(screen.getAllByLabelText("ready")).toHaveLength(1);
+  rerender(<SeatsStrip seats={ready} squeezers={null} betting={false} />);
+  expect(screen.queryByLabelText("ready")).not.toBeInTheDocument();
+});
+
+test("each seat's staged bets show as compact tokens, and hide once settled", () => {
+  const withBets: SeatView[] = [
+    {
+      ...seat(0, "alice"),
+      bets: [
+        { kind: { Main: "Player" as const }, amount: 2500 },
+        { kind: { Side: "Tiger" as const }, amount: 500 },
+      ],
+    },
+    { ...seat(1, "bob"), bets: [{ kind: { Main: "Tie" as const }, amount: 500 }] },
+  ];
+  const { rerender } = render(<SeatsStrip seats={withBets} squeezers={null} betting />);
+  expect(screen.getByText("P $25.00")).toBeInTheDocument();
+  expect(screen.getByText("TIGER $5.00")).toBeInTheDocument();
+  expect(screen.getByText("TIE $5.00")).toBeInTheDocument();
+
+  rerender(<SeatsStrip seats={withBets} squeezers={null} betting={false} settled />);
+  expect(screen.queryByText("P $25.00")).not.toBeInTheDocument();
+  expect(screen.queryByText("TIE $5.00")).not.toBeInTheDocument();
 });

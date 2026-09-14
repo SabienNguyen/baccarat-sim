@@ -148,6 +148,9 @@ function CellMarks({ cell }: { cell: BigRoadCell }) {
       {cell.player_pair && <span className="pair-dot pair-dot--player" title="Player pair" />}
       {cell.banker_pair && <span className="pair-dot pair-dot--banker" title="Banker pair" />}
       {bonus && <BonusToken kind={bonus} size={11} />}
+      {/* pair dots take top-left/bottom-right and the bonus token hangs off
+          the bottom-left — top-right is the one corner still free */}
+      {cell.natural && <span className="natural-dot" title="Natural" />}
     </>
   );
 }

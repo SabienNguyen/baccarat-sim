@@ -67,6 +67,24 @@ function isSide(kind: BetKind): boolean {
   return typeof kind === "object" && "Side" in kind;
 }
 
+const ALL_SPOTS: Spot[] = [...MAIN_SPOTS, ...SIDE_SPOTS];
+
+/**
+ * A short label for one bet kind, for anywhere the felt's own spot names are
+ * too long — the seats strip's per-seat tokens. Main bets abbreviate to their
+ * initial (P/B) or TIE; bonus spots reuse the exact short names the felt
+ * already shows them as, so there is only one place that decides what a
+ * bonus kind is called.
+ */
+export function betSpotLabel(kind: BetKind): string {
+  if (!isSide(kind)) {
+    const side = (kind as { Main: "Player" | "Banker" | "Tie" }).Main;
+    return side === "Player" ? "P" : side === "Banker" ? "B" : "TIE";
+  }
+  const key = JSON.stringify(kind);
+  return ALL_SPOTS.find((s) => JSON.stringify(s.kind) === key)?.display ?? "";
+}
+
 /** Total cents staked on one spot. */
 function stakedOn(kind: BetKind, bets: PlacedBet[]): number {
   const key = JSON.stringify(kind);

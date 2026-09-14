@@ -208,6 +208,24 @@
   color: var(--gold);
   text-decoration: none;
 }
+
+/* 44px tap target (P12): the links measured ~13px tall (text-only, no
+   padding). Padding, not a bigger font — these are quiet reference links, not
+   buttons. */
+@media (max-width: 700px) {
+  .home-learn a {
+    display: inline-block;
+    padding: 15px 6px;
+  }
+  /* home-back measures right at the 44px edge (10px font + 12px padding) —
+     a min-height plus centering makes the floor certain rather than assumed. */
+  .home-back {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
 .home-learn a:hover,
 .home-learn a:focus-visible {
   text-decoration: underline;

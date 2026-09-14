@@ -1,3 +1,15 @@
+/* Stable per-seat accent colours (see seatColour.ts), distinct enough to tell
+   seats apart at a glance on the green felt and against the panel wood. */
+:root {
+  --seat-colour-0: #5ec8f2;
+  --seat-colour-1: #f2905e;
+  --seat-colour-2: #b98af2;
+  --seat-colour-3: #6ee7a0;
+  --seat-colour-4: #f26e93;
+  --seat-colour-5: #f2e35e;
+  --seat-colour-6: #7fe0d0;
+}
+
 .mp-screen {
   min-height: 100vh;
   min-height: 100dvh;
@@ -309,7 +321,8 @@
   /* room for stake + status lines, so seat boxes never resize mid-round */
   min-height: 102px;
   background: var(--panel-face);
-  border: 3px solid var(--ink);
+  /* the seat's own colour is the default border; holding overrides it below */
+  border: 3px solid var(--seat-colour, var(--ink));
   border-radius: 10px;
   padding: 12px 18px;
   box-shadow: 3px 3px 0 var(--shadow);
@@ -393,6 +406,31 @@
   font-family: var(--font-text);
   font-size: 17px;
   color: #7ec8ff;
+}
+/* One compact token per staged bet, e.g. "P $25" — what this seat is riding
+   on, at a glance, without reading the felt. */
+.seat-bets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+.seat-bet {
+  font-family: var(--font-text);
+  font-size: 13px;
+  color: #1a1208;
+  background: var(--seat-colour, var(--gold));
+  border-radius: 5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.seat-ready {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: #6ee7a0;
+  line-height: 1;
 }
 
 .seat-status {

@@ -26,8 +26,8 @@
 /* Round, draggable casino chips with a dashed inner ring and a count badge. */
 .chip {
   position: relative;
-  width: 50px;
-  height: 50px;
+  width: round(calc(50px * var(--ui-scale)), 1px);
+  height: round(calc(50px * var(--ui-scale)), 1px);
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -57,7 +57,7 @@
 }
 .chip-face {
   font-family: var(--font-display);
-  font-size: 10px;
+  font-size: round(calc(10px * var(--ui-scale)), 1px);
   color: #fff;
   text-shadow: 1px 1px 0 var(--ink);
 }
@@ -100,7 +100,7 @@
 
 .change-note {
   font-family: var(--font-text);
-  font-size: 16px;
+  font-size: round(calc(16px * var(--ui-scale)), 1px);
   color: var(--accent-2);
 }
 
@@ -114,13 +114,13 @@
 .rail-hint {
   flex: 1;
   margin: 0;
-  font-size: 19px;
+  font-size: round(calc(19px * var(--ui-scale)), 1px);
   color: #f0ead6;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
 }
 .clear-bets {
   font-family: var(--font-display);
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
@@ -177,11 +177,11 @@
   cursor: not-allowed;
 }
 .spot-name {
-  font-size: 14px;
+  font-size: round(calc(14px * var(--ui-scale)), 1px);
   letter-spacing: 1px;
 }
 .spot-payout {
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #ffe9a8;
   background: rgba(0, 0, 0, 0.45);
   border-radius: 4px;
@@ -226,7 +226,7 @@
   transform: translateX(-50%);
   max-width: calc(100% - 6px);
   font-family: var(--font-text);
-  font-size: 16px;
+  font-size: round(calc(16px * var(--ui-scale)), 1px);
   color: var(--gold);
   background: rgba(0, 0, 0, 0.55);
   border-radius: 4px;
@@ -269,13 +269,13 @@
   border: 3px solid var(--gold);
 }
 .spot--side .spot-name {
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
 }
 .spot--side .spot-payout {
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
 }
 .spot--side .spot-stake {
-  font-size: 12px;
+  font-size: round(calc(12px * var(--ui-scale)), 1px);
 }
 /* Smaller circle, shorter tower. */
 .spot--side .spot-chips {
@@ -307,6 +307,42 @@
   /* the arches curve inward at the top, so their label needs more clearance
      than a circle's does */
   padding-top: 18px;
+}
+
+/* --- short laptops (#18): 1280x720 / 1366x768 ---
+   The felt's vertical rhythm (112px arches, 16px gaps, 18px padding) was the
+   single largest contributor after card size to the stage overflowing a
+   short viewport — shrink it enough that the chip rail stays above the
+   fold. Desktop/laptop pointer, so this doesn't need the 44px phone tap
+   floor from P12. */
+@media (min-width: 701px) and (max-height: 800px) {
+  .bet-rail {
+    padding: 10px;
+    gap: 8px;
+  }
+  .felt {
+    padding: 10px;
+    gap: 8px;
+  }
+  .spot--player,
+  .spot--banker,
+  .spot--tie {
+    min-height: 78px;
+  }
+  .rail-row {
+    min-height: 34px;
+    gap: 8px;
+  }
+  .clear-bets {
+    padding: 6px 10px;
+  }
+  .chip {
+    width: 40px;
+    height: 40px;
+  }
+  .chip-face {
+    font-size: 9px;
+  }
 }
 
 /* --- responsive felt --- */
@@ -356,11 +392,13 @@
   .side-bets {
     gap: 6px;
   }
+  /* Type floor (P12): nothing in the pixel display font renders below 10px
+     here — the side circles were the smallest offenders at 7px. */
   .spot--side .spot-name {
-    font-size: 7px;
+    font-size: 10px;
   }
   .spot--side .spot-payout {
-    font-size: 7px;
+    font-size: 10px;
     padding: 1px 4px;
   }
   .spot--player,
@@ -369,17 +407,17 @@
     min-height: 84px;
   }
   .spot-name {
-    font-size: 11px;
+    font-size: 12px;
   }
   .spot-payout {
-    font-size: 8px;
+    font-size: 10px;
   }
   .chip {
     width: 44px;
     height: 44px;
   }
   .chip-face {
-    font-size: 8px;
+    font-size: 10px;
   }
   .chip-count {
     min-width: 17px;
@@ -393,10 +431,26 @@
        can least afford it. */
     flex-wrap: nowrap;
     gap: 8px;
-    min-height: 40px;
+    min-height: 44px;
+    align-items: stretch;
   }
+  /* Type floor + 44px tap target: "Clear bets" measured 9px text in a 30px
+     box. */
+  .clear-bets {
+    font-size: 11px;
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+  /* MAIN/BONUS tabs measured 127x36 (font 11px) — the 44px floor comes from
+     min-height, not more horizontal padding, so the pair doesn't get wider
+     than the felt can spare. */
   .seg-half {
+    font-size: 12px;
+    min-height: 44px;
     padding: 8px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .rail-hint {
     font-size: 14px;
@@ -424,7 +478,7 @@
 .seg-half {
   position: relative;
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: round(calc(11px * var(--ui-scale)), 1px);
   letter-spacing: 1px;
   color: #cfc7b0;
   background: var(--panel-bevel-lo);
@@ -445,7 +499,7 @@
   border-radius: 8px;
   background: var(--gold);
   color: #1a1208;
-  font-size: 9px;
+  font-size: round(calc(9px * var(--ui-scale)), 1px);
   line-height: 16px;
   text-align: center;
   vertical-align: middle;
@@ -454,6 +508,14 @@
 .felt-head .bonus-info-btn {
   position: absolute;
   right: 0;
+}
+/* Type floor (P12): the bonus-count pill inside a seg-half tab was 9px. Placed
+   after the unconditional .seg-badge rule above (same specificity — source
+   order decides) so this phone override actually wins. */
+@media (max-width: 700px) {
+  .seg-badge {
+    font-size: 10px;
+  }
 }
 .side-bets--open {
   animation: side-reveal 180ms ease-out;
@@ -476,5 +538,63 @@
   .main-bets,
   .side-bets {
     animation: none;
+  }
+}
+
+/* --- landscape phones (T5, #19): the bet rail lives in the right column
+       beside a compact HUD, sharing ~340px of height with it — the felt's
+       arches and the chip rack both drop to a single compact row, and the
+       tab switch / hint row (not part of the core loop) step aside. This
+       block is last in the file on purpose: several rules above it (the
+       MAIN/BONUS switch, the phone rail-row) are unconditional and would
+       otherwise win the cascade over an earlier same-specificity override. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .bet-rail {
+    max-width: none;
+    padding: 6px;
+    gap: 6px;
+  }
+  .felt {
+    padding: 6px;
+    gap: 6px;
+  }
+  .felt-head {
+    display: none;
+  }
+  .rail-row {
+    display: none;
+  }
+  .main-bets {
+    gap: 5px;
+  }
+  .spot--player,
+  .spot--banker,
+  .spot--tie {
+    min-height: 44px;
+  }
+  .spot-name {
+    font-size: 10px;
+  }
+  .spot-payout {
+    display: none;
+  }
+  /* One row of chips, always — this column isn't wide enough to also wrap a
+     second row and still leave the rest of the rail visible. */
+  .chips {
+    flex-wrap: nowrap;
+    gap: 4px;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+  .chip {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+  }
+  .chip-face {
+    font-size: 8px;
+  }
+  .change-note {
+    display: none;
   }
 }

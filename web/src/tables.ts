@@ -53,6 +53,20 @@ export const TABLES: TableSpec[] = [
   },
 ];
 
+/**
+ * The chip to arm when a player first sits down: the smallest denomination
+ * that clears the table minimum. Every rack deliberately stocks a top-up chip
+ * *below* the minimum (Mid: $5 on a $25 table, High: $100 on a $500 table) so
+ * a bet can be nudged up in small steps — but the engine refuses any single
+ * bet under `table_min`, so arming that top-up chip by default makes the very
+ * first tap on the felt a refusal (F18). Falls back to the smallest chip when
+ * nothing in the rack clears the minimum. Independent of `denoms` ordering.
+ */
+export function defaultChip(denoms: number[], tableMin: number): number {
+  const playable = denoms.filter((d) => d >= tableMin);
+  return Math.min(...(playable.length ? playable : denoms));
+}
+
 export function tableSpec(tier: TableTier): TableSpec {
   const spec = TABLES.find((t) => t.tier === tier);
   if (!spec) throw new Error(`unknown table tier: ${tier}`);

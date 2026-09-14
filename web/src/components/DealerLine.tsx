@@ -17,6 +17,9 @@ interface DealerLineProps {
   announcement?: string | null;
   /** Term→entry lookup; defaults to the real (wasm-backed) glossary. Injectable for tests. */
   lookup?: (term: string) => GlossaryEntry | undefined;
+  /** T8b: the peel stage's tighter dealer line — smaller type, less padding,
+   *  no room lost to the felt below it. */
+  compact?: boolean;
 }
 
 /** The dealer's dialogue box: he narrates the table as the round unfolds. */
@@ -26,6 +29,7 @@ export function DealerLine({
   lastFlip = null,
   announcement = null,
   lookup = glossaryEntry,
+  compact = false,
 }: DealerLineProps) {
   const segments = lastError
     ? narrateError(lastError)
@@ -34,7 +38,10 @@ export function DealerLine({
       : narrate(snapshot, lastFlip);
   const lineKey = segments.map((s) => s.text).join("");
   return (
-    <section aria-label="Dealer" className="dealer-line">
+    <section
+      aria-label="Dealer"
+      className={compact ? "dealer-line dealer-line--compact" : "dealer-line"}
+    >
       <span className="dealer-tag">DEALER</span>
       {/* The live region node stays mounted; only its text changes, so screen
           readers actually announce each new line. Keying the region itself

@@ -1,6 +1,6 @@
 import { render, act } from "@testing-library/react";
 import { vi } from "vitest";
-import { CardGLOverlay, type GesturePort, type OverlayEngine } from "./CardGLOverlay";
+import { CardGLOverlay, createFrameLoop, type GesturePort, type OverlayEngine } from "./CardGLOverlay";
 import type { CurlParams } from "./curlMath";
 import { createRef } from "react";
 
@@ -93,4 +93,89 @@ test("a flip release runs the full turn then reports done", () => {
   for (let t = 16; t < 1500 && done.mock.calls.length === 0; t += 16) pump(t);
   expect(done).toHaveBeenCalled();
   expect(engine.renders.length).toBeGreaterThan(5); // the turn actually animated
+});
+
+test("the overlay stops scheduling frames once a settle finishes", () => {
+  const engine = makeFakeEngine();
+  const port: GesturePort = { drag: null, release: { kind: "settle", gx: 45, gy: 124, fx: 45, fy: 60 } };
+  const done = vi.fn();
+  mount(port, engine, done);
+  pump(0);
+  for (let t = 16; t < 1500 && done.mock.calls.length === 0; t += 16) pump(t);
+  expect(done).toHaveBeenCalledTimes(1);
+  // the tick that reported done must not have re-armed the loop
+  expect(rafQueue.length).toBe(0);
+});
+
+test("unmounting mid-drag cancels the pending frame", () => {
+  const engine = makeFakeEngine();
+  const port: GesturePort = { drag: { gx: 45, gy: 124, fx: 45, fy: 60 }, release: null };
+  const cancel = vi.fn();
+  vi.stubGlobal("cancelAnimationFrame", cancel);
+  const { unmount } = mount(port, engine, () => {});
+  pump(0);
+  expect(rafQueue.length).toBe(1); // drag mode re-armed itself for the next frame
+  unmount();
+  expect(cancel).toHaveBeenCalled();
+});
+
+describe("createFrameLoop", () => {
+  let queue: FrameRequestCallback[] = [];
+  beforeEach(() => {
+    queue = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      queue.push(cb);
+      return queue.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  function fire(now: number) {
+    const q = queue;
+    queue = [];
+    q.forEach((cb) => cb(now));
+  }
+
+  test("start schedules repeated ticks until stop", () => {
+    const seen: number[] = [];
+    const loop = createFrameLoop((now) => {
+      seen.push(now);
+    });
+    loop.start();
+    expect(loop.isRunning()).toBe(true);
+    fire(0);
+    fire(16);
+    expect(seen).toEqual([0, 16]);
+    loop.stop();
+    expect(loop.isRunning()).toBe(false);
+    fire(32); // nothing left queued once stopped
+    expect(seen).toEqual([0, 16]);
+  });
+
+  test("a tick returning false stops the loop itself, without an external stop()", () => {
+    let calls = 0;
+    const loop = createFrameLoop(() => {
+      calls += 1;
+      return calls < 2 ? undefined : false;
+    });
+    loop.start();
+    fire(0);
+    fire(16);
+    expect(calls).toBe(2);
+    expect(loop.isRunning()).toBe(false);
+    expect(queue.length).toBe(0);
+  });
+
+  test("start is idempotent while already running", () => {
+    let ticks = 0;
+    const loop = createFrameLoop(() => {
+      ticks += 1;
+    });
+    loop.start();
+    loop.start();
+    expect(queue.length).toBe(1);
+    fire(0);
+    expect(ticks).toBe(1);
+  });
 });

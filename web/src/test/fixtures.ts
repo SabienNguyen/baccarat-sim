@@ -78,7 +78,7 @@ export function scoredSnapshot(): RoundSnapshot {
       },
       big_road: {
         columns: [
-          [{ side: "Player", ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }],
+          [{ side: "Player", ties: 0, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false }],
           [
             {
               side: "Banker",
@@ -88,6 +88,7 @@ export function scoredSnapshot(): RoundSnapshot {
               dragon7: false,
               panda8: false,
               tiger: false,
+              natural: false,
             },
           ],
         ],

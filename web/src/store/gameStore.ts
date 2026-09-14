@@ -8,6 +8,7 @@ import { trackFirstHand } from "../analytics";
 export type DealerError = CommandError | { Message: string };
 import type { GameSession, CommandResult } from "../engine/adapter";
 import { CHIP_DENOMINATIONS } from "../chips";
+import { defaultChip } from "../tables";
 
 export { CHIP_DENOMINATIONS };
 
@@ -49,6 +50,12 @@ export interface GameState {
   requestDealerFlip: (count: FlipRequest) => void;
   /** Skip this coup (multiplayer); no-op alone at a single-player table. */
   sitOut: () => void;
+  /** Declare ready to deal (multiplayer); no-op alone at a single-player table. */
+  ready: () => void;
+  /** Take back a ready declaration (multiplayer); no-op alone. */
+  unready: () => void;
+  /** This seat's own ready flag (multiplayer); always false at a single-player table. */
+  myReady: boolean;
   /** The card that just turned, for the dealer's call. */
   lastFlip: Flip | null;
   /** The dealer's between-flips voice (multiplayer pacing). */
@@ -152,6 +159,9 @@ export function createGameStore(
       me: 0, // the sole seat at a single-player table
       rename: () => {},
       sitOut: () => {},
+      ready: () => {},
+      unready: () => {},
+      myReady: false,
       lastFlip: null,
       announcement: null,
       lastDelta: null,
@@ -162,7 +172,8 @@ export function createGameStore(
       dismissGoal: () => set({ goalReached: false }),
       busted: false,
       denoms,
-      selectedChip: Math.min(...denoms), // smallest chip armed by default — independent of denoms ordering
+      // smallest chip that clears the table minimum — the rack's top-up chip below it would be refused (F18)
+      selectedChip: defaultChip(denoms, session.snapshot().table_min),
 
       toggleExplain: () => set({ explainOn: !get().explainOn }),
 

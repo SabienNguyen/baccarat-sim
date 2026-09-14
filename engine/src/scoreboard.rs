@@ -13,6 +13,11 @@ pub struct RoundRecord {
     pub panda8: bool,
     /// Banker won on a total of 6 — the "Tiger".
     pub tiger: bool,
+    /// A natural: an 8 or 9 on exactly the first two cards, ending the coup
+    /// with no draws. On a tie, either side having one still counts. Reuses
+    /// `Hand::is_natural` (the same check `play_round` uses to skip draws),
+    /// so this is never re-derived from totals here.
+    pub natural: bool,
 }
 
 impl RoundRecord {
@@ -31,6 +36,7 @@ impl RoundRecord {
                 && round.player.total() == 8
                 && round.player.cards.len() == 3,
             tiger: banker_won && round.banker.total() == 6,
+            natural: round.player.is_natural() || round.banker.is_natural(),
         }
     }
 }
@@ -74,6 +80,8 @@ pub struct BigRoadCell {
     pub dragon7: bool,
     pub panda8: bool,
     pub tiger: bool,
+    /// Gold-dot mark: the winning side's two-card total was 8 or 9.
+    pub natural: bool,
 }
 
 /// Logical columns (unbounded height); the 6-row dragon-tail bend is front-end layout.
@@ -162,6 +170,7 @@ fn build_big_road(history: &[RoundRecord]) -> BigRoad {
             dragon7: r.dragon7,
             panda8: r.panda8,
             tiger: r.tiger,
+            natural: r.natural,
         };
         pending_ties = 0;
 
@@ -235,7 +244,7 @@ mod derived_road_tests {
     use super::*;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false }
     }
 
     // B B P P P B P B B
@@ -345,7 +354,7 @@ mod bead_plate_tests {
     use super::*;
 
     fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
-        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false }
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false, natural: false }
     }
 
     #[test]
@@ -391,7 +400,7 @@ mod big_road_core_tests {
     use super::*;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false }
     }
 
     #[test]
@@ -425,7 +434,7 @@ mod invariants_tests {
     use crate::round::RoundResult;
 
     fn win(outcome: Outcome) -> RoundRecord {
-        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false }
+        RoundRecord { outcome, player_pair: false, banker_pair: false, dragon7: false, panda8: false, tiger: false, natural: false }
     }
 
     #[test]
@@ -491,7 +500,7 @@ mod big_road_tie_tests {
     use super::*;
 
     fn rec(outcome: Outcome, pp: bool, bp: bool) -> RoundRecord {
-        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false }
+        RoundRecord { outcome, player_pair: pp, banker_pair: bp, dragon7: false, panda8: false, tiger: false, natural: false }
     }
     fn win(outcome: Outcome) -> RoundRecord {
         rec(outcome, false, false)
@@ -583,6 +592,83 @@ mod big_road_tie_tests {
         let s = derive_scoreboard(&history);
         assert!(s.big_road.columns[0][0].banker_pair);
         assert!(!s.big_road.columns[0][0].player_pair);
+    }
+
+    #[test]
+    fn natural_flag_lands_on_player_and_banker_wins() {
+        use crate::card::{Card, Rank, Suit};
+        use crate::hand::Hand;
+        let c = |rank: Rank| Card { rank, suit: Suit::Spades };
+        let rr = |player: Vec<Card>, banker: Vec<Card>, outcome| RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        };
+
+        // Player natural: two-card 9 beats a two-card 5.
+        let player_nine = RoundRecord::from_round(&rr(
+            vec![c(Rank::Four), c(Rank::Five)],
+            vec![c(Rank::Two), c(Rank::Three)],
+            Outcome::PlayerWin,
+        ));
+        assert!(player_nine.natural);
+
+        // Banker natural: two-card 8 beats a two-card 6.
+        let banker_eight = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Four)],
+            vec![c(Rank::Three), c(Rank::Five)],
+            Outcome::BankerWin,
+        ));
+        assert!(banker_eight.natural);
+
+        // Both flags ride onto the win cell, same as the animal-bonus flags.
+        let road = derive_scoreboard(&[player_nine, banker_eight]);
+        assert!(road.big_road.columns[0][0].natural);
+        assert!(road.big_road.columns[1][0].natural);
+    }
+
+    #[test]
+    fn natural_flag_set_on_a_tie_when_either_side_had_one() {
+        use crate::card::{Card, Rank, Suit};
+        use crate::hand::Hand;
+        let c = |rank: Rank| Card { rank, suit: Suit::Spades };
+        let rr = |player: Vec<Card>, banker: Vec<Card>, outcome| RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        };
+
+        // 9-9 tie: both sides natural.
+        let tie = RoundRecord::from_round(&rr(
+            vec![c(Rank::Four), c(Rank::Five)],
+            vec![c(Rank::Three), c(Rank::Six)],
+            Outcome::Tie,
+        ));
+        assert!(tie.natural);
+    }
+
+    #[test]
+    fn three_card_eight_or_nine_is_not_a_natural() {
+        use crate::card::{Card, Rank, Suit};
+        use crate::hand::Hand;
+        let c = |rank: Rank| Card { rank, suit: Suit::Spades };
+        let rr = |player: Vec<Card>, banker: Vec<Card>, outcome| RoundResult {
+            player: Hand { cards: player },
+            banker: Hand { cards: banker },
+            outcome,
+            trace: Vec::new(),
+        };
+
+        // Player wins with a three-card 8 (2+2+4) — a Panda 8, not a natural.
+        let panda = RoundRecord::from_round(&rr(
+            vec![c(Rank::Two), c(Rank::Two), c(Rank::Four)],
+            vec![c(Rank::Two), c(Rank::Five)],
+            Outcome::PlayerWin,
+        ));
+        assert!(panda.panda8);
+        assert!(!panda.natural);
     }
 
     // Microbenchmark for the view-layer scoreboard memo (E2): a full recompute

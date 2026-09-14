@@ -1,6 +1,6 @@
 // Wire types for the table service — mirrors server/src/protocol.rs.
 
-import type { BetKind, FlipRequest, RoundSnapshot, Side } from "../engine/types";
+import type { BetKind, FlipRequest, PlacedBet, RoundSnapshot, Side } from "../engine/types";
 import type { TableTier } from "../tables";
 
 /** Chairs at a table — mirrors the server's MAX_SEATS. */
@@ -12,8 +12,12 @@ export interface SeatView {
   name: string;
   bankroll: number;
   staked: number;
+  /** This seat's staged bets — the same money `staked` totals. */
+  bets: PlacedBet[];
   sitting_out: boolean;
-  /** Bet down or sitting out — the deal waits for everyone to decide. */
+  /** Declared ready to deal (requires a bet). Reset every coup. */
+  ready: boolean;
+  /** Sitting out, ready, or broke — the deal waits for everyone to decide. */
   decided: boolean;
   /** Bankroll can't cover the table minimum, so this seat can't bet at all. */
   broke?: boolean;
@@ -49,6 +53,10 @@ export type ClientMsg =
   | { type: "bet"; kind: BetKind; amount: number }
   | { type: "sit_out" }
   | { type: "clear_bets" }
+  /** Declare ready to deal (requires a bet); once everyone is, the coup deals. */
+  | { type: "ready" }
+  /** Take back a ready declaration. */
+  | { type: "unready" }
   | { type: "deal" }
   | { type: "peek"; hand: Side; index: number }
   | { type: "reveal"; hand: Side; index: number }

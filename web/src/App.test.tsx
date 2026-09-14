@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS } from "./App";
+import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, PEEL_EXIT_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
-import { bettingSnapshot, dealingSnapshot } from "./test/fixtures";
+import { bettingSnapshot, dealingSnapshot, settledSnapshot } from "./test/fixtures";
 import { createRemoteStore } from "./multiplayer/remoteStore";
 
 // A recording portal in place of the real (null) one, to check the table's
@@ -480,8 +480,8 @@ function sharedTableStore(overrides: { player_squeezer: number | null; banker_sq
       bets: [{ kind: { Main: "Banker" }, amount: 500 }],
     }),
     seats: [
-      { id: 3, name: "me", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
-      { id: 5, name: "them", bankroll: 100_000, staked: 500, sitting_out: false, decided: true },
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
     ],
     ...overrides,
   } as Parameters<typeof createRemoteStore>[0]["view"];
@@ -507,4 +507,63 @@ test("at a shared table, a house-held hand is the dealer's — no gesture for an
   render(<GameTable store={store} onLeave={() => {}} />);
   expect(screen.getByLabelText("Player hand").querySelectorAll('[role="button"]').length).toBe(0);
   expect(screen.getByLabelText("Banker hand").querySelectorAll('[role="button"]').length).toBe(2);
+});
+
+describe("T8b: the peel stage", () => {
+  afterEach(() => {
+    // @ts-expect-error test cleanup of a global we stub per-test
+    delete window.matchMedia;
+  });
+
+  function setPhoneLike() {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof matchMedia;
+  }
+
+  function setDesktop() {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false }) as unknown as typeof matchMedia;
+  }
+
+  test("mounts synchronously the instant Dealing starts on a phone-like device, as an overlay over the inline felt", () => {
+    setPhoneLike();
+    const store = createGameStore(fakeSession(dealingSnapshot()));
+    const { container } = render(<App store={store} />);
+    // no timer advance — the overlay is up on the very first render of the
+    // Dealing phase, so the deal fly-in plays inside it, not on the felt
+    expect(container.querySelector(".peel-stage")).not.toBeNull();
+    expect(container.querySelector(".peel-backdrop")).not.toBeNull();
+    // the ordinary felt (HUD, inline hands) stays mounted underneath —
+    // this is an overlay, not a view swap
+    expect(container.querySelector(".hud")).not.toBeNull();
+    expect(container.querySelector(".card-stage")).not.toBeNull();
+    // ...but hidden from the same instant, so nothing dealing shows through
+    expect(container.querySelector(".card-stage--peeling")).not.toBeNull();
+  });
+
+  test("never mounts on a desktop (fine pointer, wide viewport)", () => {
+    setDesktop();
+    const store = createGameStore(fakeSession(dealingSnapshot()));
+    const { container } = render(<App store={store} />);
+    expect(container.querySelector(".peel-stage")).toBeNull();
+  });
+
+  test("unmounts once the phase leaves Dealing (after its fade-out)", () => {
+    setPhoneLike();
+    vi.useFakeTimers();
+    try {
+      let snap = dealingSnapshot();
+      const store = createGameStore(fakeSession(snap, { snapshot: () => snap }));
+      const { container, rerender } = render(<App store={store} />);
+      expect(container.querySelector(".peel-stage")).not.toBeNull();
+      snap = settledSnapshot();
+      store.setState({ snapshot: snap });
+      rerender(<App store={store} />);
+      // still fading out
+      expect(container.querySelector(".peel-stage")).not.toBeNull();
+      act(() => vi.advanceTimersByTime(PEEL_EXIT_MS));
+      expect(container.querySelector(".peel-stage")).toBeNull();
+      expect(container.querySelector(".card-stage--peeling")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

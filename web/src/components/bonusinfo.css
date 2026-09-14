@@ -100,3 +100,20 @@
   box-shadow: 2px 2px 0 var(--shadow);
   z-index: 2;
 }
+
+/* Phone: a real 44px hit area without growing the visible chip. Same
+   out-of-flow `::before` technique as `.road-info-btn` — the chip sits in
+   `.felt-head` beside the MAIN/BONUS tabs, which are already 44px tall on
+   phones, so an in-flow 44px box here wouldn't even cost extra row height,
+   but it WOULD force `.felt-head`'s flex row wider than it needs and risks
+   pushing the tabs' badges around; the invisible expander avoids that too. */
+@media (max-width: 700px) {
+  .bonus-info-btn {
+    position: relative;
+  }
+  .bonus-info-btn::before {
+    content: "";
+    position: absolute;
+    inset: -10px;
+  }
+}

@@ -16,6 +16,8 @@ import { dealerFlipOffer } from "./dealerFlip";
 import { DealerFlipRequest } from "./components/DealerFlipRequest";
 import { Hud } from "./components/Hud";
 import { Hand } from "./components/Hand";
+import { PeelStage } from "./components/PeelStage";
+import { isPhoneLike } from "./phoneLike";
 import { BetRail, type BetView } from "./components/BetRail";
 import { BonusNudge } from "./components/BonusNudge";
 import { bonusWouldWin } from "./bonusNudge";
@@ -29,6 +31,8 @@ import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
 import { playSfx } from "./audio/sfx";
+import { installSleepOnHide } from "./audio/sleep";
+import { autoAdvanceMs, isRecentlyTouched } from "./autoAdvance";
 import { getPortal } from "./portal";
 import { createPortalTracker, type PortalView } from "./portal/signals";
 import { adBreak } from "./portal/adBreak";
@@ -43,6 +47,19 @@ export const AUTO_ADVANCE_MS = 3000;
 /** The dealer's sweep: the cards muck away over this window at the end of the
  *  linger, so the felt clears with a gesture instead of the cards blinking out. */
 export const SWEEP_MS = 400;
+/** T8b (P14c revision — owner direction 2026-09-13): "the user can still see
+ *  the cards being dealt on the board before we go into the peel overlay;
+ *  instead just have the dealing happen in this peel overlay". The overlay
+ *  now mounts the instant the phase flips to Dealing — no wait for the
+ *  inline deal-in fly to settle first — so the fly-in (cards.css) plays
+ *  inside the overlay's own `Hand`s instead of on the felt behind the
+ *  backdrop. The inline hands are hidden (`.card-stage--peeling`) from the
+ *  same render, so nothing dealing is ever visible underneath. */
+/** T8b (overlay revision): how long the peel overlay's backdrop + hands take
+ *  to fade out once the phase leaves Dealing — the component stays mounted
+ *  this long after that so peelstage.css's leaving transition can actually
+ *  play, instead of the overlay vanishing mid-fade. */
+export const PEEL_EXIT_MS = 150;
 
 interface AppProps {
   store?: StoreApi<GameState>;
@@ -65,6 +82,11 @@ export function App({ store }: AppProps = {}) {
     () => !store && (!!urlParam("room") || !!urlParam("watch")),
   );
   const [resetSeq, setResetSeq] = useState(0);
+  // One document-level listener for the whole app's lifetime (lobby,
+  // multiplayer, table) — installed here since App is the outermost
+  // component every screen mounts under. Backgrounding the tab / locking
+  // the phone sleeps the audio graph and freezes CSS animations (B2/B5).
+  useEffect(() => installSleepOnHide(), []);
   if (multi) {
     return <Multiplayer onExit={() => setMulti(false)} />;
   }
@@ -130,6 +152,9 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const squeezers = useStore(active, (s) => s.squeezers);
   const requestDealerFlip = useStore(active, (s) => s.requestDealerFlip);
   const sitOut = useStore(active, (s) => s.sitOut);
+  const ready = useStore(active, (s) => s.ready);
+  const unready = useStore(active, (s) => s.unready);
+  const myReady = useStore(active, (s) => s.myReady);
   const watchHand = useStore(active, (s) => s.watchHand);
   const goal = useStore(active, (s) => s.goal);
   const goalReached = useStore(active, (s) => s.goalReached);
@@ -140,6 +165,39 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
 
   // every table noise rides the store: works for local and remote play alike
   useGameSounds(active);
+
+  // T8b: peel stage. Whether this device handles like a phone doesn't change
+  // mid-session, so it's read once. The stage mounts the instant the phase
+  // becomes Dealing — the deal-in fly-in plays inside its own Hands, not on
+  // the inline felt (P14c).
+  const [phoneLike] = useState(() => isPhoneLike());
+  const showPeelStage = phoneLike && snapshot.phase === "Dealing";
+  // The overlay stays in the DOM a little longer than `showPeelStage` so its
+  // fade-out (peelstage.css, PEEL_EXIT_MS) can actually play instead of the
+  // component disappearing mid-transition; `peelStageLeaving` tells it to
+  // start that exit right away.
+  const [peelStageMounted, setPeelStageMounted] = useState(false);
+  const [peelStageLeaving, setPeelStageLeaving] = useState(false);
+  useEffect(() => {
+    if (showPeelStage) {
+      setPeelStageMounted(true);
+      setPeelStageLeaving(false);
+      return;
+    }
+    setPeelStageMounted((was) => {
+      if (!was) return false;
+      setPeelStageLeaving(true);
+      return was;
+    });
+  }, [showPeelStage]);
+  useEffect(() => {
+    if (!peelStageLeaving) return;
+    const t = setTimeout(() => {
+      setPeelStageMounted(false);
+      setPeelStageLeaving(false);
+    }, PEEL_EXIT_MS);
+    return () => clearTimeout(t);
+  }, [peelStageLeaving]);
 
   // Game-portal gameplay signals (start on the first deal, stop under a
   // modal, resume when it closes) ride the store the same way. Without a
@@ -251,20 +309,56 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   // Keep the bonus notice up until the player closes it or bets — don't sweep it.
   const showNudge = hasNudge && dismissedNudgeSeq !== settleSeq;
 
+  // P14: a thumb finishing a squeeze or mid-scroll shouldn't have the felt
+  // swept out from under it. One document-level listener for the table's
+  // lifetime tracks the last touch pointerdown; the auto-advance effect below
+  // polls it before it fires (see isRecentlyTouched).
+  const lastTouchAt = useRef<number | null>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") lastTouchAt.current = Date.now();
+    };
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+
   useEffect(() => {
     if (seats !== null) return;
     if (snapshot.phase !== "Settled" || busted || goalReached) return;
     // Every settled hand auto-advances; the bonus notice just rides along on the
     // settled window and clears with it (the player can also close it early).
-    // In the last stretch the cards muck away, then the felt clears.
-    const sweep = setTimeout(() => setSweeping(true), AUTO_ADVANCE_MS - SWEEP_MS);
-    const clear = setTimeout(() => {
-      newHand();
-      setSweeping(false);
-    }, AUTO_ADVANCE_MS);
+    // In the last stretch the cards muck away, then the felt clears. On a
+    // coarse pointer the whole window is longer (autoAdvanceMs), and each of
+    // the two timers below defers itself in short polls while a touch is
+    // still active or was within the last second, instead of firing under it.
+    const advanceMs = autoAdvanceMs(AUTO_ADVANCE_MS);
+    const DEFER_POLL_MS = 250;
+    let sweepTimer: ReturnType<typeof setTimeout>;
+    let clearTimer: ReturnType<typeof setTimeout>;
+    const armSweep = (delay: number) => {
+      sweepTimer = setTimeout(() => {
+        if (isRecentlyTouched(lastTouchAt.current, Date.now())) {
+          armSweep(DEFER_POLL_MS);
+          return;
+        }
+        setSweeping(true);
+      }, delay);
+    };
+    const armClear = (delay: number) => {
+      clearTimer = setTimeout(() => {
+        if (isRecentlyTouched(lastTouchAt.current, Date.now())) {
+          armClear(DEFER_POLL_MS);
+          return;
+        }
+        newHand();
+        setSweeping(false);
+      }, delay);
+    };
+    armSweep(Math.max(0, advanceMs - SWEEP_MS));
+    armClear(advanceMs);
     return () => {
-      clearTimeout(sweep);
-      clearTimeout(clear);
+      clearTimeout(sweepTimer);
+      clearTimeout(clearTimer);
       // The sweep belongs to THIS settled hand. If the hand ends early — a
       // chip tapped mid-muck opens the next hand through `stake` — the `clear`
       // timer above never fires, and a stranded `sweeping` would keep mucking
@@ -291,17 +385,37 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             me={me}
             squeezers={squeezers}
             betting={snapshot.phase !== "Dealing"}
+            settled={snapshot.phase === "Settled"}
             onRename={spectating ? undefined : rename}
             watchers={watchers}
           />
         )}
-        <DealerLine
-          snapshot={snapshot}
-          lastError={lastError}
-          lastFlip={lastFlip}
-          announcement={announcement}
-        />
-        <div className={`card-stage${sweeping ? " sweeping" : ""}`}>
+        {/* Wrapping the two together (P14) lets the win/loss popup anchor to
+            the dealer line's own box on phones — see winpopup.css — instead
+            of a viewport-percentage `top` that landed on the cards. The
+            wrapper only matters at that breakpoint; the popup stays
+            `position: fixed` (ignoring its DOM position) everywhere else.
+            Always mounted, even while the peel overlay is up (T8b): the
+            overlay sits ON TOP of the ordinary felt, it doesn't replace it,
+            so the normal dealer line stays live (if dimmed) behind the
+            backdrop. */}
+        <div className="dealer-slot">
+          <DealerLine
+            snapshot={snapshot}
+            lastError={lastError}
+            lastFlip={lastFlip}
+            announcement={announcement}
+          />
+          <WinPopup key={settleSeq} amount={lastDelta} />
+        </div>
+        {/* T8b (overlay revision): the inline hands stay mounted (and hold
+            the one real squeeze state) whether or not the peel overlay is
+            up — only their pixels are hidden (visibility, not display, so
+            layout never shifts) while the overlay's own Hand instances
+            render the large, up-front cards on top of the backdrop. */}
+        <div
+          className={`card-stage${sweeping ? " sweeping" : ""}${peelStageMounted ? " card-stage--peeling" : ""}`}
+        >
           <Hand
             side="Player"
             hand={snapshot.player}
@@ -332,6 +446,37 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             actions={flipControls("Banker")}
           />
         </div>
+        {peelStageMounted && (
+          <PeelStage
+            snapshot={snapshot}
+            lastError={lastError}
+            lastFlip={lastFlip}
+            announcement={announcement}
+            leaving={peelStageLeaving}
+            player={{
+              hand: snapshot.player,
+              visibleCount: playerVisible,
+              winner: snapshot.outcome === "PlayerWin",
+              squeezable: canSqueeze("Player", squeezers, me),
+              onPeek: (i) => peek("Player", i),
+              onReveal: (i) => reveal("Player", i),
+              actions: flipControls("Player"),
+            }}
+            banker={{
+              hand: snapshot.banker,
+              visibleCount: bankerVisible,
+              winner: snapshot.outcome === "BankerWin",
+              squeezable: canSqueeze("Banker", squeezers, me),
+              onPeek: (i) => {
+                if (seats === null || !bankerLocked) peek("Banker", i);
+              },
+              onReveal: (i) => {
+                if (!bankerLocked) reveal("Banker", i);
+              },
+              actions: flipControls("Banker"),
+            }}
+          />
+        )}
         <Controls
           snapshot={snapshot}
           onDeal={deal}
@@ -342,6 +487,9 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
+          onReady={seats !== null ? ready : undefined}
+          onUnready={seats !== null ? unready : undefined}
+          myReady={myReady}
           onWatch={seats === null ? watchHand : undefined}
           spectating={spectating}
         />
@@ -371,7 +519,6 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
         />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
-      <WinPopup key={settleSeq} amount={lastDelta} />
       {cutting && (
         <CutDeckModal
           onCut={() => {

@@ -57,6 +57,41 @@ interface Props {
 const FLAT_CURL: CurlParams = { gx: 0, gy: 0, nx: 0, ny: -1, ux: 1, uy: 0, apex: 0, radius: 5, theta: 0, progress: 0 };
 const FLAT_POSE: BodyPose = { tipAxis: [1, 0], tipPivot: [0, 0], tipRad: 0, slide: [0, 0], scale: 1 };
 
+/**
+ * A tiny rAF-driven loop: `start()` schedules `tick` every frame until
+ * either `stop()` cancels it or `tick` itself returns `false` (used when a
+ * settle/flip finishes mid-frame — the loop shouldn't wait for an external
+ * stop() to notice). Pure and engine-free so it is unit-testable with a
+ * fake rAF, independent of WebGL/canvas setup.
+ */
+export function createFrameLoop(tick: (now: number) => void | boolean) {
+  let raf = 0;
+  let running = false;
+  const step = (now: number) => {
+    if (!running) return;
+    const keepGoing = tick(now);
+    if (keepGoing === false) {
+      running = false;
+      return;
+    }
+    raf = requestAnimationFrame(step);
+  };
+  return {
+    start(): void {
+      if (running) return;
+      running = true;
+      raf = requestAnimationFrame(step);
+    },
+    stop(): void {
+      running = false;
+      cancelAnimationFrame(raf);
+    },
+    isRunning(): boolean {
+      return running;
+    },
+  };
+}
+
 export function CardGLOverlay({ card, cardW, cardH, port, onDone, onReady, engineFactory }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef(card);
@@ -139,10 +174,17 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, onReady, engin
     let from: { gx: number; gy: number; fx: number; fy: number } | null = null;
     let spec: FlipSpec | null = null;
     let last = 0;
-    let raf = 0;
     const rect = { left: 0, top: 0, width: cardW, height: cardH };
 
-    const frame = (now: number) => {
+    // Mount lifetime, confirmed from SqueezeCard.tsx: the overlay is mounted
+    // ONLY for the duration of one active squeeze gesture — `glActive`
+    // there flips true on pointer-down (a real drag) and false again once
+    // this overlay's `onDone` fires after a settle/flip finishes, or
+    // immediately on a tap that never dragged. It is never mounted for the
+    // whole life of a face-down card. So the loop below already starts and
+    // stops with the gesture; `createFrameLoop` just makes that explicit
+    // and testable instead of leaving it implicit in mount/unmount.
+    const frame = (now: number): void | boolean => {
       const dt = Math.min(now - (last || now), 50);
       last = now;
       const p = port.current;
@@ -203,14 +245,14 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, onReady, engin
           engine.render(curlFromGrip(grip, cardW, cardH), poseFrom(grip, cardW, cardH));
         } else {
           onDoneRef.current();
-          return;
+          return false;
         }
       } else if (mode === "flip" && from) {
         const t = now - t0;
         const grip = gripFrom(from.gx, from.gy, from.fx, from.fy, rect);
         if (!grip || t >= FLIP_MS) {
           onDoneRef.current();
-          return;
+          return false;
         }
         const tex = wantBot(grip.edge);
         if (tex.kind !== botKind) {
@@ -232,12 +274,12 @@ export function CardGLOverlay({ card, cardW, cardH, port, onDone, onReady, engin
         pose.scale *= f.settle;
         engine.render(curl, pose);
       }
-      raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(frame);
+    const loop = createFrameLoop(frame);
+    loop.start();
 
     return () => {
-      cancelAnimationFrame(raf);
+      loop.stop();
       engine.dispose();
       canvas.remove();
     };
