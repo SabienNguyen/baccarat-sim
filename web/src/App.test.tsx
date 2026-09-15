@@ -47,7 +47,7 @@ test("the table sends the portal its gameplay signals and an ad break on a fresh
   expect(portalSpy.gameplayStop).toHaveBeenCalledTimes(2);
   act(() => store.setState({ goalReached: false, snapshot: bettingSnapshot() }));
 
-  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
+  await userEvent.click(screen.getByRole("button", { name: "New shoe" }));
   expect(screen.getByRole("dialog", { name: "Cut the shoe" })).toBeInTheDocument();
   const cutCard = screen.getByLabelText("Cut card");
   cutCard.focus();
@@ -208,7 +208,7 @@ test("New Shoe opens the cut ceremony and only cuts after the confirm", async ()
   const cutShoe = vi.fn(() => okResult(bettingSnapshot()));
   const store = createGameStore(fakeSession(bettingSnapshot(), { requestNewShoe, cutShoe }));
   render(<App store={store} />);
-  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
+  await userEvent.click(screen.getByRole("button", { name: "New shoe" }));
   expect(screen.getByRole("dialog", { name: "Cut the shoe" })).toBeInTheDocument();
   expect(requestNewShoe).toHaveBeenCalledOnce();
   expect(cutShoe).not.toHaveBeenCalled();
@@ -529,8 +529,8 @@ function sharedTableStore(overrides: { player_squeezer: number | null; banker_sq
       bets: [{ kind: { Main: "Banker" }, amount: 500 }],
     }),
     seats: [
-      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
-      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true, host: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true, host: false },
     ],
     ...overrides,
   } as Parameters<typeof createRemoteStore>[0]["view"];
