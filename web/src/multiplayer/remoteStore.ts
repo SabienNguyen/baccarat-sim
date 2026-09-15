@@ -57,7 +57,12 @@ export function createRemoteStore(opts: {
     squeezers: squeezersOf(opts.view),
     lastFlip: null,
     announcement: null,
-    sitOut: () => send({ type: "sit_out" }),
+    // Between coups the felt may still show our last result; acting on the
+    // next coup sweeps it, the same way staking a chip does (see `stake`).
+    sitOut: () => {
+      if (get().snapshot.phase === "Settled") get().newHand();
+      send({ type: "sit_out" });
+    },
     ready: () => send({ type: "ready" }),
     unready: () => send({ type: "unready" }),
     myReady: opts.view.seats.find((s) => s.id === me)?.ready ?? false,
@@ -118,7 +123,10 @@ export function createRemoteStore(opts: {
       }),
 
     cutShoe: (position) => send({ type: "cut_shoe", position }),
-    requestNewShoe: () => send({ type: "propose_new_shoe" }),
+    requestNewShoe: () => {
+      if (get().snapshot.phase === "Settled") get().newHand();
+      send({ type: "propose_new_shoe" });
+    },
     voteNewShoe: (yes) => send({ type: "vote_new_shoe", yes }),
 
     // Watching without betting is `sit_out` at a live table; the deal fires

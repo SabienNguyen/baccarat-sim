@@ -522,7 +522,6 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           onDeal={deal}
           onRevealAll={seats === null ? revealAll : undefined}
           onSettle={seats !== null ? settle : undefined}
-          onNewHand={seats !== null ? newHand : undefined}
           onNewShoe={requestNewShoe}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}

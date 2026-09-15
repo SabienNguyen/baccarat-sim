@@ -97,6 +97,8 @@ gesture, peeks follow the ritual order, and the Player squeezer's flip request
 is validated by the server before the table hears it. Every coup is opt-in: bet
 or sit out, and everyone at the table readies up before the dealer deals — the
 coup goes as soon as the last seat is ready, no separate Deal press needed.
+After a hand your result stays on the felt until you act: stake, sit out or
+call for a new shoe straight from it — there is no "next hand" to press.
 
 Nobody can freeze the table: a squeezer whose connection drops has 8 seconds to
 come back before the dealer turns that hand himself, and one who simply stops
