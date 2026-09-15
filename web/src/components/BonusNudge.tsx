@@ -12,7 +12,7 @@ interface BonusNudgeProps {
  *
  * Deliberately informational only — it does NOT offer to place that bet. A bonus
  * hitting says nothing about the next coup (each one is independent), and the
- * side bets carry the worst edges on the table (pairs 10.36%, Panda 8 10.19%),
+ * side bets carry the worst edges on the table (pairs 10.36%, Tiger 16.68%),
  * so prompting a chase right after a hit would teach exactly the wrong lesson.
  */
 export function BonusNudge({ hit, onDismiss }: BonusNudgeProps) {

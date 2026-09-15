@@ -14,6 +14,8 @@ use axum::{Json, Router};
 use baccarat_engine::session::PhaseTag;
 use baccarat_engine::table::TableError;
 use futures_util::{FutureExt, SinkExt, StreamExt};
+use baccarat_engine::session::BetKind;
+use baccarat_engine::sidebets::{BetSide, SideBet};
 use protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
 use rooms::{
     arm_squeeze_clock, arm_squeeze_grace, arm_vote_timer, error_message, maybe_pace,
@@ -216,6 +218,27 @@ enum At {
 
 /// The dealer's word to a watcher who reaches for the chips.
 const RAIL_ONLY: &str = "You're watching — take a seat to play.";
+
+/// The dealer's word for a bet the felt doesn't post.
+const NOT_OFFERED: &str = "That bet isn't posted at this table.";
+
+/// The bets with a spot on the felt — mirrors `SIDE_SPOTS` in the web client.
+/// The engine settles more (Player Dragon Bonus, Panda 8, the rest of the
+/// Tiger family); the client hides those, and the server refuses them too, so
+/// a modified client can't play a bet the table doesn't post.
+fn offered(kind: &BetKind) -> bool {
+    match kind {
+        BetKind::Main(_) => true,
+        BetKind::Side(side) => matches!(
+            side,
+            SideBet::PlayerPair
+                | SideBet::BankerPair
+                | SideBet::DragonBonus(BetSide::Banker)
+                | SideBet::Dragon7
+                | SideBet::Tiger
+        ),
+    }
+}
 
 async fn handle_socket(socket: WebSocket, registry: Registry, _slot: ConnSlot) {
     let (mut ws_tx, mut ws_rx) = socket.split();
@@ -536,6 +559,12 @@ async fn handle_command(
                 return true;
             };
             let pid = *pid;
+            if let ClientMsg::Bet { kind, .. } = &table_cmd {
+                if !offered(kind) {
+                    let _ = tx.try_send(ServerMsg::Error { message: NOT_OFFERED.into() });
+                    return true;
+                }
+            }
             let mut room = room.lock().await;
             // A dealer-flip request is the one command the dealer speaks to:
             // the whole table should hear why a house card turned early.
@@ -1735,5 +1764,49 @@ mod shoe_lifecycle_tests {
             saw_cut_card_out_line,
             "the cut-card-out line should have been announced before the last hand"
         );
+    }
+}
+
+#[cfg(test)]
+mod felt_tests {
+    //! The server posts the same bets the felt does — and no others.
+    use super::*;
+    use baccarat_engine::settle::BetSpot;
+    use protocol::Tier;
+
+    #[tokio::test]
+    async fn a_bet_with_no_spot_on_the_felt_is_refused_before_it_reaches_the_table() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (tx, mut rx) = mpsc::channel(OUT_QUEUE);
+        let pid = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let pid = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap(); // bets wait on a cut shoe now
+            g.seat(pid, tx.clone());
+            pid
+        };
+        let mut at = Some(At::Seat(Seat { room: room.clone(), pid }));
+        let mut strikes = 0;
+        for side in [SideBet::Panda8, SideBet::DragonBonus(BetSide::Player), SideBet::BigTiger, SideBet::TigerPair] {
+            let bet = ClientMsg::Bet { kind: BetKind::Side(side), amount: 2_500 };
+            assert!(handle_command(bet, &registry, &tx, &mut at, &mut strikes).await);
+            match rx.try_recv() {
+                Ok(ServerMsg::Error { message }) => assert_eq!(message, NOT_OFFERED),
+                other => panic!("expected a refusal, got {other:?}"),
+            }
+        }
+        assert!(room.lock().await.table.view_for(pid).unwrap().bets.is_empty(), "nothing staged");
+
+        // the posted bets still go through
+        for side in [SideBet::DragonBonus(BetSide::Banker), SideBet::Dragon7, SideBet::Tiger, SideBet::PlayerPair] {
+            let bet = ClientMsg::Bet { kind: BetKind::Side(side), amount: 2_500 };
+            assert!(handle_command(bet, &registry, &tx, &mut at, &mut strikes).await);
+            assert!(matches!(rx.try_recv(), Ok(ServerMsg::State { .. })), "accepted: a fresh view");
+        }
+        let main = ClientMsg::Bet { kind: BetKind::Main(BetSpot::Player), amount: 2_500 };
+        assert!(handle_command(main, &registry, &tx, &mut at, &mut strikes).await);
+        assert_eq!(room.lock().await.table.view_for(pid).unwrap().bets.len(), 5);
     }
 }
