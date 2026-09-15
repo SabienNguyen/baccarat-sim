@@ -126,6 +126,29 @@ async function runSolo(browser) {
   const gone = await waitGone(page, ".shoe-stage", 3500 - 1800);
   record("solo: shoe-stage unmounts within 3.5s of the cut", gone);
 
+  // 4b. Page scroll must be unlocked once the cut stage is gone (regression
+  // check for the body/html overflow lock staying stuck after ShoeCutStage
+  // is left permanently mounted by App).
+  const overflows = await page.evaluate(() => ({
+    body: getComputedStyle(document.body).overflow,
+    html: getComputedStyle(document.documentElement).overflow,
+  }));
+  record(
+    "solo: body overflow is unlocked after the cut stage hides",
+    overflows.body !== "hidden",
+    overflows,
+  );
+  record(
+    "solo: html overflow is unlocked after the cut stage hides",
+    overflows.html !== "hidden",
+    overflows,
+  );
+  const scrollY = await page.evaluate(() => {
+    window.scrollTo(0, 400);
+    return window.scrollY;
+  });
+  record("solo: page actually scrolls after the cut stage hides", scrollY > 0, { scrollY });
+
   // 5. HUD phase reads Betting; tally shows "Shoe 1".
   const phase = await page.locator(".hud-box-value--phase").first().innerText().catch(() => "(missing)");
   record("solo: HUD phase reads Betting after the cut", phase.trim() === "Betting", { phase });

@@ -310,3 +310,81 @@ describe("the reveal animation", () => {
     expect(turned.textContent).toContain("K");
   });
 });
+
+test("page scroll is locked only while the stage is showing", () => {
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
+  const { rerender } = render(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(document.body.style.overflow).toBe("hidden");
+  expect(document.documentElement.style.overflow).toBe("hidden");
+
+  rerender(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="Betting"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(document.body.style.overflow).toBe("");
+  expect(document.documentElement.style.overflow).toBe("");
+
+  rerender(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="Betting"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={cutReveal()}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(document.body.style.overflow).toBe("hidden");
+  expect(document.documentElement.style.overflow).toBe("hidden");
+
+  rerender(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="Betting"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(document.body.style.overflow).toBe("");
+  expect(document.documentElement.style.overflow).toBe("");
+});
+
+test("a mounted but hidden stage never locks scroll", () => {
+  document.body.style.overflow = "";
+  document.documentElement.style.overflow = "";
+  render(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="Betting"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(document.body.style.overflow).toBe("");
+  expect(document.documentElement.style.overflow).toBe("");
+});
