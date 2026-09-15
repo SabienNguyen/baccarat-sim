@@ -84,9 +84,15 @@ export function ShoeCutStage({
   const [burnedCount, setBurnedCount] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Body+html scroll lock while the stage is mounted, same as PeelStage —
-  // a stray touch-scroll behind the backdrop must not move the page.
+  // Body+html scroll lock while the stage is showing, same as PeelStage —
+  // a stray touch-scroll behind the backdrop must not move the page. The
+  // component now stays mounted permanently (App self-gates it below), so
+  // the lock must track visibility rather than apply for the component's
+  // whole lifetime, or the page would stay unscrollable forever after the
+  // first cut ceremony.
+  const visible = phase === "ShoeCut" || animating !== null;
   useEffect(() => {
+    if (!visible) return;
     const prevBody = document.body.style.overflow;
     const prevHtml = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
@@ -95,7 +101,7 @@ export function ShoeCutStage({
       document.body.style.overflow = prevBody;
       document.documentElement.style.overflow = prevHtml;
     };
-  }, []);
+  }, [visible]);
 
   // Drive the reveal timeline off `animating`. Reduced-motion users skip
   // straight to the banner and end the animation on the next paint.
