@@ -1,0 +1,470 @@
+/* The cut ceremony: a full-viewport stage in the peel-overlay style (see
+   peelstage.css) — a dim/blurred backdrop over the still-mounted felt, sat
+   UNDER the pinned action bar (z-index 45 in theme.css's phone block) so
+   nothing else needs to move while it's up. */
+.shoe-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.shoe-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shoe-backdrop {
+    backdrop-filter: blur(2px);
+  }
+}
+
+.shoe-stage-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
+  justify-content: center;
+  /* Clears the pinned bottom bar the way peelstage.css does. */
+  padding: 16px 16px calc(var(--controls-bar-clearance, 0px) + 12px);
+}
+
+.shoe-title {
+  margin: 0;
+  font-family: var(--font-display, inherit);
+  font-size: 18px;
+  text-align: center;
+  color: var(--gold);
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.shoe-subline {
+  margin: 0;
+  max-width: 40ch;
+  text-align: center;
+  color: #f3eede;
+}
+
+/* --- the dealing shoe -------------------------------------------------
+   `.shoe-rig` is the positioning context for everything drawn around the
+   shoe (the peeking back card, and — during the reveal — the turned card
+   and discard tray). It is sized to the shoe itself, NOT to the full-height
+   `.shoe-stage-content`: that mismatch was the root cause of the turned
+   card and discard tray rendering off-screen (see ShoeCutStage.tsx and the
+   task report) — an absolutely positioned child measures its offsets
+   against its nearest positioned ancestor, and when that ancestor is a
+   100dvh box, `top: -84px` lands 84px above the actual viewport rather than
+   84px above the shoe. */
+.shoe-rig {
+  position: relative;
+  width: min(calc(100% - 32px), 720px);
+}
+
+/* the ink cabinet the well sits in */
+.shoe-body {
+  position: relative;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  /* the gold inner lip along the top edge */
+  padding: 4px 0 0;
+}
+.shoe-body::before {
+  content: "";
+  display: block;
+  height: 2px;
+  margin: 0 3px;
+  background: var(--gold);
+}
+/* the mouth: a gold bracket at the right end where cards feed out */
+.shoe-body::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  border: 2px solid var(--gold);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  pointer-events: none;
+}
+
+/* The shoe drawn edge-on: a long stack of card slivers. `grid-auto-columns:
+   1fr` divides the available width evenly across all 104 columns instead of
+   each sliver carrying its own fixed width, so the stack always fills the
+   shoe body exactly regardless of viewport. */
+.shoe-stack {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  touch-action: none;
+}
+
+/* Each sliver is a card back seen edge-on: a thin cream paper edge at its
+   left, then the oxblood card-back colour (matching `.card-back` in
+   cards.css) filling the rest — repeated per column so the well reads as a
+   long stack of red-backed cards, not a flat bar. */
+.sliver {
+  background: repeating-linear-gradient(
+    90deg,
+    #efe6c8 0,
+    #efe6c8 1px,
+    #52222f 1px,
+    #52222f 100%
+  );
+}
+
+/* A single card back peeking up out of the mouth so the whole assembly
+   reads as a shoe rather than a bar of stripes. */
+.shoe-peek {
+  position: absolute;
+  top: -34px;
+  right: 6px;
+  width: 56px;
+  height: 80px;
+  transform: rotate(-6deg);
+  pointer-events: none;
+}
+.shoe-peek .card {
+  width: 56px;
+  height: 80px;
+  margin: 0;
+}
+@media (max-width: 480px), (max-height: 700px) {
+  .shoe-peek {
+    width: 44px;
+    height: 63px;
+    top: -26px;
+  }
+  .shoe-peek .card {
+    width: 44px;
+    height: 63px;
+  }
+}
+
+/* Non-cutters (and spectators): a slow shimmer says the shoe is alive
+   without implying anyone but the cutter can touch it. */
+@keyframes shoe-idle {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.shoe-stack--idle .sliver {
+  animation: shoe-idle 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shoe-stack--idle .sliver {
+    animation: none;
+  }
+}
+
+/* --- the cut card: a pixel card standing edge-up in the well --- */
+.cut-card {
+  position: absolute;
+  top: -16px;
+  bottom: -16px;
+  width: 32px;
+  margin-left: -16px;
+  border: 3px solid var(--ink);
+  border-radius: 4px;
+  background: #f2c230;
+  color: var(--ink);
+  font-family: var(--font-display, inherit);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  cursor: grab;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  transition: transform 90ms ease, box-shadow 90ms ease;
+  /* a subtle lighter highlight strip down the left edge */
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.45) 0, rgba(255, 255, 255, 0.45) 3px, transparent 3px);
+}
+.cut-card span {
+  display: block;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+.cut-card:active,
+.cut-card.cut-card--dragging {
+  cursor: grabbing;
+  transform: translateY(-6px);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.45);
+}
+
+.shoe-cut-confirm {
+  min-height: 44px;
+}
+
+/* A quiet escape hatch: the stage's fixed backdrop otherwise covers the
+   HUD's own Lobby button, stranding a multiplayer waiter. Deliberately
+   understated next to the gold "Cut here" — a bevel-tone secondary, not a
+   second primary action. */
+.shoe-leave.btn {
+  font-family: var(--font-display, inherit);
+  font-size: 12px;
+  color: #fff;
+  background: var(--panel-bevel-hi);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 10px 18px;
+  min-height: 44px;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.shoe-leave.btn:hover {
+  filter: brightness(1.15);
+}
+/* `.btn`/`.btn--primary` (controls.css) are scoped under `.controls`, so the
+   confirm button — which lives in the shoe stage, not the control bar —
+   inherited none of that styling and rendered as a bare unstyled <button>.
+   These rules copy the primary look (gold face, ink text, hard shadow,
+   Silkscreen) so it reads the same wherever it's mounted. */
+.shoe-cut-confirm.btn {
+  font-family: var(--font-display, inherit);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--gold);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  padding: 12px 20px;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.3), 4px 4px 0 rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 80ms ease;
+}
+.shoe-cut-confirm.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.shoe-cut-confirm.btn:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+}
+.shoe-cut-confirm.btn:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+}
+
+/* Phone: fit 390x664 without scrolling — a shorter stack, a smaller title,
+   the confirm button stays a full 44px touch target. */
+@media (max-width: 480px), (max-height: 700px) {
+  .shoe-stack {
+    height: 72px;
+  }
+  .shoe-title {
+    font-size: 14px;
+  }
+}
+
+/* --- Cut + burn reveal animation --------------------------------------
+   Every step is a transform/opacity change so it composites cheaply and
+   plays under `prefers-reduced-motion` gating below. */
+
+/* The packet is one grid child spanning the slivers at-and-past the cut
+   point, laid out the same way (`1fr` columns) so it reads as a seamless
+   continuation of the stack until it lifts away. It stays INSIDE the well
+   (translateX to the left end, not off past the edge) per the design. */
+.shoe-packet {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  animation: shoe-packet-lift 800ms ease-in forwards;
+  --packet-shift: 0%;
+}
+@keyframes shoe-packet-lift {
+  0% {
+    transform: translate(0, 0);
+  }
+  35% {
+    transform: translate(0, -18px);
+  }
+  100% {
+    transform: translate(var(--packet-shift), -18px);
+  }
+}
+
+/* The turned card floats above the shoe, centred over the well — positioned
+   against `.shoe-rig` (sized to the shoe itself), not the full-height stage,
+   so it lands in view instead of off the top of the viewport. */
+.turned-card {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  width: 96px;
+  margin-left: -48px;
+  z-index: 2;
+  perspective: 600px;
+  animation: shoe-turn 600ms ease-out both;
+  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.45));
+}
+.turned-card .card {
+  width: 96px;
+  height: 137px;
+  margin: 0;
+}
+@keyframes shoe-turn {
+  from {
+    transform: rotateY(90deg);
+    opacity: 0.4;
+  }
+  to {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+}
+@media (max-width: 480px), (max-height: 700px) {
+  .turned-card {
+    width: 72px;
+    margin-left: -36px;
+  }
+  .turned-card .card {
+    width: 72px;
+    height: 103px;
+  }
+}
+
+/* The tray + counter travel together. Positioned against `.shoe-rig` (sized
+   to the shoe itself) for the same reason as `.turned-card` above — the
+   full-height stage was the wrong containing block and put both off-screen.
+   Desktop: to the right of the shoe, per the design. Phone: there isn't 96px
+   of gutter beside a shoe that already spans the narrow viewport, so the
+   phone override below moves the tray underneath instead of clipping off
+   the right edge. */
+.shoe-tray {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  margin-left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+/* the discard tray: an ink box with a gold lip */
+.discard {
+  position: relative;
+  width: 96px;
+  height: 64px;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: var(--ink);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45), inset 0 3px 0 var(--gold);
+  overflow: visible;
+}
+.discard .sliver--burned {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 32px;
+  height: 44px;
+  margin-left: -16px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  background: repeating-linear-gradient(45deg, #3a1622, #3a1622 4px, #52222f 4px, #52222f 8px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+  animation: shoe-burn-slide 420ms ease-in both;
+}
+/* each landed card lands a couple of px offset from the last, like a real
+   discard pile */
+.discard .sliver--burned:nth-child(odd) {
+  transform: translate(2px, -2px) rotate(-3deg);
+}
+.discard .sliver--burned:nth-child(even) {
+  transform: translate(-2px, 0) rotate(3deg);
+}
+@keyframes shoe-burn-slide {
+  from {
+    transform: translate(-160px, -30px) rotate(-8deg);
+    opacity: 0;
+  }
+}
+
+.burn-counter {
+  width: 96px;
+  text-align: center;
+  font-family: var(--font-display, inherit);
+  color: var(--gold);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 480px), (max-height: 700px) {
+  .shoe-tray {
+    left: auto;
+    right: 0;
+    bottom: auto;
+    top: calc(100% + 12px);
+    margin-left: 0;
+  }
+  .discard,
+  .burn-counter {
+    width: 72px;
+  }
+  .discard {
+    height: 48px;
+  }
+  .discard .sliver--burned {
+    width: 24px;
+    height: 33px;
+    margin-left: -12px;
+    bottom: 6px;
+  }
+}
+
+.shoe-banner {
+  font-family: var(--font-display, inherit);
+  font-size: 40px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow:
+    -3px -3px 0 var(--ink),
+    3px -3px 0 var(--ink),
+    -3px 3px 0 var(--ink),
+    3px 3px 0 var(--ink),
+    6px 6px 0 rgba(0, 0, 0, 0.45);
+  animation: shoe-banner-slam 480ms cubic-bezier(0.2, 1.7, 0.4, 1);
+}
+@keyframes shoe-banner-slam {
+  0% {
+    transform: scale(0.2) rotate(-8deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.5) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+@media (max-width: 480px), (max-height: 700px) {
+  .shoe-banner {
+    font-size: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shoe-packet,
+  .turned-card,
+  .discard .sliver--burned,
+  .shoe-banner {
+    animation: none;
+  }
+}

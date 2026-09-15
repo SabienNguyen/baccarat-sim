@@ -4,7 +4,7 @@ import { App, GameTable, AUTO_ADVANCE_MS, SWEEP_MS, PEEL_EXIT_MS } from "./App";
 import { createGameStore } from "./store/gameStore";
 import type { GameSession, CommandResult } from "./engine/adapter";
 import type { RoundSnapshot } from "./engine/types";
-import { bettingSnapshot, dealingSnapshot, settledSnapshot } from "./test/fixtures";
+import { bettingSnapshot, dealingSnapshot, settledSnapshot, shoeCutSnapshot } from "./test/fixtures";
 import { createRemoteStore } from "./multiplayer/remoteStore";
 
 // A recording portal in place of the real (null) one, to check the table's
@@ -28,7 +28,12 @@ vi.mock("./portal", async (importOriginal) => {
 });
 
 test("the table sends the portal its gameplay signals and an ad break on a fresh shoe", async () => {
-  const store = createGameStore(fakeSession(bettingSnapshot()));
+  const store = createGameStore(
+    fakeSession(bettingSnapshot(), {
+      requestNewShoe: () => okResult(shoeCutSnapshot()),
+      cutShoe: () => okResult(bettingSnapshot()),
+    }),
+  );
   render(<App store={store} />);
   expect(portalSpy.gameplayStart).not.toHaveBeenCalled();
   act(() => store.setState({ snapshot: dealingSnapshot() })); // the first deal
@@ -42,9 +47,12 @@ test("the table sends the portal its gameplay signals and an ad break on a fresh
   expect(portalSpy.gameplayStop).toHaveBeenCalledTimes(2);
   act(() => store.setState({ goalReached: false, snapshot: bettingSnapshot() }));
 
-  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
-  fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
-  await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
+  await userEvent.click(screen.getByRole("button", { name: "New shoe" }));
+  expect(screen.getByRole("dialog", { name: "Cut the shoe" })).toBeInTheDocument();
+  const cutCard = screen.getByLabelText("Cut card");
+  cutCard.focus();
+  await userEvent.keyboard("{End}");
+  await userEvent.keyboard("{Enter}");
   expect(portalSpy.requestMidgameAd).toHaveBeenCalledOnce();
 });
 
@@ -62,7 +70,8 @@ function fakeSession(initial: RoundSnapshot, spies: Partial<GameSession> = {}): 
     peek: () => ok,
     reveal: () => ok,
     settle: () => ok,
-    newShoe: () => ok,
+    cutShoe: () => ok,
+    requestNewShoe: () => ok,
     ...spies,
   };
 }
@@ -194,17 +203,89 @@ test("explain panel appears only when explain mode is on", async () => {
   expect(screen.getByLabelText("Explain")).toBeInTheDocument();
 });
 
-test("New Shoe opens the cut-the-deck ritual and only shuffles after the cut", async () => {
-  const newShoe = vi.fn(() => okResult(bettingSnapshot()));
-  const store = createGameStore(fakeSession(bettingSnapshot(), { newShoe }));
+test("New Shoe opens the cut ceremony and only cuts after the confirm", async () => {
+  const requestNewShoe = vi.fn(() => okResult(shoeCutSnapshot()));
+  const cutShoe = vi.fn(() => okResult(bettingSnapshot()));
+  const store = createGameStore(fakeSession(bettingSnapshot(), { requestNewShoe, cutShoe }));
   render(<App store={store} />);
-  await userEvent.click(screen.getByRole("button", { name: "New Shoe" }));
-  expect(screen.getByRole("dialog", { name: "Cut the deck" })).toBeInTheDocument();
-  expect(newShoe).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByLabelText("Shoe").firstChild as Element);
-  await userEvent.click(screen.getByRole("button", { name: /Cut & shuffle/ }));
-  expect(newShoe).toHaveBeenCalledOnce();
-  expect(screen.queryByRole("dialog", { name: "Cut the deck" })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "New shoe" }));
+  expect(screen.getByRole("dialog", { name: "Cut the shoe" })).toBeInTheDocument();
+  expect(requestNewShoe).toHaveBeenCalledOnce();
+  expect(cutShoe).not.toHaveBeenCalled();
+  const cutCard = screen.getByLabelText("Cut card");
+  cutCard.focus();
+  await userEvent.keyboard("{End}");
+  await userEvent.keyboard("{Enter}");
+  expect(cutShoe).toHaveBeenCalledWith(950);
+  expect(screen.queryByRole("dialog", { name: "Cut the shoe" })).toBeNull();
+});
+
+test("mounts the ShoeCutStage on a phone-like and desktop device when the phase is ShoeCut", () => {
+  const store = createGameStore(fakeSession(shoeCutSnapshot()));
+  render(<App store={store} />);
+  expect(screen.getByRole("dialog", { name: "Cut the shoe" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Cut card")).toBeInTheDocument();
+});
+
+test("keeps the ShoeCutStage mounted through the cut animation when shoe.number increases", () => {
+  vi.useFakeTimers();
+  try {
+    const store = createGameStore(fakeSession(shoeCutSnapshot()));
+    render(<App store={store} />);
+    act(() =>
+      store.setState({
+        snapshot: bettingSnapshot({
+          shoe: {
+            number: 1,
+            cut_card_out: false,
+            cut_reason: null,
+            cutter: null,
+            last_cut: { position: 600, turned: { rank: "Nine", suit: "Hearts" }, burned: 2 },
+            vote: null,
+          },
+        }),
+      }),
+    );
+    expect(screen.getByRole("dialog", { name: "Shoe cut" })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(2600);
+    });
+    expect(screen.queryByRole("dialog", { name: "Shoe cut" })).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the scoreboard shows the current shoe number", () => {
+  const store = createGameStore(fakeSession(bettingSnapshot({ shoe: { number: 3, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null } })));
+  render(<App store={store} />);
+  expect(screen.getByText(/Shoe 3/)).toBeInTheDocument();
+});
+
+test("the seat strip shows the vote row when a vote is open", () => {
+  const send = vi.fn();
+  const view = {
+    ...bettingSnapshot({
+      shoe: {
+        number: 1,
+        cut_card_out: false,
+        cut_reason: null,
+        cutter: 3,
+        last_cut: null,
+        vote: { proposer: 3, yes: [3], no: [], needed: 2 },
+      },
+    }),
+    seats: [
+      { id: 3, name: "me", bankroll: 100_000, staked: 0, bets: [], sitting_out: false, ready: true, decided: true, host: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 0, bets: [], sitting_out: false, ready: true, decided: true, host: false },
+    ],
+    player_squeezer: null,
+    banker_squeezer: null,
+  } as Parameters<typeof createRemoteStore>[0]["view"];
+  const store = createRemoteStore({ tier: "mid", view, me: 3, send });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.getByText("New shoe? 1 of 2")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Vote yes" })).toBeInTheDocument();
 });
 
 test("single-player shows no Settle or Next-hand buttons", () => {
@@ -480,8 +561,8 @@ function sharedTableStore(overrides: { player_squeezer: number | null; banker_sq
       bets: [{ kind: { Main: "Banker" }, amount: 500 }],
     }),
     seats: [
-      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
-      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true },
+      { id: 3, name: "me", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true, host: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 500, bets: [], sitting_out: false, ready: true, decided: true, host: false },
     ],
     ...overrides,
   } as Parameters<typeof createRemoteStore>[0]["view"];

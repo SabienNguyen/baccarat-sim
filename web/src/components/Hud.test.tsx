@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Hud } from "./Hud";
-import { bettingSnapshot, settledSnapshot } from "../test/fixtures";
+import { bettingSnapshot, settledSnapshot, shoeCutSnapshot } from "../test/fixtures";
 
 test("shows bankroll, phase, and table limits", () => {
   render(<Hud snapshot={bettingSnapshot()} />);
@@ -42,6 +42,26 @@ test("shows goal progress when the table has a win condition", () => {
   // betting fixture bankroll is $1,000 of a $4,000 goal -> 25%
   expect(screen.getByText("Goal $4,000.00")).toBeInTheDocument();
   expect(screen.getByText("25%")).toBeInTheDocument();
+});
+
+test("shows LAST HAND when the cut card is out", () => {
+  const { rerender } = render(<Hud snapshot={bettingSnapshot()} />);
+  expect(screen.queryByText("LAST HAND")).not.toBeInTheDocument();
+
+  rerender(
+    <Hud
+      snapshot={bettingSnapshot({
+        shoe: { number: 1, cut_card_out: true, cut_reason: null, cutter: null, last_cut: null, vote: null },
+      })}
+    />,
+  );
+  expect(screen.getByText("LAST HAND")).toBeInTheDocument();
+});
+
+test("the phase box reads Shoe cut during the cut", () => {
+  render(<Hud snapshot={shoeCutSnapshot()} />);
+  expect(screen.getByText("Shoe cut")).toBeInTheDocument();
+  expect(screen.queryByText("ShoeCut")).not.toBeInTheDocument();
 });
 
 test("at the rail the money box is an invitation: no bankroll, a seat on offer", async () => {

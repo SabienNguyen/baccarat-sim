@@ -15,7 +15,7 @@ import {
   saveSeatToken,
   saveWatchRoom,
 } from "./protocol";
-import { socketUrl } from "./protocol";
+import { socketUrl, CLIENT_PROTOCOL_VERSION } from "./protocol";
 import { urlParam } from "../urlParams";
 import { track } from "../analytics";
 import { createRemoteStore, type RemoteStore } from "./remoteStore";
@@ -170,12 +170,12 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         setRooms(msg.rooms);
         setPage(0);
       } else if (msg.type === "joined") {
-        if (msg.proto !== undefined && msg.proto !== 1) {
+        if (msg.proto !== undefined && msg.proto !== CLIENT_PROTOCOL_VERSION) {
           // A protocol skew means the server may send view shapes this build
           // can't render — stop here with a clear message rather than build a
           // store from it and risk an unguarded field access white-screening
           // the app mid-game.
-          console.warn(`server speaks protocol v${msg.proto}, this build expects v1`);
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v${CLIENT_PROTOCOL_VERSION}`);
           storeRef.current = null;
           setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
           return;
@@ -198,8 +198,8 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         storeRef.current = store;
         setStage({ at: "table", store, room: msg.room, watching: false });
       } else if (msg.type === "watching") {
-        if (msg.proto !== undefined && msg.proto !== 1) {
-          console.warn(`server speaks protocol v${msg.proto}, this build expects v1`);
+        if (msg.proto !== undefined && msg.proto !== CLIENT_PROTOCOL_VERSION) {
+          console.warn(`server speaks protocol v${msg.proto}, this build expects v${CLIENT_PROTOCOL_VERSION}`);
           storeRef.current = null;
           setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
           return;

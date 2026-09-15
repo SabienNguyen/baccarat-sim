@@ -11,11 +11,13 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
+use baccarat_engine::session::PhaseTag;
+use baccarat_engine::table::TableError;
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
 use rooms::{
-    arm_squeeze_clock, arm_squeeze_grace, error_message, maybe_pace, Registry, Room, WatcherId,
-    OUT_QUEUE,
+    arm_squeeze_clock, arm_squeeze_grace, arm_vote_timer, error_message, maybe_pace,
+    not_your_cut_line, Registry, Room, WatcherId, OUT_QUEUE,
 };
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -489,6 +491,7 @@ async fn handle_command(
             Some(At::Seat(Seat { room, pid })) => {
                 let (dealt, gone_squeezers) = {
                     let mut guard = room.lock().await;
+                    let host_before = guard.table.host();
                     guard.conns.remove(&pid);
                     let _ = guard.table.leave(pid);
                     // The seat that just left may have been the last
@@ -496,6 +499,14 @@ async fn handle_command(
                     // so leaving doesn't strand the table either.
                     let dealt = guard.try_auto_deal();
                     guard.broadcast();
+                    // The host handover, if any, happened inside `leave` —
+                    // announce it now the fresh view is already out.
+                    if guard.table.host() != host_before {
+                        guard.announce(rooms::host_handover_line(&guard.table));
+                        if guard.table.view_public().phase == PhaseTag::ShoeCut {
+                            guard.announce(rooms::host_line(&guard.table));
+                        }
+                    }
                     let gone_squeezers = if dealt { guard.held_squeezers() } else { Vec::new() };
                     (dealt, gone_squeezers)
                 };
@@ -529,6 +540,13 @@ async fn handle_command(
             // A dealer-flip request is the one command the dealer speaks to:
             // the whole table should hear why a house card turned early.
             let mut flip_line: Option<String> = None;
+            // The shoe lifecycle commands (cut, propose, vote) and a settle
+            // that crosses the cut card each add their own dealer lines,
+            // spoken (like `flip_line`) only after the fresh view is out.
+            let mut extra_lines: Vec<String> = Vec::new();
+            // Set by a successful ProposeNewShoe that leaves a vote open —
+            // armed with the room's bumped generation once the lock is free.
+            let mut start_vote_timer: Option<u64> = None;
             // Commands that move the coup along wind the squeeze clock: from
             // here the holder of the next face-down card has SQUEEZE_CLOCK to
             // act before the dealer turns it for them. A peek only counts
@@ -563,8 +581,62 @@ async fn handle_command(
                     }
                     Err(e) => Err(e),
                 },
-                ClientMsg::Settle => room.table.settle(),
-                ClientMsg::NewShoe => room.table.new_shoe(),
+                ClientMsg::Settle => {
+                    let cut_out_before =
+                        room.table.view_for(pid).map(|v| v.shoe.cut_card_out).unwrap_or(false);
+                    match room.table.settle() {
+                        Ok(()) => {
+                            if let Ok(v) = room.table.view_for(pid) {
+                                if v.shoe.cut_card_out && !cut_out_before {
+                                    extra_lines.push(rooms::cut_card_out_line());
+                                }
+                                if v.phase == PhaseTag::ShoeCut {
+                                    extra_lines.push(rooms::host_line(&room.table));
+                                }
+                            }
+                            Ok(())
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+                ClientMsg::CutShoe { position } => match room.table.cut_shoe(pid, position) {
+                    Ok(()) => {
+                        extra_lines.extend(rooms::cut_announcements(&room.table, pid));
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
+                ClientMsg::ProposeNewShoe => match room.table.propose_new_shoe(pid) {
+                    Ok(()) => {
+                        extra_lines.push(rooms::propose_announcement(&room.table, pid));
+                        if room.table.vote_open() {
+                            // Still open: (re)start the 30 s window.
+                            room.vote_generation += 1;
+                            start_vote_timer = Some(room.vote_generation);
+                        } else {
+                            // Nothing left to vote on — a lone seat (or an
+                            // already-reached majority) passes on the spot.
+                            extra_lines.push(rooms::vote_result_line(true));
+                            extra_lines.push(rooms::host_line(&room.table));
+                        }
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
+                ClientMsg::VoteNewShoe { yes } => match room.table.vote_new_shoe(pid, yes) {
+                    Ok(()) => {
+                        extra_lines.push(rooms::vote_announcement(&room.table, pid, yes));
+                        if !room.table.vote_open() {
+                            let passed = room.table.view_public().phase == PhaseTag::ShoeCut;
+                            extra_lines.push(rooms::vote_result_line(passed));
+                            if passed {
+                                extra_lines.push(rooms::host_line(&room.table));
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                },
                 _ => unreachable!("non-table commands handled above"),
             };
             match result {
@@ -595,6 +667,9 @@ async fn handle_command(
                     for line in lines {
                         room.announce(line);
                     }
+                    for line in extra_lines {
+                        room.announce(line);
+                    }
                     // A squeezer whose socket dropped BEFORE this deal got a
                     // grace that found nothing to surrender (see
                     // held_squeezers): give the dead seat the short grace
@@ -609,10 +684,18 @@ async fn handle_command(
                         if advances_coup {
                             arm_squeeze_clock(room.clone());
                         }
+                        if let Some(generation) = start_vote_timer {
+                            arm_vote_timer(room.clone(), generation);
+                        }
                     }
                 }
                 Err(e) => {
-                    let _ = tx.try_send(ServerMsg::Error { message: error_message(&e) });
+                    let message = if matches!(e, TableError::NotYourCut) {
+                        not_your_cut_line(&room.table)
+                    } else {
+                        error_message(&e)
+                    };
+                    let _ = tx.try_send(ServerMsg::Error { message });
                 }
             }
         }
@@ -678,6 +761,12 @@ async fn sit(
                 token,
             });
             guard.broadcast();
+            // The very first seat at a fresh table becomes the host and
+            // holds the cut — tell everyone (this seat included) who must
+            // act before the room shows up as anything but "waiting".
+            if guard.table.seats() == 1 {
+                guard.announce(rooms::host_line(&guard.table));
+            }
             let (id, tier) = (guard.id.clone(), guard.tier);
             drop(guard);
             tracing::info!("seat taken at {id} ({tier:?})");
@@ -747,6 +836,7 @@ mod squeeze_clock_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb);
@@ -781,6 +871,7 @@ mod squeeze_clock_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta);
             g.seat(b, tb.clone());
@@ -908,6 +999,7 @@ mod rail_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let (ta, ra) = mpsc::channel(OUT_QUEUE);
             std::mem::forget(ra); // keep alice's queue open without draining it
             g.seat(a, ta);
@@ -973,6 +1065,9 @@ mod rail_tests {
             let mut g = room.lock().await;
             for i in 0..rooms::MAX_SEATS {
                 let pid = g.table.join(&format!("p{i}"), 50_000).unwrap();
+                if i == 0 {
+                    g.table.cut_shoe(pid, 500).unwrap();
+                }
                 let (t, r) = mpsc::channel(OUT_QUEUE);
                 std::mem::forget(r);
                 g.seat(pid, t);
@@ -1090,6 +1185,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());
@@ -1154,6 +1250,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             g.seat(a, ta.clone());
             a
         };
@@ -1177,6 +1274,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             // bob is seated but hasn't decided, so alice alone never triggers
             // an auto-deal — this test is about the ready flag flipping back.
             let b = g.table.join("bob", buy_in).unwrap();
@@ -1224,6 +1322,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());
@@ -1271,6 +1370,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             let c = g.table.join("carol", buy_in).unwrap();
             g.seat(a, ta.clone());
@@ -1312,6 +1412,7 @@ mod ready_command_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             g.seat(a, ta.clone());
             g.seat(b, tb.clone());
@@ -1329,6 +1430,310 @@ mod ready_command_tests {
         assert!(
             states(&msgs_a).iter().any(|v| v.phase == PhaseTag::Dealing),
             "bob leaving was the table's last decision — it deals: {msgs_a:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod shoe_lifecycle_tests {
+    //! The cut ceremony, the New Shoe vote (propose/vote/pass/expire), host
+    //! handover, and the cut-card-out announcement — driven through
+    //! `handle_command` the way a real client would.
+    use super::*;
+    use baccarat_engine::session::BetKind;
+    use baccarat_engine::session::PhaseTag;
+    use baccarat_engine::settle::BetSpot;
+    use protocol::Tier;
+    use std::time::Duration;
+
+    fn drain(rx: &mut mpsc::Receiver<ServerMsg>) -> Vec<ServerMsg> {
+        let mut out = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            out.push(m);
+        }
+        out
+    }
+
+    fn announcements(msgs: &[ServerMsg]) -> Vec<String> {
+        msgs.iter()
+            .filter_map(|m| match m {
+                ServerMsg::Announce { message } => Some(message.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn states(msgs: &[ServerMsg]) -> Vec<baccarat_engine::table::TableView> {
+        msgs.iter()
+            .filter_map(|m| match m {
+                ServerMsg::State { view, .. } => Some(view.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn join_then_cut_then_bet_ready_deal_settle_happy_path() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let a = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            a
+        };
+        drain(&mut ra);
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+
+        // alice is the only seat — she holds the cut from the moment she joins.
+        assert_eq!(room.lock().await.table.host(), Some(a));
+
+        assert!(
+            handle_command(ClientMsg::CutShoe { position: 500 }, &registry, &ta, &mut seat_a, &mut strikes)
+                .await
+        );
+        let msgs = drain(&mut ra);
+        let lines = announcements(&msgs);
+        assert!(lines.iter().any(|m| m == "alice cuts the shoe"), "{lines:?}");
+        assert!(lines.iter().any(|m| m.starts_with("Dealer turns the")), "{lines:?}");
+        assert!(lines.iter().any(|m| m == "Shoe 1. Place your bets."), "{lines:?}");
+        assert!(states(&msgs).iter().any(|v| v.phase == PhaseTag::Betting), "{msgs:?}");
+
+        assert!(handle_command(
+            ClientMsg::Bet { kind: BetKind::Main(BetSpot::Player), amount: 2_500 },
+            &registry,
+            &ta,
+            &mut seat_a,
+            &mut strikes
+        )
+        .await);
+        drain(&mut ra);
+
+        assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs = drain(&mut ra);
+        assert!(states(&msgs).iter().any(|v| v.phase == PhaseTag::Dealing), "{msgs:?}");
+
+        assert!(handle_command(ClientMsg::Settle, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs = drain(&mut ra);
+        assert!(
+            states(&msgs).iter().any(|v| v.phase == PhaseTag::Settled),
+            "settle returns a Settled snapshot for this coup: {msgs:?}"
+        );
+        assert_eq!(room.lock().await.table.shoe_number(), 1, "still the shoe we cut — settle alone never re-cuts");
+    }
+
+    #[tokio::test]
+    async fn non_host_cut_is_refused() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (_a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(b, tb.clone());
+            (a, b)
+        };
+        drain(&mut ra);
+        drain(&mut rb);
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+
+        assert!(
+            handle_command(ClientMsg::CutShoe { position: 500 }, &registry, &tb, &mut seat_b, &mut strikes)
+                .await
+        );
+        let msgs = drain(&mut rb);
+        assert!(
+            matches!(msgs.as_slice(), [ServerMsg::Error { message }] if message == "The cut isn't yours — alice has it."),
+            "{msgs:?}"
+        );
+        assert_eq!(room.lock().await.table.shoe_number(), 0, "the shoe is untouched");
+    }
+
+    #[tokio::test]
+    async fn propose_vote_pass_moves_everyone_to_shoe_cut_and_announces() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.table.cut_shoe(a, 500).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(b, tb.clone());
+            (a, b)
+        };
+        drain(&mut ra);
+        drain(&mut rb);
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+
+        assert!(handle_command(ClientMsg::ProposeNewShoe, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs_a = drain(&mut ra);
+        let lines_a = announcements(&msgs_a);
+        assert!(lines_a.iter().any(|m| m.contains("calls for a new shoe")), "{lines_a:?}");
+        drain(&mut rb);
+
+        assert!(handle_command(
+            ClientMsg::VoteNewShoe { yes: true },
+            &registry,
+            &tb,
+            &mut seat_b,
+            &mut strikes
+        )
+        .await);
+        let msgs_b = drain(&mut rb);
+        let lines_b = announcements(&msgs_b);
+        assert!(lines_b.iter().any(|m| m.contains("votes yes")), "{lines_b:?}");
+        assert!(lines_b.iter().any(|m| m == "New shoe: the table says yes"), "{lines_b:?}");
+        assert!(states(&msgs_b).iter().any(|v| v.phase == PhaseTag::ShoeCut), "{msgs_b:?}");
+
+        let msgs_a = drain(&mut ra);
+        assert!(
+            states(&msgs_a).iter().any(|v| v.phase == PhaseTag::ShoeCut),
+            "alice sees ShoeCut too: {msgs_a:?}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn vote_timer_expires_an_open_vote() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, _b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            g.table.cut_shoe(a, 500).unwrap();
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(b, tb.clone());
+            (a, b)
+        };
+        drain(&mut ra);
+        drain(&mut rb);
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+
+        // Only alice's yes: 1 of 2 seats isn't a majority — the vote stays
+        // open, waiting on bob (or the clock).
+        assert!(handle_command(ClientMsg::ProposeNewShoe, &registry, &ta, &mut seat_a, &mut strikes).await);
+        drain(&mut ra);
+        drain(&mut rb);
+        assert!(room.lock().await.table.vote_open(), "still waiting on bob");
+
+        tokio::task::yield_now().await; // let the timer task register its sleep
+        tokio::time::advance(Duration::from_secs(31)).await;
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(!room.lock().await.table.vote_open(), "the 30s window should have closed it");
+        let msgs = drain(&mut ra);
+        assert!(
+            announcements(&msgs).iter().any(|m| m == "New shoe: the table says no"),
+            "{msgs:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn host_leaving_announces_the_new_cutter() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.seat(a, ta.clone());
+            let b = g.table.join("bob", buy_in).unwrap();
+            g.seat(b, tb.clone());
+            (a, b)
+        };
+        drain(&mut ra);
+        drain(&mut rb);
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+
+        // Both seats are still in ShoeCut (never cut) when the host leaves.
+        assert!(handle_command(ClientMsg::Leave, &registry, &ta, &mut seat_a, &mut strikes).await);
+        let msgs_b = drain(&mut rb);
+        let lines = announcements(&msgs_b);
+        assert!(lines.iter().any(|m| m == "bob now has the cut"), "{lines:?}");
+        assert!(
+            lines.iter().any(|m| m == "bob has the cut — waiting on the shoe"),
+            "{lines:?}"
+        );
+        assert_eq!(room.lock().await.table.host(), Some(b));
+    }
+
+    #[tokio::test]
+    async fn cut_card_out_is_announced_before_the_last_hand() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let a = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
+            g.seat(a, ta.clone());
+            a
+        };
+        drain(&mut ra);
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+
+        let mut hands = 0;
+        let mut saw_cut_card_out_line = false;
+        loop {
+            assert!(handle_command(
+                ClientMsg::Bet { kind: BetKind::Main(BetSpot::Player), amount: 2_500 },
+                &registry,
+                &ta,
+                &mut seat_a,
+                &mut strikes
+            )
+            .await);
+            drain(&mut ra);
+            assert!(handle_command(ClientMsg::Ready, &registry, &ta, &mut seat_a, &mut strikes).await);
+            drain(&mut ra);
+            assert!(handle_command(ClientMsg::Settle, &registry, &ta, &mut seat_a, &mut strikes).await);
+            let msgs = drain(&mut ra);
+            let lines = announcements(&msgs);
+            if lines.iter().any(|m| m == "Cut card's out — one more hand, then a fresh shoe") {
+                saw_cut_card_out_line = true;
+            }
+            hands += 1;
+            assert!(hands < 300, "cut card never came out");
+            // The seat's own view still shows `Settled` (the felt stays up
+            // until the next bet); `shoe.cut_reason` reflects the table's
+            // real underlying phase regardless of that overlay.
+            let entered_shoe_cut = room.lock().await.table.view_for(a).unwrap().shoe.cut_reason.is_some();
+            if entered_shoe_cut {
+                assert!(
+                    lines.iter().any(|m| m == "alice has the cut — waiting on the shoe"),
+                    "{lines:?}"
+                );
+                break;
+            }
+        }
+        assert!(
+            saw_cut_card_out_line,
+            "the cut-card-out line should have been announced before the last hand"
         );
     }
 }

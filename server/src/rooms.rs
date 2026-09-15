@@ -3,6 +3,8 @@
 //! after any accepted command, every seat gets a fresh view pushed.
 
 use crate::protocol::{RoomInfo, ServerMsg, Tier};
+use baccarat_engine::card::{Card, Rank, Suit};
+use baccarat_engine::session::PhaseTag;
 use baccarat_engine::settle::Ruleset;
 use baccarat_engine::table::{FlipRequest, PlayerId, Table, TableConfig, TableError};
 use futures_util::FutureExt;
@@ -10,6 +12,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 
 pub const MAX_SEATS: usize = 7;
@@ -50,6 +53,9 @@ pub const HOLD: std::time::Duration = std::time::Duration::from_secs(120);
 /// so after this the house dealer turns them for this coup only.
 pub const SQUEEZE_GRACE: std::time::Duration = std::time::Duration::from_millis(SQUEEZE_GRACE_MS);
 pub const SQUEEZE_GRACE_MS: u64 = 8_000;
+
+/// How long an open New Shoe vote stays open before it expires as a "no".
+pub const VOTE_WINDOW: Duration = Duration::from_secs(30);
 
 /// How long a connected squeezer may sit on face-down cards before the
 /// dealer turns them. Measured from the last accepted command that moved the
@@ -97,6 +103,10 @@ pub struct Room {
     /// Generation of the squeeze clock. Each arming bumps it; a clock task
     /// that wakes to find a newer generation is stale and stands down.
     squeeze_gen: u64,
+    /// Generation of the New Shoe vote. Bumped on every successful propose;
+    /// a vote timer that wakes to find a newer generation (a later propose,
+    /// or the vote it was watching already resolved) stands down.
+    pub vote_generation: u64,
 }
 
 impl Room {
@@ -196,6 +206,7 @@ impl Room {
             held: HashMap::new(),
             seated_once: false,
             squeeze_gen: 0,
+            vote_generation: 0,
         }
     }
 
@@ -489,12 +500,19 @@ impl Registry {
             // them, and let the dealer pick up any squeeze the seat was holding
             // (`table.leave` handed it to the house; without a pace the cards
             // would sit face down until someone else acted).
+            let host_before = guard.table.host();
             if guard.expire_held() {
                 // The seat that just got evicted may have been the last
                 // undecided one — same ready-up check a live SitOut or Leave
                 // gets, so a hold expiring doesn't strand the table either.
                 let dealt = guard.try_auto_deal();
                 guard.broadcast();
+                if guard.table.host() != host_before {
+                    guard.announce(host_handover_line(&guard.table));
+                    if guard.table.view_public().phase == PhaseTag::ShoeCut {
+                        guard.announce(host_line(&guard.table));
+                    }
+                }
                 maybe_pace(room.clone());
                 if dealt {
                     for (pid, since) in guard.held_squeezers() {
@@ -706,6 +724,11 @@ pub fn waiting_on_line(table: &Table) -> String {
 }
 
 /// Human dealer speech for refusals, mirrored from the web's narrateError.
+///
+/// `NotYourCut` has no table to name the host with here (the signature is
+/// shared with every other refusal, which don't need one) — the call site
+/// uses `not_your_cut_line` instead when it has the table, and only falls
+/// back to this generic line otherwise.
 pub fn error_message(err: &TableError) -> String {
     use baccarat_engine::session::CommandError as E;
     match err {
@@ -722,6 +745,9 @@ pub fn error_message(err: &TableError) -> String {
         }
         TableError::OutOfOrder => "Order, order — Player hand first, then Banker.".into(),
         TableError::NothingToTurn => "Nothing for the dealer to turn just now.".into(),
+        TableError::NotYourCut => "The cut isn't yours.".into(),
+        TableError::VoteOpen => "There's already a vote on the table.".into(),
+        TableError::NoVote => "Nothing to vote on.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {
             format!("Too rich for this table — the max is ${}.{:02}.", max / 100, max % 100)
         }
@@ -732,9 +758,140 @@ pub fn error_message(err: &TableError) -> String {
             "Your rack can't cover that one.".into()
         }
         TableError::Command(E::NoBetsPlaced) => "Chips down first — then we deal.".into(),
+        TableError::Command(E::WrongPhase { found: PhaseTag::ShoeCut, .. }) => {
+            "Shoe's not cut yet — the host has the cut.".into()
+        }
         TableError::Command(E::WrongPhase { .. }) => "Not just now — let's finish this hand.".into(),
         TableError::Command(E::BadCardIndex { .. }) => "That card isn't on the felt.".into(),
     }
+}
+
+/// The refusal for a non-host's cut attempt, naming who really holds it.
+/// Used at call sites that have the table; `error_message` above is the
+/// fallback when only the bare `TableError` is in hand.
+pub fn not_your_cut_line(table: &Table) -> String {
+    let host = table.host().and_then(|h| table.name_of(h)).unwrap_or(NAMELESS);
+    format!("The cut isn't yours — {host} has it.")
+}
+
+/// "{host} has the cut — waiting on the shoe" — spoken whenever the table
+/// lands in `ShoeCut` and everyone needs to know who must act.
+pub fn host_line(table: &Table) -> String {
+    let host = table.host().and_then(|h| table.name_of(h)).unwrap_or(NAMELESS);
+    format!("{host} has the cut — waiting on the shoe")
+}
+
+/// "{name} now has the cut" — the host-handover counterpart to `host_line`,
+/// spoken when the cut passes to a new seat (the old host left).
+pub fn host_handover_line(table: &Table) -> String {
+    let host = table.host().and_then(|h| table.name_of(h)).unwrap_or(NAMELESS);
+    format!("{host} now has the cut")
+}
+
+/// "{name} calls for a new shoe — vote (k of n)" — k is the yes tally right
+/// after the proposal (the proposer's own immediate yes), n how many are
+/// needed to pass.
+pub fn propose_announcement(table: &Table, pid: PlayerId) -> String {
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
+    let (k, n) = vote_tally(table);
+    format!("{name} calls for a new shoe — vote ({k} of {n})")
+}
+
+/// "{name} votes yes/no (k of n)" — k/n as `propose_announcement`, taken
+/// after the vote that triggered this line is already recorded.
+pub fn vote_announcement(table: &Table, pid: PlayerId, yes: bool) -> String {
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
+    let (k, n) = vote_tally(table);
+    let choice = if yes { "yes" } else { "no" };
+    format!("{name} votes {choice} ({k} of {n})")
+}
+
+/// The open vote's current (yes so far, needed to pass), straight from the
+/// public view so callers don't have to reach into `Table`'s private state.
+fn vote_tally(table: &Table) -> (usize, u8) {
+    match table.view_public().shoe.vote {
+        Some(v) => (v.yes.len(), v.needed),
+        None => (0, 0),
+    }
+}
+
+/// "New shoe: the table says yes/no" — spoken once a vote resolves, whether
+/// by a decisive tally or by the 30 s window running out.
+pub fn vote_result_line(passed: bool) -> String {
+    if passed {
+        "New shoe: the table says yes".into()
+    } else {
+        "New shoe: the table says no".into()
+    }
+}
+
+/// "Cut card's out — one more hand, then a fresh shoe" — spoken the moment
+/// `cut_card_out` flips true, one settle before the shoe actually ends.
+pub fn cut_card_out_line() -> String {
+    "Cut card's out — one more hand, then a fresh shoe".into()
+}
+
+/// The cut ceremony's three lines, in order: who cut, what the dealer
+/// turned and burned, and the fresh shoe's number. Reads `shoe.last_cut`
+/// (just recorded by `cut_shoe`) and `shoe.number` off the table's own view.
+pub fn cut_announcements(table: &Table, host: PlayerId) -> Vec<String> {
+    let name = table.name_of(host).unwrap_or(NAMELESS);
+    let shoe = table.view_public().shoe;
+    let mut lines = vec![format!("{name} cuts the shoe")];
+    if let Some(reveal) = shoe.last_cut {
+        lines.push(format!(
+            "Dealer turns the {} — {} cards burned",
+            card_label(reveal.turned),
+            reveal.burned
+        ));
+    }
+    lines.push(format!("Shoe {}. Place your bets.", shoe.number));
+    lines
+}
+
+/// A card as the dealer's voice reads it: rank + suit symbol, e.g. `7♣`,
+/// `K♥`, `A♠`, `10♦`.
+pub fn card_label(card: Card) -> String {
+    let rank = match card.rank {
+        Rank::Ace => "A",
+        Rank::Two => "2",
+        Rank::Three => "3",
+        Rank::Four => "4",
+        Rank::Five => "5",
+        Rank::Six => "6",
+        Rank::Seven => "7",
+        Rank::Eight => "8",
+        Rank::Nine => "9",
+        Rank::Ten => "10",
+        Rank::Jack => "J",
+        Rank::Queen => "Q",
+        Rank::King => "K",
+    };
+    let suit = match card.suit {
+        Suit::Clubs => "♣",
+        Suit::Diamonds => "♦",
+        Suit::Hearts => "♥",
+        Suit::Spades => "♠",
+    };
+    format!("{rank}{suit}")
+}
+
+/// (Re)start the room's New Shoe vote timer: 30 s from now, this generation's
+/// vote fails and is announced as a "no" if it's still open. Follows the same
+/// generation-stamped, lock-only-around-the-check discipline as
+/// `arm_squeeze_clock` — a later propose (or a resolution reached in the
+/// meantime) bumps `vote_generation`, and a stale wake stands down.
+pub fn arm_vote_timer(room: Arc<Mutex<Room>>, generation: u64) {
+    tokio::spawn(async move {
+        tokio::time::sleep(VOTE_WINDOW).await;
+        let mut guard = room.lock().await;
+        if guard.vote_generation != generation || !guard.table.vote_open() {
+            return; // superseded by a later propose, or already resolved
+        }
+        guard.table.vote_expire();
+        guard.broadcast();
+        guard.announce(vote_result_line(false));
+    });
 }
 
 #[cfg(test)]
@@ -751,6 +908,7 @@ mod tests {
             let mut room = room.lock().await;
             let (.., buy_in) = room.tier.stakes();
             let a = room.table.join("a", buy_in).unwrap();
+            room.table.cut_shoe(a, 500).unwrap();
             let b = room.table.join("b", buy_in).unwrap();
             room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
             room.table.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -788,6 +946,7 @@ mod tests {
             let mut g = room.lock().await;
             let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, tx);
             g.conns.remove(&pid);
         }
@@ -812,6 +971,7 @@ mod tests {
             let mut g = room.lock().await;
             let (tx, _rx) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, tx);
         }
         assert!(registry.get(&id).await.is_some());
@@ -844,6 +1004,7 @@ mod reconnect_tests {
         let mut room = Room::new("TEST01".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let pid = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(pid, 500).unwrap();
         let (tx, _rx) = mpsc::channel(OUT_QUEUE);
         room.seat(pid, tx);
         (room, pid)
@@ -932,6 +1093,7 @@ mod flip_request_line_tests {
             3,
         );
         let pid = table.join("Sabien", 100_000).unwrap();
+        table.cut_shoe(pid, 500).unwrap();
         table.place_bet(pid, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         table.ready(pid).unwrap();
         table.deal().unwrap();
@@ -979,6 +1141,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST02".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let b = room.table.join("bob", buy_in).unwrap();
         let (ta, ra) = mpsc::channel(OUT_QUEUE);
         let (tb, rb) = mpsc::channel(OUT_QUEUE);
@@ -1056,6 +1219,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST04".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let b = room.table.join("bob", buy_in).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         let (tb, _rb) = mpsc::channel(OUT_QUEUE);
@@ -1073,6 +1237,7 @@ mod squeeze_gap_tests {
         // a holder of both hands is listed once
         let mut solo = Room::new("TEST05".into(), Tier::Mid, false);
         let c = solo.table.join("carol", buy_in).unwrap();
+        solo.table.cut_shoe(c, 500).unwrap();
         let (tc, _rc) = mpsc::channel(OUT_QUEUE);
         solo.seat(c, tc);
         solo.table.place_bet(c, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1217,6 +1382,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST03".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1270,6 +1436,7 @@ mod squeeze_gap_tests {
         let mut room = Room::new("TEST06".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1300,6 +1467,7 @@ mod squeeze_gap_tests {
             let mut g = room.lock().await;
             let (.., buy_in) = g.tier.stakes();
             let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
             let b = g.table.join("bob", buy_in).unwrap();
             let (ta, _ra) = mpsc::channel(OUT_QUEUE);
             let (tb, rb) = mpsc::channel(OUT_QUEUE);
@@ -1351,6 +1519,7 @@ mod rail_tests {
         let mut room = Room::new("RAIL01".into(), Tier::Mid, false);
         let (.., buy_in) = room.tier.stakes();
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         let (tw, mut rw) = mpsc::channel(OUT_QUEUE);
@@ -1391,6 +1560,7 @@ mod rail_tests {
         room.watch(tw).unwrap();
         // a table of one seat plus a watcher deals as soon as the seat bets
         let a = room.table.join("alice", buy_in).unwrap();
+        room.table.cut_shoe(a, 500).unwrap();
         let (ta, _ra) = mpsc::channel(OUT_QUEUE);
         room.seat(a, ta);
         room.table.place_bet(a, BetKind::Main(BetSpot::Player), 2_500).unwrap();
@@ -1444,6 +1614,7 @@ mod rail_tests {
             let mut g = room.lock().await;
             let (ta, _ra) = mpsc::channel(OUT_QUEUE);
             let pid = g.table.join("a", 1_000_000).unwrap();
+            g.table.cut_shoe(pid, 500).unwrap();
             g.seat(pid, ta);
             g.watch(tw).unwrap();
             g.release(pid); // the only seat stands up

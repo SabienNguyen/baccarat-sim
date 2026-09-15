@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Controls } from "./Controls";
-import { bettingSnapshot, dealingSnapshot } from "../test/fixtures";
+import { bettingSnapshot, dealingSnapshot, shoeCutSnapshot } from "../test/fixtures";
 
 test("Deal is enabled in Betting with at least one bet", async () => {
   const onDeal = vi.fn();
@@ -154,6 +154,52 @@ test("once ready, the button reads Unready and fires onUnready", async () => {
   expect(unready).toBeEnabled();
   await userEvent.click(unready);
   expect(onUnready).toHaveBeenCalledOnce();
+});
+
+test("New shoe is disabled while a vote is open", () => {
+  const voteOpen = bettingSnapshot({
+    shoe: {
+      number: 1,
+      cut_card_out: false,
+      cut_reason: null,
+      cutter: null,
+      last_cut: null,
+      vote: { proposer: 0, yes: [0], no: [], needed: 2 },
+    },
+  });
+  const { rerender } = render(<Controls snapshot={voteOpen} onDeal={vi.fn()} onNewShoe={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "New shoe" })).toBeDisabled();
+
+  // no open vote, but not Betting either — still disabled
+  rerender(<Controls snapshot={dealingSnapshot()} onDeal={vi.fn()} onNewShoe={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "New shoe" })).toBeDisabled();
+
+  // Betting, no vote — enabled
+  rerender(<Controls snapshot={bettingSnapshot()} onDeal={vi.fn()} onNewShoe={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "New shoe" })).toBeEnabled();
+});
+
+test("everything but explain and audio is disabled in ShoeCut", () => {
+  render(
+    <Controls
+      snapshot={shoeCutSnapshot()}
+      onDeal={vi.fn()}
+      onRevealAll={vi.fn()}
+      onSettle={vi.fn()}
+      onNewHand={vi.fn()}
+      onNewShoe={vi.fn()}
+      onSitOut={vi.fn()}
+      onReady={vi.fn()}
+      onUnready={vi.fn()}
+      onWatch={vi.fn()}
+      explainOn={false}
+      onToggleExplain={vi.fn()}
+    />,
+  );
+  for (const name of ["Ready", "Sit out", "Watch hand", "Reveal all", "Settle", "Next hand", "New shoe"]) {
+    expect(screen.getByRole("button", { name })).toBeDisabled();
+  }
+  expect(screen.getByRole("button", { name: "Explain" })).toBeEnabled();
 });
 
 test("at the rail only Explain is offered — nothing there moves the game", () => {

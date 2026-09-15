@@ -21,7 +21,8 @@ function view(over: Partial<TableViewMsg> = {}): TableViewMsg {
       cockroach_pig: { columns: [] },
     },
     explain: [],
-    seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false }],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
+    seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false }],
     player_squeezer: null,
     banker_squeezer: null,
     ...over,
@@ -97,7 +98,7 @@ test("a settle push records the round's delta and fires the win pop-up", () => {
       phase: "Settled",
       bankroll: 1_010_000,
       payouts: [{ bet: { kind: { Main: "Player" }, amount: 10000 }, net: 10000 }],
-      seats: [{ id: 0, name: "me", bankroll: 1_010_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false }],
+      seats: [{ id: 0, name: "me", bankroll: 1_010_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false }],
     }),
   });
   expect(store.getState().snapshot.bankroll).toBe(1_010_000);
@@ -134,8 +135,8 @@ test("other players' actions arrive as seat updates", () => {
     type: "state",
     view: view({
       seats: [
-        { id: 0, name: "me", bankroll: 1_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false },
-        { id: 1, name: "friend", bankroll: 1_000_000, staked: 50_000, bets: [], sitting_out: false, ready: true, decided: true },
+        { id: 0, name: "me", bankroll: 1_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false },
+        { id: 1, name: "friend", bankroll: 1_000_000, staked: 50_000, bets: [], sitting_out: false, ready: true, decided: true, host: false },
       ],
     }),
   });
@@ -162,14 +163,14 @@ test("myReady is derived from my own seat on every push", () => {
   store.handle({
     type: "state",
     view: view({
-      seats: [{ id: 1, name: "me", bankroll: 1_000_000, staked: 2_500, bets: [], sitting_out: false, ready: true, decided: true }],
+      seats: [{ id: 1, name: "me", bankroll: 1_000_000, staked: 2_500, bets: [], sitting_out: false, ready: true, decided: true, host: false }],
     }),
   });
   expect(store.getState().myReady).toBe(true);
   store.handle({
     type: "state",
     view: view({
-      seats: [{ id: 1, name: "me", bankroll: 1_000_000, staked: 2_500, bets: [], sitting_out: false, ready: false, decided: false }],
+      seats: [{ id: 1, name: "me", bankroll: 1_000_000, staked: 2_500, bets: [], sitting_out: false, ready: false, decided: false, host: false }],
     }),
   });
   expect(store.getState().myReady).toBe(false);
@@ -188,7 +189,7 @@ test("a seat that can't cover the table minimum is reported as busted", () => {
   const v = view();
   // The server marks the seat; the store must surface it so the UI can offer a
   // rebuy or a way out rather than leaving the player stuck unable to bet.
-  v.seats = [{ id: 1, name: "me", bankroll: 50, staked: 0, bets: [], sitting_out: false, ready: false, decided: true, broke: true }];
+  v.seats = [{ id: 1, name: "me", bankroll: 50, staked: 0, bets: [], sitting_out: false, ready: false, decided: true, broke: true, host: false }];
   store.handle({ type: "state", view: v });
   expect(store.getState().busted).toBe(true);
 });
@@ -197,13 +198,33 @@ test("another player going broke doesn't mark me busted", () => {
   const { store } = setup();
   const v = view();
   v.seats = [
-    { id: 1, name: "me", bankroll: 5000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, broke: false },
-    { id: 2, name: "them", bankroll: 10, staked: 0, bets: [], sitting_out: false, ready: false, decided: true, broke: true },
+    { id: 1, name: "me", bankroll: 5000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, broke: false, host: false },
+    { id: 2, name: "them", bankroll: 10, staked: 0, bets: [], sitting_out: false, ready: false, decided: true, broke: true, host: false },
   ];
   store.handle({ type: "state", view: v });
   expect(store.getState().busted).toBe(false);
 });
 
+
+test("cutShoe sends cut_shoe with the position", () => {
+  const { store, sent } = setup();
+  store.getState().cutShoe(600);
+  expect(sent.at(-1)).toEqual({ type: "cut_shoe", position: 600 });
+});
+
+test("requestNewShoe sends propose_new_shoe", () => {
+  const { store, sent } = setup();
+  store.getState().requestNewShoe();
+  expect(sent.at(-1)).toEqual({ type: "propose_new_shoe" });
+});
+
+test("voteNewShoe sends vote_new_shoe", () => {
+  const { store, sent } = setup();
+  store.getState().voteNewShoe(true);
+  expect(sent.at(-1)).toEqual({ type: "vote_new_shoe", yes: true });
+  store.getState().voteNewShoe(false);
+  expect(sent.at(-1)).toEqual({ type: "vote_new_shoe", yes: false });
+});
 
 test("asking the dealer for a flip goes over the wire; the server decides", () => {
   const { store, sent } = setup();
@@ -223,7 +244,7 @@ test("each seat's bets pass straight through from the server's view", () => {
   const bets = [{ kind: { Main: "Banker" as const }, amount: 5000 }];
   store.handle({
     type: "state",
-    view: view({ seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 5000, bets, sitting_out: false, ready: false, decided: false }] }),
+    view: view({ seats: [{ id: 0, name: "me", bankroll: 1_000_000, staked: 5000, bets, sitting_out: false, ready: false, decided: false, host: false }] }),
   });
   expect(store.getState().seats?.[0].bets).toEqual(bets);
 });

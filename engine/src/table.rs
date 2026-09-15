@@ -7,18 +7,17 @@ use crate::round::{play_round, RoundResult};
 use crate::scoreboard::{derive_scoreboard, RoundRecord, ScoreboardSnapshot, Side};
 use crate::session::{
     aggregate_payouts, derive_events, fully_revealed, hand_view, BetKind, CardStatus, CommandError,
-    Event, HandView, PhaseTag, PlacedBet, RevealState,
+    Event, HandView, PhaseTag, PlacedBet, RevealState, ShoeCutReason, ShoeView, VoteView,
 };
 use crate::settle::{settle_with, Bet, Ruleset};
 use crate::shoe::{Shoe, CUT_CARD};
 use crate::sidebets::settle_side;
 use serde::{Deserialize, Serialize};
 
-/// A seat at the table, identified for the lifetime of the table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
-#[cfg_attr(feature = "wasm", tsify(into_wasm_abi, from_wasm_abi))]
-pub struct PlayerId(pub u64);
+/// A seat at the table, identified for the lifetime of the table. Defined in
+/// `session.rs` (shared with `ShoeView`/`VoteView`); re-exported here so
+/// `baccarat_engine::table::PlayerId` keeps working.
+pub use crate::session::PlayerId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "wasm", derive(tsify_next::Tsify))]
@@ -47,6 +46,12 @@ pub enum TableError {
     /// squeeze, the house hand is already up, or the dealer is turning it
     /// anyway.
     NothingToTurn,
+    /// The cut belongs to the host — someone else tried to cut the shoe.
+    NotYourCut,
+    /// A New Shoe vote is already open.
+    VoteOpen,
+    /// No New Shoe vote is open to vote on.
+    NoVote,
     Command(CommandError),
 }
 
@@ -111,7 +116,16 @@ impl Player {
     }
 }
 
+/// An in-progress New Shoe vote. Only possible in `Phase::Betting`.
+struct Vote {
+    proposer: PlayerId,
+    yes: Vec<PlayerId>,
+    no: Vec<PlayerId>,
+}
+
 enum Phase {
+    /// Before betting can open: waiting on the host to cut a fresh shoe.
+    ShoeCut { reason: ShoeCutReason },
     Betting,
     Dealing {
         round: RoundResult,
@@ -143,6 +157,7 @@ pub struct TableView {
     /// Who holds each hand's cards this coup (None: anyone may flip).
     pub player_squeezer: Option<PlayerId>,
     pub banker_squeezer: Option<PlayerId>,
+    pub shoe: ShoeView,
 }
 
 /// The public face of every seat, shown to the whole table.
@@ -164,16 +179,31 @@ pub struct SeatView {
     pub decided: bool,
     /// Bankroll won't cover the table minimum, so this seat can't bet at all.
     pub broke: bool,
+    /// The first player to join (or their successor by join order). Holds
+    /// the cut while the table is in `ShoeCut`.
+    pub host: bool,
 }
 
 pub struct Table {
     config: TableConfig,
     seed: u64,
-    shoes_dealt: u64,
+    /// Incremented on every cut; 0 until the first one. Also seeds the next
+    /// shoe (`seed.wrapping_add(shoe_number)`), so the sequence is
+    /// reproducible from the table seed alone.
+    shoe_number: u32,
     shoe: Shoe,
     phase: Phase,
     players: Vec<Player>,
     next_player: u64,
+    /// The first player to join, or their successor by join order once they
+    /// leave. Holds the cut for every shoe. `None` with no seats.
+    host: Option<PlayerId>,
+    /// True once a hand has been dealt with the shoe at or below `CUT_CARD`
+    /// remaining; one more hand is played, then the shoe ends.
+    cut_card_out: bool,
+    /// The most recent cut's ceremony, for clients to replay the animation.
+    /// Cleared whenever the phase enters `ShoeCut` again.
+    last_cut: Option<crate::shoe::CutReveal>,
     history: Vec<RoundRecord>,
     /// Outcome of the most recent settled round, until the next deal.
     last_outcome: Option<crate::round::Outcome>,
@@ -183,12 +213,15 @@ pub struct Table {
     /// out). Each seat's own settled display is keyed on its `payouts`; a
     /// spectator has no seat, so theirs is keyed on the table as a whole.
     settled_on_felt: bool,
-    /// Memoized scoreboard, keyed on history length. `history` is append-only
-    /// (only pushed at settle, never cleared), so equal length ⇒ identical
-    /// content ⇒ identical roads — this skips recomputing all five roads on
-    /// every view (a view is built after every command, ~8-10× per coup, but
-    /// the scoreboard only changes once per settled round).
-    sb_cache: std::cell::RefCell<Option<(usize, ScoreboardSnapshot)>>,
+    /// Memoized scoreboard, keyed on `(shoe_number, history.len())` so a cut
+    /// (which clears history back to an empty, previously-seen length)
+    /// still invalidates the cache. `history` is otherwise append-only
+    /// within a shoe — this skips recomputing all five roads on every view
+    /// (a view is built after every command, ~8-10× per coup, but the
+    /// scoreboard only changes once per settled round).
+    sb_cache: std::cell::RefCell<Option<((u32, usize), ScoreboardSnapshot)>>,
+    /// An open New Shoe vote, if any. Only possible during `Phase::Betting`.
+    vote: Option<Vote>,
 }
 
 impl Table {
@@ -201,31 +234,177 @@ impl Table {
         Table {
             config,
             seed,
-            shoes_dealt: 0,
+            shoe_number: 0,
+            // Placeholder shoe — never dealt from until the first cut.
             shoe: Shoe::new_seeded(seed),
-            phase: Phase::Betting,
+            phase: Phase::ShoeCut { reason: ShoeCutReason::NewTable },
             players: Vec::new(),
             next_player: 0,
+            host: None,
+            cut_card_out: false,
+            last_cut: None,
             history: Vec::new(),
             last_outcome: None,
             last_round: None,
             settled_on_felt: false,
             sb_cache: std::cell::RefCell::new(None),
+            vote: None,
         }
     }
 
-    /// The scoreboard, recomputed only when `history` has grown since the last
-    /// call (see `sb_cache`). Behavior-identical to `derive_scoreboard`.
+    /// The current phase, as the client-visible tag.
+    fn phase_tag(&self) -> PhaseTag {
+        match &self.phase {
+            Phase::ShoeCut { .. } => PhaseTag::ShoeCut,
+            Phase::Betting => PhaseTag::Betting,
+            Phase::Dealing { .. } => PhaseTag::Dealing,
+        }
+    }
+
+    /// The first player to join, or their successor by join order.
+    pub fn host(&self) -> Option<PlayerId> {
+        self.host
+    }
+
+    /// 0 until the first cut, then incremented on every cut.
+    pub fn shoe_number(&self) -> u32 {
+        self.shoe_number
+    }
+
+    /// The scoreboard, recomputed only when `(shoe_number, history.len())`
+    /// changed since the last call (see `sb_cache`). Behavior-identical to
+    /// `derive_scoreboard`.
     fn scoreboard(&self) -> ScoreboardSnapshot {
-        let len = self.history.len();
-        if let Some((cached_len, snap)) = self.sb_cache.borrow().as_ref() {
-            if *cached_len == len {
+        let key = (self.shoe_number, self.history.len());
+        if let Some((cached_key, snap)) = self.sb_cache.borrow().as_ref() {
+            if *cached_key == key {
                 return snap.clone();
             }
         }
         let snap = derive_scoreboard(&self.history);
-        *self.sb_cache.borrow_mut() = Some((len, snap.clone()));
+        *self.sb_cache.borrow_mut() = Some((key, snap.clone()));
         snap
+    }
+
+    /// Only the host may cut. `position` is a fraction of the shoe in
+    /// `0..=1000` (clamped by the engine to `50..=950`).
+    pub fn cut_shoe(&mut self, pid: PlayerId, position: u16) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::ShoeCut { .. }) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::ShoeCut,
+                found: self.phase_tag(),
+            }
+            .into());
+        }
+        if self.host != Some(pid) {
+            return Err(TableError::NotYourCut);
+        }
+        self.shoe_number += 1;
+        let (shoe, reveal) = Shoe::new_cut(self.seed.wrapping_add(self.shoe_number as u64), position);
+        self.shoe = shoe;
+        self.last_cut = Some(reveal);
+        self.history.clear();
+        self.cut_card_out = false;
+        self.last_outcome = None;
+        self.last_round = None;
+        self.settled_on_felt = false;
+        for p in &mut self.players {
+            p.bets.clear();
+            p.ready = false;
+            p.sitting_out = false;
+            p.payouts = None;
+        }
+        self.phase = Phase::Betting;
+        Ok(())
+    }
+
+    /// Open a New Shoe vote: Betting only, one vote at a time, proposer must
+    /// be seated. The proposer counts as an immediate yes, so a lone seat
+    /// (or any table where that alone is already a majority) passes on the
+    /// spot.
+    pub fn propose_new_shoe(&mut self, pid: PlayerId) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: self.phase_tag(),
+            }
+            .into());
+        }
+        if self.vote.is_some() {
+            return Err(TableError::VoteOpen);
+        }
+        // seated check
+        if !self.players.iter().any(|p| p.id == pid) {
+            return Err(TableError::NoSuchPlayer);
+        }
+        self.vote = Some(Vote { proposer: pid, yes: vec![pid], no: Vec::new() });
+        self.resolve_vote();
+        Ok(())
+    }
+
+    /// Cast (or change) a vote on the open New Shoe proposal. Seated players
+    /// only; a player may switch their vote as many times as they like until
+    /// the vote resolves.
+    pub fn vote_new_shoe(&mut self, pid: PlayerId, yes: bool) -> Result<(), TableError> {
+        if self.vote.is_none() {
+            return Err(TableError::NoVote);
+        }
+        if !self.players.iter().any(|p| p.id == pid) {
+            return Err(TableError::NoSuchPlayer);
+        }
+        let vote = self.vote.as_mut().expect("checked above");
+        vote.yes.retain(|&p| p != pid);
+        vote.no.retain(|&p| p != pid);
+        if yes {
+            vote.yes.push(pid);
+        } else {
+            vote.no.push(pid);
+        }
+        self.resolve_vote();
+        Ok(())
+    }
+
+    /// The server's 30 s timer calls this when an open vote's window elapses
+    /// without a resolution: it fails, same as a decisive "no". A no-op when
+    /// nothing is open (the vote may have already resolved).
+    pub fn vote_expire(&mut self) {
+        self.vote = None;
+    }
+
+    /// Whether a New Shoe vote is currently open.
+    pub fn vote_open(&self) -> bool {
+        self.vote.is_some()
+    }
+
+    /// Resolve the open vote against the current seat count, if any: pass on
+    /// a strict majority yes, fail once a majority can no longer be reached.
+    /// Otherwise the vote stays open. Called after every vote change and
+    /// after a leave.
+    fn resolve_vote(&mut self) {
+        let Some(vote) = &self.vote else { return };
+        let seats = self.players.len();
+        if seats == 0 {
+            // Nobody left to vote — nothing to resolve.
+            self.vote = None;
+            return;
+        }
+        if vote.yes.len() * 2 > seats {
+            // Pass: every seat's staged bets are cleared. Bets are only
+            // staged (not yet drawn from the bankroll), so `bets.clear()`
+            // alone conserves money — there is nothing to refund.
+            for p in &mut self.players {
+                p.bets.clear();
+                p.ready = false;
+                p.payouts = None;
+            }
+            self.phase = Phase::ShoeCut { reason: ShoeCutReason::Vote };
+            self.last_cut = None;
+            self.vote = None;
+        } else if vote.no.len() * 2 >= seats {
+            // Fail: a majority yes can no longer be reached.
+            self.vote = None;
+        }
+        // else: still open, waiting on more votes.
     }
 
     pub fn seats(&self) -> usize {
@@ -255,6 +434,9 @@ impl Table {
             ready: false,
             payouts: None,
         });
+        if self.host.is_none() {
+            self.host = Some(id);
+        }
         Ok(id)
     }
 
@@ -283,6 +465,21 @@ impl Table {
         if self.players.len() == before {
             return Err(TableError::NoSuchPlayer);
         }
+        // Host handover: the next seat by join order (players are stored in
+        // join order — pushed once in `join`, never reordered). Never
+        // touches the shoe, history or phase.
+        if self.host == Some(pid) {
+            self.host = self.players.first().map(|p| p.id);
+        }
+        // An open vote loses the leaver's tally (whether they were the
+        // proposer, a yes or a no — the proposer leaving does not cancel the
+        // vote) and re-resolves against the smaller seat count. If nobody is
+        // left at all, `resolve_vote` clears it.
+        if let Some(vote) = &mut self.vote {
+            vote.yes.retain(|&p| p != pid);
+            vote.no.retain(|&p| p != pid);
+            self.resolve_vote();
+        }
         Ok(())
     }
 
@@ -297,7 +494,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -343,7 +540,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -359,7 +556,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -376,7 +573,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -393,7 +590,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -415,10 +612,12 @@ impl Table {
     /// touches nothing about the shoe or the history.
     pub fn rebuy(&mut self, pid: PlayerId, amount: i64) -> Result<(), TableError> {
         debug_assert!(amount >= 0, "negative rebuy");
-        if !matches!(self.phase, Phase::Betting) {
+        // Allowed in Betting AND ShoeCut (like rename, join, leave) — only a
+        // hand in progress holds it up.
+        if matches!(self.phase, Phase::Dealing { .. }) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -442,7 +641,7 @@ impl Table {
         if !matches!(self.phase, Phase::Betting) {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+                found: self.phase_tag(),
             }
             .into());
         }
@@ -457,9 +656,8 @@ impl Table {
         if self.players.iter().any(|p| !p.decided(table_min)) {
             return Err(TableError::WaitingOnPlayers);
         }
-        if self.shoe.remaining() <= CUT_CARD {
-            self.reshuffle();
-        }
+        // No silent reshuffle — the shoe ends via the cut-card-out rule in
+        // `settle()` and only the host's cut ever replaces it.
         let round = play_round(&mut self.shoe);
         let reveal = RevealState {
             player: vec![CardStatus::FaceDown; round.player.cards.len()],
@@ -473,6 +671,12 @@ impl Table {
         let player_squeezer = self.biggest_bettor(crate::settle::BetSpot::Player);
         let banker_squeezer = self.biggest_bettor(crate::settle::BetSpot::Banker);
         self.phase = Phase::Dealing { round, reveal, player_squeezer, banker_squeezer };
+        // An open vote does not block dealing — Betting only waits on
+        // `all_ready`, not on a vote. But the coup dealing while a vote is
+        // open makes the vote moot (its resolution targets Betting), so it
+        // is silently cleared rather than left to resolve into a phase that
+        // has already moved on.
+        self.vote = None;
         Ok(())
     }
 
@@ -574,7 +778,7 @@ impl Table {
         let Phase::Dealing { player_squeezer, banker_squeezer, .. } = &self.phase else {
             return Err(CommandError::WrongPhase {
                 expected: PhaseTag::Dealing,
-                found: PhaseTag::Betting,
+                found: self.phase_tag(),
             }
             .into());
         };
@@ -757,6 +961,7 @@ impl Table {
     /// Returns whether the card's status actually changed (a peek at a card
     /// already peeked or up, or a reveal of one already up, changes nothing).
     fn set_status(&mut self, hand: Side, index: usize, to: CardStatus) -> Result<bool, TableError> {
+        let tag = self.phase_tag();
         match &mut self.phase {
             Phase::Dealing { reveal, .. } => {
                 let statuses = match hand {
@@ -772,11 +977,7 @@ impl Table {
                 }
                 Ok(statuses[index] != was)
             }
-            Phase::Betting => Err(CommandError::WrongPhase {
-                expected: PhaseTag::Dealing,
-                found: PhaseTag::Betting,
-            }
-            .into()),
+            _ => Err(CommandError::WrongPhase { expected: PhaseTag::Dealing, found: tag }.into()),
         }
     }
 
@@ -784,10 +985,10 @@ impl Table {
     pub fn settle(&mut self) -> Result<(), TableError> {
         let round = match &self.phase {
             Phase::Dealing { round, .. } => round.clone(),
-            Phase::Betting => {
+            _ => {
                 return Err(CommandError::WrongPhase {
                     expected: PhaseTag::Dealing,
-                    found: PhaseTag::Betting,
+                    found: self.phase_tag(),
                 }
                 .into())
             }
@@ -811,25 +1012,21 @@ impl Table {
         self.last_round = Some(round.clone());
         self.settled_on_felt = true;
         self.history.push(RoundRecord::from_round(&round));
-        self.phase = Phase::Betting;
-        Ok(())
-    }
-
-    pub fn new_shoe(&mut self) -> Result<(), TableError> {
-        if !matches!(self.phase, Phase::Betting) {
-            return Err(CommandError::WrongPhase {
-                expected: PhaseTag::Betting,
-                found: PhaseTag::Dealing,
+        // Realistic cut-card-end: the coup that pushed the shoe past the cut
+        // card finishes, one more hand is dealt, and only THEN does the shoe
+        // end — never mid-coup.
+        if self.cut_card_out {
+            // Entering ShoeCut: the previous cut's ceremony has been shown —
+            // clear it so a client doesn't replay a stale animation.
+            self.last_cut = None;
+            self.phase = Phase::ShoeCut { reason: ShoeCutReason::CutCardOut };
+        } else {
+            self.phase = Phase::Betting;
+            if self.shoe.remaining() <= CUT_CARD {
+                self.cut_card_out = true;
             }
-            .into());
         }
-        self.reshuffle();
         Ok(())
-    }
-
-    fn reshuffle(&mut self) {
-        self.shoes_dealt += 1;
-        self.shoe = Shoe::new_seeded(self.seed.wrapping_add(self.shoes_dealt));
     }
 
     /// The table as one seated player sees it. Face-down cards stay face down
@@ -869,13 +1066,35 @@ impl Table {
                 // Out of chips for this table — the client shows a rebuy or
                 // leave prompt, and the deal no longer waits on them.
                 broke: p.broke(self.config.table_min),
+                host: self.host == Some(p.id),
             })
             .collect();
         let (player_squeezer, banker_squeezer) = match &self.phase {
             Phase::Dealing { player_squeezer, banker_squeezer, .. } => {
                 (*player_squeezer, *banker_squeezer)
             }
-            Phase::Betting => (None, None),
+            Phase::Betting | Phase::ShoeCut { .. } => (None, None),
+        };
+        let shoe = ShoeView {
+            number: self.shoe_number,
+            cut_card_out: self.cut_card_out,
+            cut_reason: match &self.phase {
+                Phase::ShoeCut { reason } => Some(*reason),
+                _ => None,
+            },
+            // The host always holds the cut; there is nobody to cut for once
+            // betting or a coup is under way.
+            cutter: match &self.phase {
+                Phase::ShoeCut { .. } => self.host,
+                _ => None,
+            },
+            last_cut: self.last_cut,
+            vote: self.vote.as_ref().map(|v| VoteView {
+                proposer: v.proposer,
+                yes: v.yes.clone(),
+                no: v.no.clone(),
+                needed: (self.players.len() / 2 + 1) as u8,
+            }),
         };
         let viewer_id = viewer.map(|p| p.id);
         // A seat's settled display closes the moment THEY re-bet or sit out
@@ -927,6 +1146,28 @@ impl Table {
                 seats,
                 player_squeezer,
                 banker_squeezer,
+                shoe: shoe.clone(),
+            },
+            Phase::ShoeCut { .. } => TableView {
+                phase: PhaseTag::ShoeCut,
+                player: settled_hands(Side::Player),
+                banker: settled_hands(Side::Banker),
+                bets,
+                bankroll,
+                table_min: self.config.table_min,
+                table_max: self.config.table_max,
+                outcome: if showing_settled { self.last_outcome } else { None },
+                payouts: viewer.and_then(|p| p.payouts.clone()),
+                events: Vec::new(),
+                scoreboard: self.scoreboard(),
+                explain: match (&self.last_round, showing_settled) {
+                    (Some(round), true) => round.trace.clone(),
+                    _ => Vec::new(),
+                },
+                seats,
+                player_squeezer,
+                banker_squeezer,
+                shoe: shoe.clone(),
             },
             Phase::Dealing { round, reveal, .. } => {
                 // A peeked sliver is the squeezer's private glimpse. Everyone
@@ -974,6 +1215,7 @@ impl Table {
                     seats,
                     player_squeezer,
                     banker_squeezer,
+                    shoe,
                 }
             }
         }
@@ -1006,12 +1248,30 @@ mod tests {
         )
     }
 
+    /// A table with one seat, cut and ready for betting — the shared setup
+    /// every dealing test starts from.
+    pub(crate) fn open_table(seed: u64) -> (Table, PlayerId) {
+        let mut t = Table::new(
+            TableConfig {
+                table_min: 100,
+                table_max: 1_000_000,
+                ruleset: Ruleset::Commission,
+                max_seats: 7,
+            },
+            seed,
+        );
+        let host = t.join("host", 100_000).unwrap();
+        t.cut_shoe(host, 500).unwrap();
+        (t, host)
+    }
+
     #[test]
     fn tied_stakes_give_the_squeeze_to_the_first_seated() {
         // The doc contract is "ties: first seated". a joins before b and they
         // stake the Player side identically, so a must hold the squeeze.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 5_000).unwrap();
@@ -1028,6 +1288,7 @@ mod tests {
         // squeeze's suspense leaks to every client at the table.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -1051,6 +1312,7 @@ mod tests {
         // must reset with them, not linger from the previous round.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1067,6 +1329,7 @@ mod tests {
     fn a_seat_can_be_renamed_mid_deal_and_everyone_sees_it() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -1103,6 +1366,7 @@ mod tests {
         // over-limit, never wrap `on_spot + amount` past the max/bankroll guards.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         let err = t.place_bet(a, BetKind::Main(BetSpot::Player), i64::MAX);
         assert!(matches!(
@@ -1118,6 +1382,7 @@ mod tests {
     fn bets_validate_against_each_players_own_bankroll() {
         let mut t = table();
         let rich = t.join("rich", 1_000_000).unwrap();
+        t.cut_shoe(rich, 500).unwrap();
         let poor = t.join("poor", 500).unwrap();
         t.place_bet(rich, BetKind::Main(BetSpot::Player), 10_000).unwrap();
         let err = t.place_bet(poor, BetKind::Main(BetSpot::Player), 10_000);
@@ -1129,6 +1394,7 @@ mod tests {
     fn a_full_coup_settles_every_player_and_conserves_money() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         // Opposite main bets: exactly one wins (or both push on tie).
         t.place_bet(a, BetKind::Main(BetSpot::Player), 10_000).unwrap();
@@ -1156,6 +1422,7 @@ mod tests {
     fn settled_view_keeps_the_rounds_cards_face_up() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1200,6 +1467,7 @@ mod tests {
                 seed,
             );
             let a = t.join("a", 100_000).unwrap();
+            t.cut_shoe(a, 500).unwrap();
             for _ in 0..4 {
                 t.place_bet(a, BetKind::Main(BetSpot::Player), 500).unwrap();
             }
@@ -1236,6 +1504,7 @@ mod tests {
                 seed,
             );
             let a = t.join("a", 100_000).unwrap();
+            t.cut_shoe(a, 500).unwrap();
             for _ in 0..4 {
                 t.place_bet(a, BetKind::Main(BetSpot::Player), 500).unwrap();
             }
@@ -1263,6 +1532,7 @@ mod tests {
         // finally sees why one hand has three cards and the other two.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1306,6 +1576,7 @@ mod tests {
     fn views_share_cards_but_keep_money_private_to_the_viewer() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 50_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
@@ -1329,6 +1600,7 @@ mod tests {
     fn no_view_ever_exposes_a_face_down_card() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1343,6 +1615,7 @@ mod tests {
     fn every_seat_view_and_the_public_view_exposes_each_seats_bets() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 2_000).unwrap();
@@ -1369,6 +1642,7 @@ mod tests {
     fn a_spectator_sees_the_felt_but_no_money_and_no_face_down_card() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 2_000).unwrap();
@@ -1395,6 +1669,7 @@ mod tests {
     fn a_spectator_never_sees_a_peeked_sliver() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1409,6 +1684,7 @@ mod tests {
     fn a_spectator_keeps_the_settled_coup_until_a_seat_opens_the_next_one() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.sit_out(b).unwrap();
@@ -1444,6 +1720,7 @@ mod tests {
     fn sitting_out_opens_the_next_coup_for_the_spectator_too() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1457,6 +1734,7 @@ mod tests {
     fn the_squeeze_is_communal() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
@@ -1473,6 +1751,7 @@ mod tests {
     fn stacked_bets_on_one_spot_cannot_pass_the_table_max() {
         let mut t = table(); // max 1_000_000
         let a = t.join("a", 5_000_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 600_000).unwrap();
         let err = t.place_bet(a, BetKind::Main(BetSpot::Player), 600_000).unwrap_err();
         assert!(matches!(
@@ -1491,12 +1770,17 @@ mod tests {
         // single-player adapter narrates this as "chips down first").
         let mut t = table();
         let _a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(_a, 500).unwrap();
         assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
-        // ...and with nobody seated at all there's no coup to deal
+        // ...and with nobody seated (and nobody to cut) the shoe never even
+        // opened for betting.
         let mut empty = table();
         assert!(matches!(
             empty.deal(),
-            Err(TableError::Command(CommandError::NoBetsPlaced))
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut,
+            }))
         ));
     }
 
@@ -1507,6 +1791,7 @@ mod tests {
         // untouched.
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.sit_out(a).unwrap();
         t.deal().unwrap();
 
@@ -1533,6 +1818,7 @@ mod tests {
     fn leaving_mid_deal_settles_the_departing_player() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 10_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1546,6 +1832,7 @@ mod tests {
     fn the_deal_waits_for_every_seat_to_decide() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers));
@@ -1563,6 +1850,7 @@ mod tests {
     fn sitting_out_returns_your_bets() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
         t.sit_out(a).unwrap();
         let v = t.view_for(a).unwrap();
@@ -1577,6 +1865,7 @@ mod tests {
     fn each_side_is_squeezed_by_its_biggest_bettor() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -1600,6 +1889,7 @@ mod tests {
     fn a_holder_turns_their_own_cards_in_any_order() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1612,6 +1902,7 @@ mod tests {
     fn cards_are_exposed_in_ritual_order() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
@@ -1633,6 +1924,7 @@ mod tests {
     fn a_shared_table_reserves_unbet_hands_for_the_house_dealer() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1655,6 +1947,7 @@ mod tests {
             7,
         );
         let p = solo.join("me", 100_000).unwrap();
+        solo.cut_shoe(p, 500).unwrap();
         solo.place_bet(p, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         solo.ready(p).unwrap();
         solo.deal().unwrap();
@@ -1667,6 +1960,7 @@ mod tests {
     fn betting_again_after_a_settle_returns_the_view_to_betting() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1684,6 +1978,7 @@ mod tests {
     fn both_betting_player_leaves_the_player_hand_face_down_at_the_deal() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 2_000).unwrap();
@@ -1703,6 +1998,7 @@ mod tests {
     fn the_house_dealer_flips_unbet_sides_in_order() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1730,6 +2026,7 @@ mod tests {
     fn a_tie_only_coup_is_entirely_dealer_flipped() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Tie), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1745,26 +2042,13 @@ mod tests {
     }
 
     #[test]
-    fn shoe_reshuffles_at_the_cut_card_across_many_coups() {
-        let mut t = table();
-        let a = t.join("a", 10_000_000).unwrap();
-        for _ in 0..200 {
-            t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
-            t.ready(a).unwrap();
-            t.deal().unwrap();
-            t.settle().unwrap();
-        }
-        // surviving 200 coups proves the cut-card reshuffle path works
-        assert!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len() == 200);
-    }
-
-    #[test]
     fn rebuy_tops_up_the_roll_without_touching_the_shoe() {
         // Buying more chips must NOT reshuffle: the coups already played stay on
         // the roads and the shoe keeps its position, exactly like handing cash
         // to the dealer mid-shoe.
         let mut t = table();
         let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         for _ in 0..4 {
             t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
             t.ready(a).unwrap();
@@ -1793,6 +2077,7 @@ mod tests {
     fn rebuy_is_refused_mid_deal() {
         let mut t = table();
         let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -1819,6 +2104,7 @@ mod tests {
                 seed,
             );
             let a = t.join("a", i64::MAX / 4).unwrap();
+            t.cut_shoe(a, 500).unwrap();
             // play until the shoe reshuffles: the bead plate keeps growing, so
             // detect the reshuffle by watching for the coup that follows it
             let mut coups = 0u32;
@@ -1873,6 +2159,7 @@ mod tests {
                     seed,
                 );
                 let p = t.join("p", BUY_IN).unwrap();
+                t.cut_shoe(p, 500).unwrap();
                 let mut hands = 0u32;
                 loop {
                     let roll = t.view_for(p).unwrap().bankroll;
@@ -1919,6 +2206,7 @@ mod tests {
         // go stale) and return an identical board on a repeat view (cache hit).
         let mut t = table();
         let a = t.join("a", 10_000_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         for expected in 1..=6 {
             t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
             t.ready(a).unwrap();
@@ -1959,6 +2247,7 @@ mod ready_tests {
     fn ready_requires_a_bet() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         assert!(matches!(
             t.ready(a),
             Err(TableError::Command(CommandError::NoBetsPlaced))
@@ -1972,6 +2261,7 @@ mod ready_tests {
     fn a_bet_after_ready_unreadies_the_seat() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         assert!(t.view_for(a).unwrap().seats[0].ready);
@@ -1983,6 +2273,7 @@ mod ready_tests {
     fn clearing_bets_also_unreadies_the_seat() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.clear_bets(a).unwrap();
@@ -1993,6 +2284,7 @@ mod ready_tests {
     fn deal_waits_on_a_betted_but_unready_seat_and_proceeds_once_ready() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
@@ -2011,6 +2303,7 @@ mod ready_tests {
     fn sitting_out_seats_never_block_ready_up() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.sit_out(b).unwrap();
@@ -2027,6 +2320,7 @@ mod ready_tests {
             7,
         );
         let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let broke = t.join("broke", 50).unwrap(); // below the table minimum
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
         assert_eq!(t.deal(), Err(TableError::WaitingOnPlayers), "a hasn't readied yet");
@@ -2040,6 +2334,7 @@ mod ready_tests {
     fn settle_resets_ready_for_the_next_coup() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -2052,6 +2347,7 @@ mod ready_tests {
     fn unready_flips_the_seat_back_and_a_later_deal_is_refused() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         assert!(t.all_ready());
@@ -2065,6 +2361,7 @@ mod ready_tests {
     fn ready_and_unready_are_refused_outside_betting() {
         let mut t = table();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -2101,6 +2398,7 @@ mod broke_seat_tests {
     fn a_seat_that_cannot_cover_the_minimum_does_not_freeze_the_table() {
         let mut t = table();
         let rich = t.join("rich", 5_000).unwrap();
+        t.cut_shoe(rich, 500).unwrap();
         let broke = t.join("broke", 50).unwrap(); // below the 100 minimum
 
         t.place_bet(rich, BetKind::Main(BetSpot::Banker), 100).unwrap();
@@ -2118,6 +2416,7 @@ mod broke_seat_tests {
     fn a_seat_that_can_still_afford_the_minimum_is_waited_for() {
         let mut t = table();
         let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100).unwrap(); // exactly the minimum — still playable
 
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
@@ -2137,6 +2436,7 @@ mod broke_seat_tests {
         // The realistic path: a player busts on a hand, then can't act.
         let mut t = table();
         let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 150).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
@@ -2196,6 +2496,7 @@ mod dealer_flip_tests {
     fn player_squeezer_dealt(seed: u64) -> (Table, PlayerId) {
         let mut t = table_seeded(seed);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -2244,6 +2545,7 @@ mod dealer_flip_tests {
     fn no_request_before_the_deal() {
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         assert!(matches!(
             t.request_dealer_flip(a, FlipRequest::One),
@@ -2256,6 +2558,7 @@ mod dealer_flip_tests {
         // b sits out: holds nothing, so has no standing to ask the dealer.
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.ready(a).unwrap();
@@ -2271,6 +2574,7 @@ mod dealer_flip_tests {
         // b holds the Banker squeeze — a asks the dealer, not another player.
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -2291,6 +2595,7 @@ mod dealer_flip_tests {
     fn holding_both_hands_leaves_nothing_for_the_dealer() {
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
         t.ready(a).unwrap();
@@ -2317,6 +2622,7 @@ mod dealer_flip_tests {
         // the pacer is already turning those cards — nothing to hurry along.
         let mut t = table_seeded(42);
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -2412,6 +2718,7 @@ mod squeeze_gap_tests {
     fn two_squeezers() -> (Table, PlayerId, PlayerId) {
         let mut t = shared();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         let b = t.join("b", 100_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 5_000).unwrap();
@@ -2457,6 +2764,7 @@ mod squeeze_gap_tests {
     fn surrendering_both_hands_reports_both() {
         let mut t = shared();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.ready(a).unwrap();
@@ -2468,6 +2776,7 @@ mod squeeze_gap_tests {
     fn surrendering_one_side_leaves_the_holders_other_hand_alone() {
         let mut t = shared();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.ready(a).unwrap();
@@ -2505,6 +2814,7 @@ mod squeeze_gap_tests {
     fn the_house_turning_its_own_hand_stalls_nobody() {
         let mut t = shared();
         let b = t.join("b", 100_000).unwrap();
+        t.cut_shoe(b, 500).unwrap();
         t.place_bet(b, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.ready(b).unwrap();
         t.deal().unwrap();
@@ -2554,6 +2864,7 @@ mod squeeze_gap_tests {
         // turns the Player hand ("peeking is fine, no dealer scolding").
         let mut t = solo();
         let p = t.join("me", 100_000).unwrap();
+        t.cut_shoe(p, 500).unwrap();
         t.place_bet(p, BetKind::Main(BetSpot::Banker), 1_000).unwrap();
         t.ready(p).unwrap();
         t.deal().unwrap();
@@ -2576,6 +2887,7 @@ mod squeeze_gap_tests {
         );
         let mut t = shared();
         let a = t.join("a", 100_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
         t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000).unwrap();
         t.ready(a).unwrap();
         t.deal().unwrap();
@@ -2583,5 +2895,389 @@ mod squeeze_gap_tests {
             t.reveal(a, Side::Banker, 0),
             Err(TableError::NotYourSqueeze { side: Side::Banker, house: true })
         );
+    }
+}
+
+#[cfg(test)]
+mod shoe_lifecycle_tests {
+    //! ShoeCut phase, the host's cut, and the realistic cut-card end.
+    use super::tests::open_table;
+    use super::*;
+    use crate::settle::BetSpot;
+
+    fn table() -> Table {
+        Table::new(
+            TableConfig {
+                table_min: 100,
+                table_max: 1_000_000,
+                ruleset: Ruleset::Commission,
+                max_seats: 7,
+            },
+            42,
+        )
+    }
+
+    /// Play one full coup for `pid` (bet Player, ready, deal, reveal
+    /// everything it can, let the dealer flip the rest) and settle it.
+    fn play_one_hand(t: &mut Table, pid: PlayerId) {
+        t.place_bet(pid, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(pid).unwrap();
+        t.deal().unwrap();
+        for _ in 0..12 {
+            let v = t.view_for(pid).unwrap();
+            for i in 0..v.player.cards.len() {
+                let _ = t.reveal(pid, Side::Player, i);
+            }
+            while t.dealer_flip_pending() {
+                t.dealer_flip_one();
+            }
+        }
+        t.settle().unwrap();
+    }
+
+    /// Play coups until the cut card is flagged (but the shoe hasn't ended
+    /// yet — one more hand is still owed).
+    fn play_until_cut_card_out(t: &mut Table, pid: PlayerId) {
+        loop {
+            play_one_hand(t, pid);
+            if t.view_for(pid).unwrap().shoe.cut_card_out {
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn a_new_table_starts_in_shoe_cut_with_no_cutter() {
+        let t = table();
+        assert_eq!(t.host(), None);
+        assert_eq!(t.shoe_number(), 0);
+        let v = t.view_public();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.shoe.cutter, None);
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::NewTable));
+        assert_eq!(v.shoe.number, 0);
+    }
+
+    #[test]
+    fn first_join_becomes_host_and_cutter() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        assert_eq!(t.host(), Some(a));
+        assert_eq!(t.view_for(a).unwrap().shoe.cutter, Some(a));
+        // a second seat does not take over the cut
+        let b = t.join("b", 100_000).unwrap();
+        assert_eq!(t.host(), Some(a));
+        assert_eq!(t.view_for(b).unwrap().shoe.cutter, Some(a));
+        assert!(t.view_for(a).unwrap().seats[0].host);
+        assert!(!t.view_for(b).unwrap().seats[1].host);
+    }
+
+    #[test]
+    fn only_the_host_may_cut() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        assert_eq!(t.cut_shoe(b, 500), Err(TableError::NotYourCut));
+        t.cut_shoe(a, 500).unwrap();
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Betting);
+    }
+
+    #[test]
+    fn cut_moves_to_betting_and_numbers_the_shoe() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut);
+        t.cut_shoe(a, 500).unwrap();
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::Betting);
+        assert_eq!(v.shoe.number, 1);
+        assert!(v.shoe.last_cut.is_some());
+        assert_eq!(t.shoe_number(), 1);
+    }
+
+    #[test]
+    fn betting_is_refused_in_shoe_cut() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        assert_eq!(
+            t.place_bet(a, BetKind::Main(BetSpot::Player), 1_000),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut,
+            }))
+        );
+        assert_eq!(
+            t.deal(),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut,
+            }))
+        );
+        assert!(!t.all_ready());
+        // rename/rebuy/join/leave (and the cut itself) are still allowed
+        t.rename(a, "alice").unwrap();
+        t.rebuy(a, 1_000).unwrap();
+    }
+
+    #[test]
+    fn host_leaving_hands_the_cut_to_the_next_seat() {
+        let mut t = table();
+        let a = t.join("a", 100_000).unwrap();
+        let b = t.join("b", 100_000).unwrap();
+        assert_eq!(t.host(), Some(a));
+        t.leave(a).unwrap();
+        assert_eq!(t.host(), Some(b));
+        assert_eq!(t.view_for(b).unwrap().shoe.cutter, Some(b));
+        assert!(t.view_for(b).unwrap().seats[0].host);
+        // the new host can cut
+        t.cut_shoe(b, 500).unwrap();
+        assert_eq!(t.shoe_number(), 1);
+    }
+
+    #[test]
+    fn leaving_never_changes_the_shoe() {
+        let (mut t, a) = open_table(5);
+        let b = t.join("b", 100_000).unwrap();
+        for _ in 0..3 {
+            // sitting_out resets every coup — b sits out fresh each round
+            t.sit_out(b).unwrap();
+            play_one_hand(&mut t, a);
+        }
+        let shoe_number_before = t.shoe_number();
+        let history_len_before = t.view_for(a).unwrap().scoreboard.bead_plate.cells.len();
+        t.leave(b).unwrap();
+        assert_eq!(t.shoe_number(), shoe_number_before);
+        assert_eq!(t.view_for(a).unwrap().scoreboard.bead_plate.cells.len(), history_len_before);
+        assert_ne!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut, "leaving never touches the phase");
+    }
+
+    #[test]
+    fn cut_card_out_allows_exactly_one_more_hand() {
+        let (mut t, a) = open_table(3);
+        play_until_cut_card_out(&mut t, a);
+        // the shoe hasn't ended yet — the felt is still open (Settled here is
+        // the just-finished coup's display; the underlying phase is Betting).
+        assert_ne!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut, "one more hand still owed");
+
+        // exactly one more hand deals and settles normally...
+        play_one_hand(&mut t, a);
+
+        // ...and only now does the shoe end.
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::CutCardOut));
+        assert_eq!(v.shoe.cutter, t.host());
+        assert!(matches!(
+            t.deal(),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut,
+            }))
+        ));
+    }
+
+    #[test]
+    fn shoe_end_clears_last_cut() {
+        let (mut t, a) = open_table(3);
+        play_until_cut_card_out(&mut t, a);
+        play_one_hand(&mut t, a); // the one more hand — the shoe now ends
+        assert!(t.view_for(a).unwrap().shoe.last_cut.is_none(), "entering ShoeCut clears the prior cut");
+    }
+
+    #[test]
+    fn cut_after_shoe_end_clears_the_roads() {
+        let (mut t, a) = open_table(3);
+        play_until_cut_card_out(&mut t, a);
+        play_one_hand(&mut t, a); // the one more hand — the shoe now ends
+
+        let before = t.view_for(a).unwrap();
+        assert_eq!(before.phase, PhaseTag::ShoeCut);
+        assert!(!before.scoreboard.big_road.columns.is_empty(), "roads stay up until the cut");
+        let bankroll_before = before.bankroll;
+
+        t.cut_shoe(a, 500).unwrap();
+        let after = t.view_for(a).unwrap();
+        assert!(after.scoreboard.big_road.columns.is_empty(), "the cut wipes the roads");
+        assert_eq!(after.shoe.number, 2);
+        assert_eq!(after.bankroll, bankroll_before, "bankroll survives the cut");
+    }
+
+    #[test]
+    fn the_shoe_never_reshuffles_silently() {
+        let (mut t, a) = open_table(11);
+        let mut cuts = 1u32; // open_table already made the first cut
+        for _ in 0..200 {
+            if t.view_for(a).unwrap().phase == PhaseTag::ShoeCut {
+                t.cut_shoe(a, 500).unwrap();
+                cuts += 1;
+            }
+            let before = t.shoe_number();
+            play_one_hand(&mut t, a);
+            // the shoe number moves ONLY at a cut, never across a deal/settle
+            assert_eq!(t.shoe_number(), before);
+        }
+        assert_eq!(t.shoe_number(), cuts);
+    }
+}
+
+#[cfg(test)]
+mod vote_tests {
+    //! The New Shoe majority vote: propose, vote, expire, and the effect of
+    //! a pass on the table.
+    use super::tests::open_table;
+    use super::*;
+    use crate::settle::BetSpot;
+
+    #[test]
+    fn proposer_counts_as_yes_and_a_lone_seat_passes_immediately() {
+        let (mut t, host) = open_table(1);
+        t.propose_new_shoe(host).unwrap();
+        assert!(!t.vote_open());
+        let v = t.view_for(host).unwrap();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::Vote));
+    }
+
+    #[test]
+    fn majority_of_three_passes_on_the_second_yes() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        // 1 yes of 3 seats: 1*2 == 2, not > 3 — still open.
+        assert!(t.vote_open());
+        t.vote_new_shoe(b, true).unwrap();
+        // 2 yes of 3 seats: 2*2 == 4 > 3 — passes.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut);
+    }
+
+    #[test]
+    fn two_nos_of_three_fail() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        let c = t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        t.vote_new_shoe(b, false).unwrap();
+        // 1 no of 3 seats: 1*2 == 2, not >= 3 — still open.
+        assert!(t.vote_open());
+        t.vote_new_shoe(c, false).unwrap();
+        // 2 no of 3 seats: 2*2 == 4 >= 3 — fails.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Betting);
+    }
+
+    #[test]
+    fn expire_fails_an_open_vote() {
+        let (mut t, a) = open_table(1);
+        t.join("b", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        t.vote_expire();
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::Betting);
+        // a no-op without an open vote
+        t.vote_expire();
+        assert!(!t.vote_open());
+    }
+
+    #[test]
+    fn a_vote_needs_betting_phase() {
+        let mut t = Table::new(
+            TableConfig { table_min: 100, table_max: 1_000_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            1,
+        );
+        let a = t.join("a", 100_000).unwrap();
+        assert!(matches!(
+            t.propose_new_shoe(a),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::ShoeCut
+            }))
+        ));
+        t.cut_shoe(a, 500).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(a).unwrap();
+        t.deal().unwrap();
+        assert!(matches!(
+            t.propose_new_shoe(a),
+            Err(TableError::Command(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: PhaseTag::Dealing
+            }))
+        ));
+    }
+
+    #[test]
+    fn voter_leaving_recounts() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        let c = t.join("c", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        t.leave(b).unwrap();
+        // 1 yes of 2 seats: 1*2 == 2, not > 2 — not yet a majority.
+        assert!(t.vote_open(), "1 yes of 2 seats is not yet a majority");
+        t.vote_new_shoe(c, true).unwrap();
+        // 2 yes of 2 seats: 2*2 == 4 > 2 — passes.
+        assert!(!t.vote_open());
+        assert_eq!(t.view_for(a).unwrap().phase, PhaseTag::ShoeCut);
+    }
+
+    #[test]
+    fn pass_returns_staged_bets_and_moves_to_shoe_cut() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Player), 5_000).unwrap();
+        let bankroll_before = t.view_for(a).unwrap().bankroll;
+        t.propose_new_shoe(a).unwrap();
+        // 1 yes of 2 seats — not yet a majority.
+        assert!(t.vote_open());
+        t.vote_new_shoe(b, true).unwrap();
+        assert!(!t.vote_open());
+        let v = t.view_for(a).unwrap();
+        assert_eq!(v.phase, PhaseTag::ShoeCut);
+        assert_eq!(v.bankroll, bankroll_before, "bets are staged only — bankroll is untouched");
+        assert!(v.bets.is_empty(), "staged bets are cleared, not settled");
+        assert_eq!(v.shoe.cut_reason, Some(ShoeCutReason::Vote));
+        assert_eq!(v.shoe.cutter, Some(a), "the host holds the cut");
+    }
+
+    #[test]
+    fn changing_a_vote_is_allowed_until_resolved() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.join("c", 100_000).unwrap();
+        t.join("d", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        t.vote_new_shoe(b, true).unwrap();
+        // 2 yes of 4 seats: 2*2 == 4, not > 4 — still open.
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a, b]);
+        assert!(v.no.is_empty());
+
+        // b changes their mind to no.
+        t.vote_new_shoe(b, false).unwrap();
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a]);
+        assert_eq!(v.no, vec![b]);
+
+        // and back to yes again.
+        t.vote_new_shoe(b, true).unwrap();
+        assert!(t.vote_open());
+        let v = t.view_for(a).unwrap().shoe.vote.clone().unwrap();
+        assert_eq!(v.yes, vec![a, b]);
+        assert!(v.no.is_empty());
+    }
+
+    #[test]
+    fn second_proposal_while_open_is_refused() {
+        let (mut t, a) = open_table(1);
+        let b = t.join("b", 100_000).unwrap();
+        t.propose_new_shoe(a).unwrap();
+        assert!(t.vote_open());
+        assert_eq!(t.propose_new_shoe(b), Err(TableError::VoteOpen));
     }
 }

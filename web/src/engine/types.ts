@@ -28,4 +28,8 @@ export type {
   GlossaryEntry,
   Event,
   FlipRequest,
+  ShoeView,
+  CutReveal,
+  ShoeCutReason,
+  VoteView,
 } from "engine-wasm";

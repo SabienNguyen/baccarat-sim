@@ -27,11 +27,11 @@ import { Scoreboard } from "./components/Scoreboard";
 import { WinPopup } from "./components/WinPopup";
 import { DealerLine } from "./components/DealerLine";
 import { ExplainPanel } from "./components/ExplainPanel";
-import { CutDeckModal } from "./components/CutDeckModal";
+import { ShoeCutStage, SHOE_CUT_ANIM_MS } from "./components/ShoeCutStage";
+import type { CutReveal } from "./engine/types";
 import { VictoryModal } from "./components/VictoryModal";
 import { BustModal } from "./components/BustModal";
 import { useGameSounds } from "./audio/useGameSounds";
-import { playSfx } from "./audio/sfx";
 import { installSleepOnHide } from "./audio/sleep";
 import { autoAdvanceMs, isRecentlyTouched } from "./autoAdvance";
 import { getPortal } from "./portal";
@@ -139,7 +139,6 @@ interface GameTableProps {
 }
 
 export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }: GameTableProps) {
-  const [cutting, setCutting] = useState(false);
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
   // the settle the player closed the bonus notice on, so it stays up otherwise
@@ -162,7 +161,9 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const reveal = useStore(active, (s) => s.reveal);
   const settle = useStore(active, (s) => s.settle);
   const newHand = useStore(active, (s) => s.newHand);
-  const newShoe = useStore(active, (s) => s.newShoe);
+  const requestNewShoe = useStore(active, (s) => s.requestNewShoe);
+  const cutShoe = useStore(active, (s) => s.cutShoe);
+  const voteNewShoe = useStore(active, (s) => s.voteNewShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
@@ -217,6 +218,24 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
     }, PEEL_EXIT_MS);
     return () => clearTimeout(t);
   }, [peelStageLeaving]);
+
+  // The cut+burn reveal: everyone at the table (cutter included) watches
+  // `shoe.number` tick up and plays the same animation off the server's
+  // `last_cut`. Kept mounted for SHOE_CUT_ANIM_MS as a backstop; the stage
+  // itself calls onAnimationEnd sooner for reduced-motion users.
+  const lastShoeNumberRef = useRef(snapshot.shoe?.number ?? 0);
+  const [cutAnim, setCutAnim] = useState<CutReveal | null>(null);
+  useEffect(() => {
+    const currentNumber = snapshot.shoe?.number;
+    if (currentNumber === undefined) return;
+    const prev = lastShoeNumberRef.current;
+    lastShoeNumberRef.current = currentNumber;
+    if (currentNumber > prev && snapshot.shoe?.last_cut) {
+      setCutAnim(snapshot.shoe.last_cut);
+      const t = setTimeout(() => setCutAnim(null), SHOE_CUT_ANIM_MS);
+      return () => clearTimeout(t);
+    }
+  }, [snapshot.shoe?.number, snapshot.shoe?.last_cut]);
 
   // Game-portal gameplay signals (start on the first deal, stop under a
   // modal, resume when it closes) ride the store the same way. Without a
@@ -407,6 +426,8 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             settled={snapshot.phase === "Settled"}
             onRename={spectating ? undefined : rename}
             watchers={watchers}
+            shoe={snapshot.shoe}
+            voteNewShoe={voteNewShoe}
           />
         )}
         {/* Wrapping the two together (P14) lets the win/loss popup anchor to
@@ -502,7 +523,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           onRevealAll={seats === null ? revealAll : undefined}
           onSettle={seats !== null ? settle : undefined}
           onNewHand={seats !== null ? newHand : undefined}
-          onNewShoe={() => setCutting(true)}
+          onNewShoe={requestNewShoe}
           explainOn={explainOn}
           onToggleExplain={toggleExplain}
           onSitOut={seats !== null ? sitOut : undefined}
@@ -530,27 +551,36 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           />
         )}
       </main>
-      <div className="board-dock">
+      <div className="board-dock" data-shoe={snapshot.shoe?.number ?? 0}>
         <Scoreboard
+          key={snapshot.shoe?.number ?? 0}
           scoreboard={snapshot.scoreboard}
           tableMin={snapshot.table_min}
           tableMax={snapshot.table_max}
+          shoeNumber={snapshot.shoe?.number}
         />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>
-      {cutting && (
-        <CutDeckModal
-          onCut={() => {
-            // a fresh shoe is invisible in the store diff — riffle it here
-            playSfx("shuffle");
-            newShoe();
-            setCutting(false);
-            // between shoes is the natural break for a portal's midgame ad
-            void adBreak(getPortal());
-          }}
-          onCancel={() => setCutting(false)}
-        />
-      )}
+      <ShoeCutStage
+        shoe={snapshot.shoe}
+        phase={snapshot.phase}
+        canCut={seats === null ? true : me != null && snapshot.shoe?.cutter === me}
+        cutterName={
+          seats === null ? null : (seats.find((s) => s.id === snapshot.shoe?.cutter)?.name ?? null)
+        }
+        animating={cutAnim}
+        onAnimationEnd={() => setCutAnim(null)}
+        onCut={(position) => {
+          cutShoe(position);
+          // between shoes is the natural break for a portal's midgame ad
+          void adBreak(getPortal());
+        }}
+        // Solo has nowhere else to go from the cut stage, and the stage's
+        // fixed backdrop covers the HUD's own Lobby button — so only a
+        // multiplayer waiter (who might be stuck watching someone else cut)
+        // gets an escape hatch here, reusing the same callback as the HUD.
+        onLeave={seats !== null ? onLeave : undefined}
+      />
       {goalReached && goal !== null && (
         <VictoryModal
           bankroll={snapshot.bankroll}

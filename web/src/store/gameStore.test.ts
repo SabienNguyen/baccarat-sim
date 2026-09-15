@@ -1,4 +1,5 @@
 import { createGameStore } from "./gameStore";
+import { createSession } from "../engine/adapter";
 import type { GameSession, CommandResult } from "../engine/adapter";
 import type { RoundSnapshot, CommandError } from "../engine/types";
 
@@ -22,6 +23,7 @@ function snapshotWith(overrides: Partial<RoundSnapshot> = {}): RoundSnapshot {
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
     ...overrides,
   };
 }
@@ -36,7 +38,8 @@ function fakeSession(result: CommandResult, initial?: RoundSnapshot): GameSessio
     peek: () => result,
     reveal: () => result,
     settle: () => result,
-    newShoe: () => result,
+    cutShoe: () => result,
+    requestNewShoe: () => result,
   };
 }
 
@@ -285,10 +288,10 @@ test("re-buying clears the bust and sweeps the felt without a new shoe", () => {
   const broke = snapshotWith({ phase: "Settled", bankroll: 300, payouts: [] });
   const toppedUp = snapshotWith({ phase: "Settled", bankroll: 50_300, payouts: [] });
   const rebuy = vi.fn(() => ({ ok: true as const, snapshot: toppedUp }));
-  const newShoe = vi.fn(() => ({ ok: true as const, snapshot: broke }));
+  const requestNewShoe = vi.fn(() => ({ ok: true as const, snapshot: broke }));
   const store = createGameStore({
     ...fakeSession({ ok: true, snapshot: broke }),
-    newShoe,
+    requestNewShoe,
     rebuy,
   });
   store.getState().settle();
@@ -302,7 +305,7 @@ test("re-buying clears the bust and sweeps the felt without a new shoe", () => {
   expect(store.getState().snapshot.phase).toBe("Betting");
   expect(store.getState().snapshot.payouts).toBeNull();
   // ...and emphatically NOT by reshuffling: handing over cash keeps the shoe.
-  expect(newShoe).not.toHaveBeenCalled();
+  expect(requestNewShoe).not.toHaveBeenCalled();
 });
 
 test("a settle that keeps the roll at or above the minimum does not bust", () => {
@@ -374,4 +377,57 @@ test("a plain session (no house dealer) ignores the ask", () => {
 test("a single-player table seats its player as 0", () => {
   const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
   expect(store.getState().me).toBe(0);
+});
+
+// --- shoe lifecycle: real wasm session, since the phase transition and
+// shoe bookkeeping (number, last_cut) live entirely in the engine. ---
+
+test("a fresh session opens in ShoeCut, waiting on the first cut", () => {
+  const session = createSession({
+    starting_bankroll: 1_000_000,
+    table_min: 500,
+    table_max: 5_000_000,
+    ruleset: "Commission",
+    seed: 7,
+  });
+  const store = createGameStore(session);
+  expect(store.getState().snapshot.phase).toBe("ShoeCut");
+  expect(store.getState().snapshot.shoe.number).toBe(0);
+});
+
+test("cutShoe forwards the position and the store leaves ShoeCut", () => {
+  const session = createSession({
+    starting_bankroll: 1_000_000,
+    table_min: 500,
+    table_max: 5_000_000,
+    ruleset: "Commission",
+    seed: 7,
+  });
+  const store = createGameStore(session);
+  store.getState().cutShoe(600);
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  expect(store.getState().snapshot.shoe.number).toBe(1);
+  expect(store.getState().snapshot.shoe.last_cut?.position).toBe(600);
+  expect(store.getState().lastError).toBeNull();
+});
+
+test("requestNewShoe sends the session back to ShoeCut from Betting", () => {
+  const session = createSession({
+    starting_bankroll: 1_000_000,
+    table_min: 500,
+    table_max: 5_000_000,
+    ruleset: "Commission",
+    seed: 7,
+  });
+  const store = createGameStore(session);
+  store.getState().cutShoe(500);
+  expect(store.getState().snapshot.phase).toBe("Betting");
+  store.getState().requestNewShoe();
+  expect(store.getState().snapshot.phase).toBe("ShoeCut");
+  expect(store.getState().snapshot.shoe.cut_reason).toBe("Requested");
+});
+
+test("voteNewShoe is a no-op in solo", () => {
+  const store = createGameStore(fakeSession({ ok: true, snapshot: snapshotWith() }));
+  expect(() => store.getState().voteNewShoe(true)).not.toThrow();
 });

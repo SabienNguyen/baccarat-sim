@@ -27,6 +27,13 @@ function formatNet(net: number): string {
 // notes name a bet the same way — and so the two Dragon Bonus sides don't both
 // render as a bare "DragonBonus".
 
+/** Display-only label for the phase box — the wire tag itself (`data-phase`)
+ *  stays untouched since hud.css keys off it. Only "ShoeCut" gets a friendlier
+ *  rendering; every other tag passes through unchanged. */
+function phaseLabel(tag: RoundSnapshot["phase"]): string {
+  return tag === "ShoeCut" ? "Shoe cut" : tag;
+}
+
 export function Hud({
   snapshot,
   goal,
@@ -81,7 +88,7 @@ export function Hud({
 
       <div className="hud-box" data-phase={snapshot.phase}>
         <span className="hud-box-label">Phase</span>
-        <span className="hud-box-value hud-box-value--phase">{snapshot.phase}</span>
+        <span className="hud-box-value hud-box-value--phase">{phaseLabel(snapshot.phase)}</span>
       </div>
 
       <div className="hud-box">
@@ -99,6 +106,10 @@ export function Hud({
         className="hud-box hud-box--outcome"
         data-has-outcome={snapshot.outcome !== null}
       >
+        {/* The cut card is out: one more hand, then a fresh shoe. Lives in
+            this row (not its own box) so the fixed-height outcome slot on
+            phones (hud.css) never has to grow to fit it. */}
+        {snapshot.shoe.cut_card_out && <span className="hud-last-hand">LAST HAND</span>}
         <span className="hud-box-label">Outcome</span>
         <span className="hud-box-value hud-box-value--small">
           {snapshot.outcome !== null ? outcomeLabel(snapshot.outcome) : null}

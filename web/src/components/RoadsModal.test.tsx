@@ -70,6 +70,12 @@ test("the tally panel reads zero on a fresh shoe", () => {
   expect(row(tally, "Game number")).toHaveTextContent("0");
 });
 
+test("the modal shows a Shoe row", () => {
+  render(<RoadsModal scoreboard={board()} shoeNumber={4} onClose={() => {}} />);
+  const tally = screen.getByRole("table", { name: "Tally" });
+  expect(row(tally, "Shoe")).toHaveTextContent("4");
+});
+
 test("the limits panel posts the table's min and max for every spot", () => {
   render(<RoadsModal scoreboard={board()} tableMin={2500} tableMax={500000} onClose={() => {}} />);
   const limits = screen.getByRole("table", { name: "Table limits" });

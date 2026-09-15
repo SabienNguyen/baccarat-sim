@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 /// Bumped on any breaking wire change. Sent with `Joined` so a stale client
 /// can tell "please refresh" apart from a generic bad message.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Stake tiers, mirrored from the web client's tables.ts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,7 +63,14 @@ pub enum ClientMsg {
     /// cards before finishing their own — the high-limit courtesy.
     DealerFlip { count: FlipRequest },
     Settle,
-    NewShoe,
+    /// The host cuts the shoe — `position` is a fraction of the shoe in
+    /// `0..=1000` (clamped by the engine to `50..=950`).
+    CutShoe { position: u16 },
+    /// Call for a New Shoe vote. Betting only; the proposer counts as an
+    /// immediate yes.
+    ProposeNewShoe,
+    /// Cast (or change) a vote on the open New Shoe proposal.
+    VoteNewShoe { yes: bool },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -145,6 +152,15 @@ mod tests {
         assert!(matches!(m, ClientMsg::Watch { ref room } if room == "ab12cd"));
         let m: ClientMsg = serde_json::from_str(r#"{"type":"ping"}"#).unwrap();
         assert!(matches!(m, ClientMsg::Ping));
+
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"cut_shoe","position":500}"#).unwrap();
+        assert!(matches!(m, ClientMsg::CutShoe { position: 500 }));
+
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"propose_new_shoe"}"#).unwrap();
+        assert!(matches!(m, ClientMsg::ProposeNewShoe));
+
+        let m: ClientMsg = serde_json::from_str(r#"{"type":"vote_new_shoe","yes":true}"#).unwrap();
+        assert!(matches!(m, ClientMsg::VoteNewShoe { yes: true }));
     }
 
     #[test]

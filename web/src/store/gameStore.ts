@@ -93,7 +93,12 @@ export interface GameState {
   settle: () => void;
   /** Start the next hand from the same shoe after a settled round. */
   newHand: () => void;
-  newShoe: () => void;
+  /** Only the cutter may call this. `position` is 0..=1000 (fraction of the shoe). */
+  cutShoe: (position: number) => void;
+  /** Solo: leaves ShoeCut { reason: Requested }. Multiplayer: opens a table vote. */
+  requestNewShoe: () => void;
+  /** Vote on an open New Shoe proposal (multiplayer); no-op alone. */
+  voteNewShoe: (yes: boolean) => void;
   /**
    * Buy back in for `amountCents` and keep playing the same shoe — the roads
    * and the shoe's position survive, as they would in a real pit.
@@ -274,7 +279,9 @@ export function createGameStore(
           lastFlip: null,
         }),
 
-      newShoe: () => apply(session.newShoe()),
+      cutShoe: (position) => apply(session.cutShoe(position)),
+      requestNewShoe: () => apply(session.requestNewShoe()),
+      voteNewShoe: () => {}, // solo: no table, no vote
 
       rebuy: (amountCents) => {
         if (!session.rebuy) return; // multiplayer seats re-buy through the server

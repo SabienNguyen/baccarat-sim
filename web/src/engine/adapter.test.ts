@@ -10,8 +10,20 @@ const config: SessionConfig = {
   seed: 7,
 };
 
+test("a fresh session opens in ShoeCut; cutting the shoe opens it to Betting", () => {
+  const session = createSession(config);
+  expect(session.snapshot().phase).toBe("ShoeCut");
+  const cut = session.cutShoe(500);
+  expect(cut.ok).toBe(true);
+  if (cut.ok) {
+    expect(cut.snapshot.phase).toBe("Betting");
+    expect(cut.snapshot.shoe.number).toBe(1);
+  }
+});
+
 test("plays a full round through the adapter", () => {
   const session = createSession(config);
+  session.cutShoe(500);
   expect(session.snapshot().phase).toBe("Betting");
 
   const placed = session.placeBet({ Main: "Player" }, 500);
@@ -31,6 +43,7 @@ test("plays a full round through the adapter", () => {
 
 test("a wrong-phase command returns ok:false with a typed error", () => {
   const session = createSession(config);
+  session.cutShoe(500);
   const result = session.settle(); // settle before deal -> WrongPhase
   expect(result.ok).toBe(false);
   if (!result.ok) {
@@ -40,6 +53,7 @@ test("a wrong-phase command returns ok:false with a typed error", () => {
 
 test("a stray non-integer amount degrades to a refusal, never a throw", () => {
   const session = createSession(config);
+  session.cutShoe(500);
   // BigInt(100.5) would throw a RangeError at the wasm boundary; the
   // adapter rounds instead, so the bet simply lands.
   const fractional = session.placeBet({ Main: "Player" }, 100.5);

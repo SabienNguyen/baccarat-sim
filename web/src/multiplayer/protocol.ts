@@ -6,6 +6,9 @@ import type { TableTier } from "../tables";
 /** Chairs at a table — mirrors the server's MAX_SEATS. */
 export const MAX_SEATS = 7;
 
+/** The wire protocol this client speaks — bumped for the shoe lifecycle messages. */
+export const CLIENT_PROTOCOL_VERSION = 2;
+
 /** One seat's public face, shown to the whole table. */
 export interface SeatView {
   id: number;
@@ -21,6 +24,9 @@ export interface SeatView {
   decided: boolean;
   /** Bankroll can't cover the table minimum, so this seat can't bet at all. */
   broke?: boolean;
+  /** Holds the cut — the first player to join, or the next by join order
+   *  after the previous host leaves. */
+  host: boolean;
 }
 
 /** The player's snapshot plus everyone's seat summaries and squeeze rights. */
@@ -63,7 +69,9 @@ export type ClientMsg =
   /** Ask the dealer to turn one/both house cards early (the squeezer only). */
   | { type: "dealer_flip"; count: FlipRequest }
   | { type: "settle" }
-  | { type: "new_shoe" };
+  | { type: "cut_shoe"; position: number }
+  | { type: "propose_new_shoe" }
+  | { type: "vote_new_shoe"; yes: boolean };
 
 export type ServerMsg =
   | { type: "rooms"; rooms: RoomInfo[] }

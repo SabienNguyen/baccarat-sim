@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatCents } from "../format";
+import type { ShoeView } from "../engine/types";
 import type { SeatView } from "./protocol";
 import { seatColour } from "./seatColour";
 import { betSpotLabel } from "../components/BetRail";
@@ -7,6 +8,17 @@ import "./multiplayer.css";
 
 /** The server caps names here too; matching it keeps the box honest. */
 const NAME_MAX = 24;
+
+/** No open vote, nobody's cut yet — the strip's default when a caller (or a
+ *  test) has nothing shoe-shaped to pass. */
+const NO_SHOE: ShoeView = {
+  number: 0,
+  cut_card_out: false,
+  cut_reason: null,
+  cutter: null,
+  last_cut: null,
+  vote: null,
+};
 
 interface SeatsStripProps {
   seats: SeatView[];
@@ -21,6 +33,11 @@ interface SeatsStripProps {
   onRename?: (name: string) => void;
   /** Spectators at the rail; shown as one more chip when there are any. */
   watchers?: number | null;
+  /** The table's shoe: the host crown and an in-progress New Shoe vote read
+   *  off it. Defaults to no vote/no host when a caller has nothing to pass. */
+  shoe?: ShoeView;
+  /** Cast this client's own vote on the open New Shoe proposal. */
+  voteNewShoe?: (yes: boolean) => void;
 }
 
 /** Everyone at the table: name, roll, stake, who holds the cards — and how
@@ -33,13 +50,17 @@ export function SeatsStrip({
   settled = false,
   onRename,
   watchers = null,
+  shoe = NO_SHOE,
+  voteNewShoe,
 }: SeatsStripProps) {
+  const vote = shoe.vote;
   return (
     <div className="seats-strip" aria-label="Seats">
       {seats.map((s) => {
         const holding =
           squeezers?.player === s.id ? "Player" : squeezers?.banker === s.id ? "Banker" : null;
         const mine = me !== null && s.id === me && onRename !== undefined;
+        const myVote = vote ? (vote.yes.includes(s.id) ? "yes" : vote.no.includes(s.id) ? "no" : null) : null;
         return (
           <div
             key={s.id}
@@ -47,6 +68,11 @@ export function SeatsStrip({
             style={{ "--seat-colour": seatColour(s.id) } as React.CSSProperties}
           >
             {holding && <span className="seat-cards">🂠 {holding} cards</span>}
+            {s.host && (
+              <span className="seat-host" title="Has the cut" aria-label="Has the cut">
+                ♛
+              </span>
+            )}
             {mine ? (
               <SeatName name={s.name} onRename={onRename} />
             ) : (
@@ -70,6 +96,11 @@ export function SeatsStrip({
             )}
             {betting && s.sitting_out && <span className="seat-status">sitting out</span>}
             {betting && !s.decided && <span className="seat-status seat-status--wait">waiting…</span>}
+            {myVote && (
+              <span className={`seat-vote seat-vote--${myVote}`} aria-label={`voted ${myVote}`}>
+                {myVote === "yes" ? "✓" : "✗"}
+              </span>
+            )}
           </div>
         );
       })}
@@ -77,6 +108,36 @@ export function SeatsStrip({
         <div className="seat-chip seat-chip--rail" aria-label="Watching">
           <span className="seat-name">👁 {watchers}</span>
           <span className="seat-status">watching</span>
+        </div>
+      )}
+      {vote && (
+        <div className="vote-bar" aria-label="New shoe vote">
+          <span className="vote-text">
+            New shoe? {vote.yes.length} of {vote.needed}
+          </span>
+          {me !== null && (
+            <span className="vote-buttons">
+              <button
+                type="button"
+                className="vote-btn vote-btn--yes"
+                aria-label="Vote yes"
+                aria-pressed={vote.yes.includes(me)}
+                onClick={() => voteNewShoe?.(true)}
+              >
+                ✓
+              </button>
+              <button
+                type="button"
+                className="vote-btn vote-btn--no"
+                aria-label="Vote no"
+                aria-pressed={vote.no.includes(me)}
+                onClick={() => voteNewShoe?.(false)}
+              >
+                ✗
+              </button>
+            </span>
+          )}
+          <span className="vote-clock" key={vote.proposer} aria-hidden="true" />
         </div>
       )}
     </div>

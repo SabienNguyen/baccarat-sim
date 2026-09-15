@@ -21,6 +21,7 @@ function snap(phase: RoundSnapshot["phase"], events: Event[] = []): RoundSnapsho
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
   };
 }
 
@@ -30,6 +31,35 @@ function text(segs: ReturnType<typeof narrate>): string {
 
 test("betting phase invites bets", () => {
   expect(narrate(snap("Betting"))).toEqual([{ text: "Place your bets." }]);
+});
+
+test("shoe cut prompts the cut", () => {
+  const fresh = snap("ShoeCut");
+  fresh.shoe = { ...fresh.shoe, cut_reason: "NewTable" };
+  expect(text(narrate(fresh))).toBe("Fresh shoe — cut it wherever you like.");
+
+  const doneShoe = snap("ShoeCut");
+  doneShoe.shoe = { ...doneShoe.shoe, cut_reason: "CutCardOut" };
+  expect(text(narrate(doneShoe))).toBe("That shoe's done. Cut the new one wherever you like.");
+});
+
+test("after a cut it narrates the burn and the shoe number", () => {
+  const s = snap("Betting");
+  s.shoe = {
+    number: 2,
+    cut_card_out: false,
+    cut_reason: null,
+    cutter: null,
+    last_cut: { position: 500, turned: { rank: "Seven", suit: "Clubs" }, burned: 7 },
+    vote: null,
+  };
+  expect(text(narrate(s))).toBe("You cut the shoe. Dealer turns the Seven of Clubs and burns 7. Shoe 2.");
+});
+
+test("cut card out warns of the last hand", () => {
+  const s = snap("Betting");
+  s.shoe = { ...s.shoe, cut_card_out: true };
+  expect(text(narrate(s))).toBe("Cut card's out — one more hand, then a fresh shoe.");
 });
 
 test("betting with chips down announces what's riding", () => {

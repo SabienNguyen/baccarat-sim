@@ -20,8 +20,17 @@ export function bettingSnapshot(overrides: Partial<RoundSnapshot> = {}): RoundSn
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
     ...overrides,
   };
+}
+
+/** A ShoeCut snapshot: a fresh table, waiting on the cut before shoe 1 deals. */
+export function shoeCutSnapshot(): RoundSnapshot {
+  return bettingSnapshot({
+    phase: "ShoeCut",
+    shoe: { number: 0, cut_card_out: false, cut_reason: "NewTable", cutter: null, last_cut: null, vote: null },
+  });
 }
 
 /** A Dealing snapshot: player has a face-up 9 + a peeked card; banker face-down. */

@@ -1,6 +1,7 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Multiplayer, PING_MS } from "./Multiplayer";
+import { CLIENT_PROTOCOL_VERSION } from "./protocol";
 
 /** jsdom on newer Node exposes a bare `localStorage` that is undefined (the
  *  same quirk analytics.test.ts works around); a Map-backed stand-in keeps the
@@ -93,8 +94,9 @@ test("creating a table sends the choice and joining mounts the live table", asyn
         cockroach_pig: { columns: [] },
       },
       explain: [],
+      shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
       seats: [
-        { id: 0, name: "sabien", bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false },
+        { id: 0, name: "sabien", bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false },
       ],
       player_squeezer: null,
       banker_squeezer: null,
@@ -134,8 +136,9 @@ test("renaming at the table goes over the wire and sticks for next time", async 
         cockroach_pig: { columns: [] },
       },
       explain: [],
+      shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
       seats: [
-        { id: 0, name: "guest", bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false },
+        { id: 0, name: "guest", bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false },
       ],
       player_squeezer: null,
       banker_squeezer: null,
@@ -200,7 +203,8 @@ test("the room code copies to the clipboard", async () => {
         cockroach_pig: { columns: [] },
       },
       explain: [],
-      seats: [{ id: 0, name: "me", bankroll: 50_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false }],
+      shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
+      seats: [{ id: 0, name: "me", bankroll: 50_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false }],
       player_squeezer: null,
       banker_squeezer: null,
     },
@@ -442,7 +446,8 @@ describe("join-path analytics", () => {
         cockroach_pig: { columns: [] },
       },
       explain: [],
-      seats: [{ id: 0, name, bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false }],
+      shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
+      seats: [{ id: 0, name, bankroll: 25_000_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: false, host: false }],
       player_squeezer: null,
       banker_squeezer: null,
     };
@@ -493,6 +498,7 @@ describe("the rail (spectator mode)", () => {
     events: [],
     scoreboard,
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
     seats: Array.from({ length: seats }, (_, i) => ({
       id: i,
       name: `p${i}`,
@@ -511,7 +517,7 @@ describe("the rail (spectator mode)", () => {
     room: "AB12CD",
     tier: "mid",
     view: railView(),
-    proto: 1,
+    proto: CLIENT_PROTOCOL_VERSION,
     watchers: 3,
     ...over,
   });

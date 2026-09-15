@@ -11,6 +11,9 @@ interface RoadsModalProps {
   scoreboard: ScoreboardSnapshot;
   /** Bead-plate counts, if the caller already has them (Scoreboard memoises one). */
   tally?: BoardTally;
+  /** The current shoe's number, folded into a freshly-computed `tally` when
+   *  the caller doesn't already pass one with it baked in. */
+  shoeNumber?: number;
   /** Posted table limits in cents; the limits panel is left off without them. */
   tableMin?: number;
   tableMax?: number;
@@ -36,6 +39,7 @@ function TallyPanel({ tally: t }: { tally: BoardTally }) {
     ["Player pair", <span className="pair-dot pair-dot--player pair-dot--inline" />, t.playerPair],
     ["Natural", <span className="natural-dot natural-dot--inline" />, t.natural],
     ["Game number", null, t.games],
+    ["Shoe", null, t.shoe],
   ];
   return (
     <BoardCard title="Tally">
@@ -156,7 +160,7 @@ function LimitsPanel({ min, max }: { min: number; max: number }) {
  * plate, tallies, next-hand key and limits across the top, then the Big Road,
  * Big Eye Boy, and the Small Road / Cockroach Pig pair, with a welcome strip.
  */
-export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: RoadsModalProps) {
+export function RoadsModal({ scoreboard, tally, shoeNumber, tableMin, tableMax, onClose }: RoadsModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -181,7 +185,7 @@ export function RoadsModal({ scoreboard, tally, tableMin, tableMax, onClose }: R
   const { cell, scale, scroll } = useFitCells(boardRef, fitRef, backdropRef);
 
   const hasLimits = tableMin !== undefined && tableMax !== undefined;
-  const counts = tally ?? boardTally(scoreboard);
+  const counts = tally ?? boardTally(scoreboard, shoeNumber);
 
   return (
     <div className="roads-backdrop" ref={backdropRef} onClick={onClose}>

@@ -24,6 +24,7 @@ function settled(over: Partial<RoundSnapshot>): RoundSnapshot {
       cockroach_pig: { columns: [] },
     },
     explain: [],
+    shoe: { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null },
     ...over,
   };
 }
