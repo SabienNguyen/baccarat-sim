@@ -10,9 +10,7 @@ interface ScoreboardProps {
   /** Posted table limits in cents, for the full board's limits panel. */
   tableMin?: number;
   tableMax?: number;
-  // TODO(App.tsx): pass `snapshot.shoe.number` here — App owns the only
-  // call site (`<Scoreboard scoreboard={...} .../>`) and is outside this
-  // task's fence. Defaults to 0 (pre-first-cut) so it compiles without it.
+  /** The current shoe's number, for the tally. Defaults to 0 (pre-first-cut). */
   shoeNumber?: number;
 }
 

@@ -163,6 +163,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
   const newHand = useStore(active, (s) => s.newHand);
   const requestNewShoe = useStore(active, (s) => s.requestNewShoe);
   const cutShoe = useStore(active, (s) => s.cutShoe);
+  const voteNewShoe = useStore(active, (s) => s.voteNewShoe);
   const explainOn = useStore(active, (s) => s.explainOn);
   const toggleExplain = useStore(active, (s) => s.toggleExplain);
   const seats = useStore(active, (s) => s.seats);
@@ -425,6 +426,8 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
             settled={snapshot.phase === "Settled"}
             onRename={spectating ? undefined : rename}
             watchers={watchers}
+            shoe={snapshot.shoe}
+            voteNewShoe={voteNewShoe}
           />
         )}
         {/* Wrapping the two together (P14) lets the win/loss popup anchor to
@@ -554,6 +557,7 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           scoreboard={snapshot.scoreboard}
           tableMin={snapshot.table_min}
           tableMax={snapshot.table_max}
+          shoeNumber={snapshot.shoe?.number}
         />
         {explainOn && <ExplainPanel snapshot={snapshot} />}
       </div>

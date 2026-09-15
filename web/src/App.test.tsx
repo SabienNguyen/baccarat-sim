@@ -256,6 +256,38 @@ test("keeps the ShoeCutStage mounted through the cut animation when shoe.number 
   }
 });
 
+test("the scoreboard shows the current shoe number", () => {
+  const store = createGameStore(fakeSession(bettingSnapshot({ shoe: { number: 3, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null } })));
+  render(<App store={store} />);
+  expect(screen.getByText(/Shoe 3/)).toBeInTheDocument();
+});
+
+test("the seat strip shows the vote row when a vote is open", () => {
+  const send = vi.fn();
+  const view = {
+    ...bettingSnapshot({
+      shoe: {
+        number: 1,
+        cut_card_out: false,
+        cut_reason: null,
+        cutter: 3,
+        last_cut: null,
+        vote: { proposer: 3, yes: [3], no: [], needed: 2 },
+      },
+    }),
+    seats: [
+      { id: 3, name: "me", bankroll: 100_000, staked: 0, bets: [], sitting_out: false, ready: true, decided: true, host: true },
+      { id: 5, name: "them", bankroll: 100_000, staked: 0, bets: [], sitting_out: false, ready: true, decided: true, host: false },
+    ],
+    player_squeezer: null,
+    banker_squeezer: null,
+  } as Parameters<typeof createRemoteStore>[0]["view"];
+  const store = createRemoteStore({ tier: "mid", view, me: 3, send });
+  render(<GameTable store={store} onLeave={() => {}} />);
+  expect(screen.getByText("New shoe? 1 of 2")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Vote yes" })).toBeInTheDocument();
+});
+
 test("single-player shows no Settle or Next-hand buttons", () => {
   const store = createGameStore(fakeSession(dealingSnapshot()));
   render(<App store={store} />);
