@@ -151,7 +151,7 @@
 }
 .side-bets {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 .spot {
@@ -354,11 +354,10 @@
     padding: 12px;
     gap: 12px;
   }
-  /* 3 across keeps five spots to two rows (3 + 2) without an orphan — the
-     phone layout can't spare a third row (see P1/P2 in docs/BACKLOG.md). The
-     P/B pairs still land together on the top row. */
+  /* Four spots fit one row at phone width (the four-across layout predates
+     the felt trim and was measured at 390px, see P6–P9 in docs/BACKLOG.md). */
   .side-bets {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
   .spot--player,
   .spot--banker,
