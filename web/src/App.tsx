@@ -575,6 +575,11 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           // between shoes is the natural break for a portal's midgame ad
           void adBreak(getPortal());
         }}
+        // Solo has nowhere else to go from the cut stage, and the stage's
+        // fixed backdrop covers the HUD's own Lobby button — so only a
+        // multiplayer waiter (who might be stuck watching someone else cut)
+        // gets an escape hatch here, reusing the same callback as the HUD.
+        onLeave={seats !== null ? onLeave : undefined}
       />
       {goalReached && goal !== null && (
         <VictoryModal

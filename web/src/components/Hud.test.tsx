@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Hud } from "./Hud";
-import { bettingSnapshot, settledSnapshot } from "../test/fixtures";
+import { bettingSnapshot, settledSnapshot, shoeCutSnapshot } from "../test/fixtures";
 
 test("shows bankroll, phase, and table limits", () => {
   render(<Hud snapshot={bettingSnapshot()} />);
@@ -56,6 +56,12 @@ test("shows LAST HAND when the cut card is out", () => {
     />,
   );
   expect(screen.getByText("LAST HAND")).toBeInTheDocument();
+});
+
+test("the phase box reads Shoe cut during the cut", () => {
+  render(<Hud snapshot={shoeCutSnapshot()} />);
+  expect(screen.getByText("Shoe cut")).toBeInTheDocument();
+  expect(screen.queryByText("ShoeCut")).not.toBeInTheDocument();
 });
 
 test("at the rail the money box is an invitation: no bankroll, a seat on offer", async () => {

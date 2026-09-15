@@ -113,6 +113,56 @@ test("keyboard End then Enter calls onCut(950)", async () => {
   expect(onCut).toHaveBeenCalledWith(950);
 });
 
+test("the confirm button uses the primary button styling", () => {
+  render(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut
+      onCut={vi.fn()}
+      cutterName={null}
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  const confirm = screen.getByRole("button", { name: "Cut here" });
+  expect(confirm.className.split(" ")).toEqual(
+    expect.arrayContaining(["btn", "btn--primary", "shoe-cut-confirm"]),
+  );
+});
+
+test("a waiting player can leave the table", async () => {
+  const onLeave = vi.fn();
+  const { rerender } = render(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut={false}
+      onCut={vi.fn()}
+      cutterName="Alice"
+      animating={null}
+      onAnimationEnd={vi.fn()}
+      onLeave={onLeave}
+    />,
+  );
+  const leave = screen.getByRole("button", { name: "Leave table" });
+  await userEvent.click(leave);
+  expect(onLeave).toHaveBeenCalledOnce();
+
+  rerender(
+    <ShoeCutStage
+      shoe={shoe()}
+      phase="ShoeCut"
+      canCut={false}
+      onCut={vi.fn()}
+      cutterName="Alice"
+      animating={null}
+      onAnimationEnd={vi.fn()}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Leave table" })).toBeNull();
+});
+
 test("a non-cutter sees the waiting copy and no cut card", () => {
   render(
     <ShoeCutStage

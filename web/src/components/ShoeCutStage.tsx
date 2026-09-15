@@ -20,6 +20,11 @@ export interface ShoeCutStageProps {
   /** Fired once the animation timeline finishes (or immediately, under
    *  reduced motion). */
   onAnimationEnd: () => void;
+  /** When set, a quiet "Leave table" button offers an escape hatch from the
+   *  cut stage — the stage's fixed backdrop otherwise covers the HUD's own
+   *  Lobby button. Only wired up in multiplayer (solo has nowhere else to
+   *  go); never shown during the animation view. */
+  onLeave?: () => void;
 }
 
 /** The shoe is 416 cards; a sliver per card would be sub-pixel on a 390px
@@ -64,6 +69,7 @@ export function ShoeCutStage({
   onCut,
   animating,
   onAnimationEnd,
+  onLeave,
 }: ShoeCutStageProps) {
   // Percent (5..95) along the stack; converted to the 0..=1000 wire unit
   // only when the cut is confirmed.
@@ -76,6 +82,7 @@ export function ShoeCutStage({
   // have counted up so far.
   const [step, setStep] = useState<AnimStep | null>(null);
   const [burnedCount, setBurnedCount] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Body+html scroll lock while the stage is mounted, same as PeelStage —
   // a stray touch-scroll behind the backdrop must not move the page.
@@ -146,6 +153,10 @@ export function ShoeCutStage({
       Math.max(0, Math.round((animating.position / 1000) * SLIVER_COUNT)),
     );
     const packetCount = SLIVER_COUNT - cutIndex;
+    // The packet slides so its LEFT edge lands at the left end of the well,
+    // staying inside the shoe. Expressed as a percentage of the packet's
+    // OWN width (it's the translated element), not the full stack's.
+    const packetShiftPct = packetCount > 0 ? -(cutIndex / packetCount) * 100 : 0;
     const turnedView: CardView = { FaceUp: animating.turned };
     const showTurned = step === "turn" || step === "burn" || step === "banner";
     const showBurn = step === "burn" || step === "banner";
@@ -161,31 +172,45 @@ export function ShoeCutStage({
       >
         <div className="shoe-backdrop" />
         <div className="shoe-stage-content">
-          <div className="shoe-stack shoe-stack--anim" aria-label="Shoe">
-            {Array.from({ length: cutIndex }).map((_, i) => (
-              <span key={i} className="sliver" data-index={i} />
-            ))}
-            <div className="shoe-packet" style={{ gridColumn: `span ${packetCount}` }}>
-              {Array.from({ length: packetCount }).map((_, i) => (
-                <span key={i} className="sliver sliver--packet" data-index={cutIndex + i} />
-              ))}
-            </div>
-          </div>
-          {showTurned && (
-            <div className="turned-card" aria-label="Turned card">
-              <Card card={turnedView} />
-            </div>
-          )}
-          {showBurn && (
-            <>
-              <div className="discard" aria-hidden="true">
-                {Array.from({ length: animating.burned }).map((_, i) => (
-                  <span key={i} className="sliver sliver--burned" />
+          {/* `.shoe-rig` is the positioning context for the turned card and
+              discard tray below — sized to the shoe itself so their offsets
+              land next to the shoe instead of against the full-height
+              stage (see shoecut.css for why that mismatch hid them). */}
+          <div className="shoe-rig">
+            <div className="shoe-body">
+              <div className="shoe-stack shoe-stack--anim" aria-label="Shoe">
+                {Array.from({ length: cutIndex }).map((_, i) => (
+                  <span key={i} className="sliver" data-index={i} />
                 ))}
+                <div
+                  className="shoe-packet"
+                  style={{
+                    gridColumn: `span ${packetCount}`,
+                    ["--packet-shift" as string]: `${packetShiftPct}%`,
+                  }}
+                >
+                  {Array.from({ length: packetCount }).map((_, i) => (
+                    <span key={i} className="sliver sliver--packet" data-index={cutIndex + i} />
+                  ))}
+                </div>
               </div>
-              <span className="burn-counter">Burned {burnedCount}</span>
-            </>
-          )}
+            </div>
+            {showTurned && (
+              <div className="turned-card" aria-label="Turned card">
+                <Card card={turnedView} />
+              </div>
+            )}
+            {showBurn && (
+              <div className="shoe-tray">
+                <div className="discard" aria-hidden="true">
+                  {Array.from({ length: animating.burned }).map((_, i) => (
+                    <span key={i} className="sliver sliver--burned" />
+                  ))}
+                </div>
+                <span className="burn-counter">Burned {burnedCount}</span>
+              </div>
+            )}
+          </div>
           {showBanner && <div className="shoe-banner">SHOE {shoe.number}</div>}
         </div>
       </div>
@@ -202,6 +227,7 @@ export function ShoeCutStage({
     if (!canCut) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     draggingRef.current = true;
+    setIsDragging(true);
     setPos(pctFromClientX(e.clientX));
     setPlaced(true);
   };
@@ -211,6 +237,7 @@ export function ShoeCutStage({
   };
   const handlePointerUp = () => {
     draggingRef.current = false;
+    setIsDragging(false);
   };
 
   const nudge = (delta: number) => {
@@ -257,32 +284,39 @@ export function ShoeCutStage({
       <div className="shoe-stage-content">
         <h2 className="shoe-title">{title}</h2>
         {reason && <p className="shoe-subline">{reason}</p>}
-        <div
-          ref={stackRef}
-          className={`shoe-stack${canCut ? "" : " shoe-stack--idle"}`}
-          role="group"
-          aria-label="Shoe"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-        >
-          {Array.from({ length: SLIVER_COUNT }).map((_, i) => (
-            <span key={i} className="sliver" data-index={i} />
-          ))}
-          {canCut && (
-            <button
-              type="button"
-              className="cut-card"
-              aria-label="Cut card"
-              aria-valuemin={50}
-              aria-valuemax={950}
-              aria-valuenow={Math.round(pos * 10)}
-              style={{ left: `calc(${pos}%)` }}
-              onKeyDown={handleKeyDown}
+        <div className="shoe-rig">
+          <div className="shoe-body">
+            <div
+              ref={stackRef}
+              className={`shoe-stack${canCut ? "" : " shoe-stack--idle"}`}
+              role="group"
+              aria-label="Shoe"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
             >
-              CUT
-            </button>
-          )}
+              {Array.from({ length: SLIVER_COUNT }).map((_, i) => (
+                <span key={i} className="sliver" data-index={i} />
+              ))}
+              {canCut && (
+                <button
+                  type="button"
+                  className={`cut-card${isDragging ? " cut-card--dragging" : ""}`}
+                  aria-label="Cut card"
+                  aria-valuemin={50}
+                  aria-valuemax={950}
+                  aria-valuenow={Math.round(pos * 10)}
+                  style={{ left: `calc(${pos}%)` }}
+                  onKeyDown={handleKeyDown}
+                >
+                  <span>CUT</span>
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="shoe-peek" aria-hidden="true">
+            <div className="card card-back" />
+          </div>
         </div>
         {canCut && (
           <button
@@ -292,6 +326,11 @@ export function ShoeCutStage({
             onClick={() => onCut(Math.round(pos * 10))}
           >
             Cut here
+          </button>
+        )}
+        {onLeave && (
+          <button type="button" className="btn shoe-leave" onClick={onLeave}>
+            Leave table
           </button>
         )}
       </div>

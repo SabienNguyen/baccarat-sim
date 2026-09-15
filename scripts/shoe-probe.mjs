@@ -249,14 +249,12 @@ async function runMultiplayer(browser) {
 
   // B leaves; A's stage is unchanged. B is still on the ShoeCut "Waiting for
   // Alice…" stage here, whose full-viewport backdrop (.shoe-stage, z-index 40)
-  // sits over the HUD in normal document flow — the HUD never lifts its own
-  // z-index outside the phone breakpoint's pinned action bar. So the Lobby
-  // button (the only "leave" affordance in the UI — see Hud.tsx) is present
-  // in the DOM but not clickable while the stage is up. A short timeout here
-  // turns that into a recorded FAIL with evidence instead of an uncaught
-  // Playwright exception that kills the whole probe.
+  // sits over the HUD in normal document flow, so the HUD's own Lobby button
+  // is present in the DOM but not clickable while the stage is up.
+  // `ShoeCutStage` now renders its own "Leave table" button inside the stage
+  // for exactly this case (see docs/BACKLOG.md's F21 row) — use that instead.
   const aStageBefore = await stageTitle(a.page);
-  const leaveBtn = b.page.getByRole("button", { name: "Lobby" });
+  const leaveBtn = b.page.getByRole("button", { name: "Leave table" });
   let leaveClicked = false;
   let leaveError = null;
   try {
@@ -264,13 +262,13 @@ async function runMultiplayer(browser) {
       await leaveBtn.click({ timeout: 3000 });
       leaveClicked = true;
     } else {
-      await b.page.getByRole("button", { name: /Leave/ }).click({ timeout: 3000 });
+      await b.page.getByRole("button", { name: "Lobby" }).click({ timeout: 3000 });
       leaveClicked = true;
     }
   } catch (err) {
     leaveError = String(err).split("\n")[0];
   }
-  record("mp: B can click Lobby to leave while waiting on the shoe cut", leaveClicked, {
+  record("mp: B can click Leave table to leave while waiting on the shoe cut", leaveClicked, {
     leaveError,
   });
   await a.page.waitForTimeout(400);
