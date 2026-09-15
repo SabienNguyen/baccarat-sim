@@ -162,35 +162,13 @@ test("the explainer documents only bets the felt actually offers", async () => {
   }
 });
 
-test("the Banker Dragon Bonus is on the felt and stakes its own side", async () => {
-  const onStake = vi.fn();
-  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} onStake={onStake} />);
-  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
-  await userEvent.click(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" }));
-  expect(onStake).toHaveBeenLastCalledWith({ Side: { DragonBonus: "Banker" } });
-});
-
-test("the felt posts five side bets: no Player Dragon Bonus, no Panda 8", async () => {
+test("the felt posts four side bets: no Dragon Bonus on either side, no Panda 8", async () => {
   render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
   await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
   const spots = screen.getAllByRole("button", { name: /^Bet / }).map((b) => b.getAttribute("aria-label"));
-  expect(spots).toEqual([
-    "Bet Player Pair",
-    "Bet Banker Pair",
-    "Bet Banker Dragon Bonus",
-    "Bet Dragon 7",
-    "Bet Tiger",
-  ]);
-});
-
-test("the Dragon Bonus spot doesn't read as a duplicate of Dragon 7", async () => {
-  render(<BetRail snapshot={bettingSnapshot()} {...noopProps} />);
-  await userEvent.click(screen.getByRole("tab", { name: /BONUS/ }));
-  // Two spots carry the word "dragon"; each has to say which bet it is.
+  expect(spots).toEqual(["Bet Player Pair", "Bet Banker Pair", "Bet Dragon 7", "Bet Tiger"]);
+  // only one bet carries the word "dragon" now, and it says what it pays
   expect(screen.getByRole("button", { name: "Bet Dragon 7" })).toHaveTextContent("40:1");
-  expect(screen.getByRole("button", { name: "Bet Banker Dragon Bonus" })).toHaveTextContent(
-    "B DRAGON",
-  );
 });
 
 test("Clear bets is disabled when nothing is staged", () => {

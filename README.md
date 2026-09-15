@@ -63,10 +63,10 @@ the dealer's call of the card that turned.
 
 ### The full bet menu
 
-Player, Banker and Tie, plus Pairs, the Banker Dragon Bonus, Dragon 7 and
-Tiger — every one documented in-game, with its odds a tap away. (The engine
-also settles the Player Dragon Bonus, Panda 8 and the rest of the Tiger family;
-the felt doesn't post them, and the table service refuses them.)
+Player, Banker and Tie, plus Pairs, Dragon 7 and Tiger — every one documented
+in-game, with its odds a tap away. (The engine also settles the Dragon Bonus on
+both sides, Panda 8 and the rest of the Tiger family; the felt doesn't post
+them, and the table service refuses them.)
 
 ![The bonus felt, with chips stacked into towers](docs/screenshots/bonus-felt.png)
 

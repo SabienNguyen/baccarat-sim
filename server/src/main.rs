@@ -223,7 +223,7 @@ const RAIL_ONLY: &str = "You're watching — take a seat to play.";
 const NOT_OFFERED: &str = "That bet isn't posted at this table.";
 
 /// The bets with a spot on the felt — mirrors `SIDE_SPOTS` in the web client.
-/// The engine settles more (Player Dragon Bonus, Panda 8, the rest of the
+/// The engine settles more (both Dragon Bonus sides, Panda 8, the rest of the
 /// Tiger family); the client hides those, and the server refuses them too, so
 /// a modified client can't play a bet the table doesn't post.
 fn offered(kind: &BetKind) -> bool {
@@ -231,11 +231,7 @@ fn offered(kind: &BetKind) -> bool {
         BetKind::Main(_) => true,
         BetKind::Side(side) => matches!(
             side,
-            SideBet::PlayerPair
-                | SideBet::BankerPair
-                | SideBet::DragonBonus(BetSide::Banker)
-                | SideBet::Dragon7
-                | SideBet::Tiger
+            SideBet::PlayerPair | SideBet::BankerPair | SideBet::Dragon7 | SideBet::Tiger
         ),
     }
 }
@@ -1789,7 +1785,13 @@ mod felt_tests {
         };
         let mut at = Some(At::Seat(Seat { room: room.clone(), pid }));
         let mut strikes = 0;
-        for side in [SideBet::Panda8, SideBet::DragonBonus(BetSide::Player), SideBet::BigTiger, SideBet::TigerPair] {
+        for side in [
+            SideBet::Panda8,
+            SideBet::DragonBonus(BetSide::Player),
+            SideBet::DragonBonus(BetSide::Banker),
+            SideBet::BigTiger,
+            SideBet::TigerPair,
+        ] {
             let bet = ClientMsg::Bet { kind: BetKind::Side(side), amount: 2_500 };
             assert!(handle_command(bet, &registry, &tx, &mut at, &mut strikes).await);
             match rx.try_recv() {
@@ -1800,7 +1802,7 @@ mod felt_tests {
         assert!(room.lock().await.table.view_for(pid).unwrap().bets.is_empty(), "nothing staged");
 
         // the posted bets still go through
-        for side in [SideBet::DragonBonus(BetSide::Banker), SideBet::Dragon7, SideBet::Tiger, SideBet::PlayerPair] {
+        for side in [SideBet::Dragon7, SideBet::Tiger, SideBet::PlayerPair, SideBet::BankerPair] {
             let bet = ClientMsg::Bet { kind: BetKind::Side(side), amount: 2_500 };
             assert!(handle_command(bet, &registry, &tx, &mut at, &mut strikes).await);
             assert!(matches!(rx.try_recv(), Ok(ServerMsg::State { .. })), "accepted: a fresh view");

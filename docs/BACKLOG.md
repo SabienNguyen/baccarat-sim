@@ -626,3 +626,7 @@ organic-search engine). Then G8, then G9/G11/G12 as retention/polish.
   any bet without a spot (`offered` in `main.rs`, allowlist mirroring
   `SIDE_SPOTS`), so a modified client can't play one at a live table. Bonus
   grid is 5 across on desktop, 3 + 2 on phones. Server 45 / web 500 green.
+- **2026-09-15 (felt trimmed again, owner request):** The Banker Dragon Bonus
+  is off the felt too — four side spots remain: P Pair, B Pair, Dragon 7,
+  Tiger. `offered` in `main.rs` now refuses both Dragon Bonus sides. Bonus
+  grid is 4 across at every width.

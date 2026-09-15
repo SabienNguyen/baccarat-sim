@@ -5,15 +5,14 @@ import "./bonusinfo.css";
 
 /**
  * The bonus bets explained, in felt order — one row per spot you can actually
- * reach, with the two-sided pair bet sharing a row. The engine settles six
- * more (Player Dragon Bonus, Panda 8, Big/Small Tiger, Tiger Tie, Tiger Pair)
- * that no spot offers; documenting those here taught bets nobody could place,
- * so they live in the glossary proper instead. Keep this list in step with
- * `SIDE_SPOTS` in BetRail.tsx.
+ * reach, with the two-sided pair bet sharing a row. The engine settles seven
+ * more (both Dragon Bonus sides, Panda 8, Big/Small Tiger, Tiger Tie, Tiger
+ * Pair) that no spot offers; documenting those here taught bets nobody could
+ * place, so they live in the glossary proper instead. Keep this list in step
+ * with `SIDE_SPOTS` in BetRail.tsx.
  */
 const BONUS_TERMS: Array<{ term: string; title?: string; payout: string }> = [
   { term: "pair", title: "Player / Banker Pair", payout: "11:1" },
-  { term: "dragon-bonus", title: "Banker Dragon Bonus", payout: "up to 30:1" },
   { term: "dragon-7", payout: "40:1" },
   { term: "tiger", payout: "12:1 / 20:1" },
 ];

@@ -40,20 +40,12 @@ const MAIN_SPOTS: Spot[] = [
 ];
 
 // The pair bets sit together, the way a real layout stacks them, so the P/B
-// prefixes read as a set. The felt posts five side bets; the engine settles
-// more (Player Dragon Bonus, Panda 8, the rest of the Tiger family) but no
+// prefixes read as a set. The felt posts four side bets; the engine settles
+// more (both Dragon Bonus sides, Panda 8, the rest of the Tiger family) but no
 // spot offers them, and the server refuses them too (`offered` in main.rs).
-// NB: the Dragon Bonus is a different bet from Dragon 7, despite the shared
-// word — it pays a margin/natural ladder, so it states that ladder.
 const SIDE_SPOTS: Spot[] = [
   { label: "Player Pair", display: "P PAIR", payout: "11:1", kind: { Side: "PlayerPair" } },
   { label: "Banker Pair", display: "B PAIR", payout: "11:1", kind: { Side: "BankerPair" } },
-  {
-    label: "Banker Dragon Bonus",
-    display: "B DRAGON",
-    payout: "TO 30:1",
-    kind: { Side: { DragonBonus: "Banker" } },
-  },
   { label: "Dragon 7", display: "DRAGON 7", payout: "40:1", kind: { Side: "Dragon7" } },
   { label: "Tiger", display: "TIGER", payout: "12-20:1", kind: { Side: "Tiger" } },
 ];
