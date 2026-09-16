@@ -56,6 +56,8 @@ pub enum ClientMsg {
     Ready,
     /// Take back a ready declaration.
     Unready,
+    /// Buy back in at the table's starting buy-in. Only a broke seat may.
+    Rebuy,
     Deal,
     Peek { hand: Side, index: usize },
     Reveal { hand: Side, index: usize },

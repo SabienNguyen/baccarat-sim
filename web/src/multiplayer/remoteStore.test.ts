@@ -206,6 +206,12 @@ test("another player going broke doesn't mark me busted", () => {
 });
 
 
+test("rebuy sends the request over the wire", () => {
+  const { store, sent } = setup();
+  store.getState().rebuy(0);
+  expect(sent.at(-1)).toEqual({ type: "rebuy" });
+});
+
 test("cutShoe sends cut_shoe with the position", () => {
   const { store, sent } = setup();
   store.getState().cutShoe(600);

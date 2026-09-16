@@ -67,9 +67,10 @@ export function createRemoteStore(opts: {
     goal: null,
     goalReached: false,
     dismissGoal: () => set({ goalReached: false }),
-    // Set from the seat view below: a player whose bankroll can't cover the
-    // table minimum is out of chips, and the table now deals past them rather
-    // than waiting (F6). The UI uses this to offer a rebuy or a way out.
+    // Set from the seat view below (mirrored from the server's `broke`): a
+    // player whose bankroll can't cover the table minimum is out of chips,
+    // and the table now deals past them rather than waiting (F6). The UI
+    // uses this to offer a rebuy or a way out.
     busted: false,
     denoms,
     // smallest chip that clears the table minimum — the rack's top-up chip below it would be refused (F18)
@@ -125,10 +126,11 @@ export function createRemoteStore(opts: {
     // once every seat has decided.
     watchHand: () => send({ type: "sit_out" }),
 
-    // A seat's bankroll is the server's to change, and multiplayer bust/rebuy
-    // handling isn't built yet (backlog F6/F7) — `busted` is hardcoded false
-    // here, so this is never reached. No-op rather than faking money locally.
-    rebuy: () => {},
+    // The server owns the money: it resets a broke seat to the table's
+    // buy-in and the next push clears `busted`. The amount is ignored — the
+    // shared `GameState.rebuy` signature takes one for single-player's
+    // client-side top-up, but the server decides the multiplayer buy-in.
+    rebuy: (_amountCents) => send({ type: "rebuy" }),
   }));
 
   const handle = (msg: ServerMsg) => {

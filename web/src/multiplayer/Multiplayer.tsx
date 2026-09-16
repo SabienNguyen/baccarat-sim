@@ -406,6 +406,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           onLeave={() => {
             send({ type: "leave" });
           }}
+          onRebuy={stage.watching ? undefined : () => stage.store.getState().rebuy(0)} // amount is the server's call
           onTakeSeat={
             stage.watching
               ? () => {

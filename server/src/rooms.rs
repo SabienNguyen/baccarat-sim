@@ -709,6 +709,12 @@ pub fn sit_out_announcement(table: &Table, pid: PlayerId) -> String {
     format!("{name} sits this one out")
 }
 
+/// "{name} buys back in" — the Rebuy counterpart to `sit_out_announcement`.
+pub fn rebuy_announcement(table: &Table, pid: PlayerId) -> String {
+    let name = table.name_of(pid).unwrap_or(NAMELESS);
+    format!("{name} buys back in")
+}
+
 /// "Waiting on X, Y, Z" for the seats still undecided — at most three names,
 /// then an ellipsis for the rest.
 pub fn waiting_on_line(table: &Table) -> String {
@@ -748,6 +754,7 @@ pub fn error_message(err: &TableError) -> String {
         TableError::NotYourCut => "The cut isn't yours.".into(),
         TableError::VoteOpen => "There's already a vote on the table.".into(),
         TableError::NoVote => "Nothing to vote on.".into(),
+        TableError::NotBroke => "You've still got chips — play them.".into(),
         TableError::Command(E::BetAboveMaximum { max, .. }) => {
             format!("Too rich for this table — the max is ${}.{:02}.", max / 100, max % 100)
         }
