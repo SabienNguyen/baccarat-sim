@@ -306,3 +306,29 @@ describe("at the rail", () => {
     expect(store.getState().watchers).toBe(3);
   });
 });
+
+describe("between coups", () => {
+  function settledStore() {
+    const sent: ClientMsg[] = [];
+    const store = createRemoteStore({ tier: "mid", view: view(), me: 1, send: (m) => sent.push(m) });
+    store.handle({ type: "state", view: view({ phase: "Dealing" }) });
+    store.handle({ type: "state", view: view({ phase: "Settled", outcome: "PlayerWin" }) });
+    expect(store.getState().snapshot.phase).toBe("Settled");
+    return { store, sent };
+  }
+
+  test("sitting out from the settled felt sweeps it and sends sit_out — no Next hand needed", () => {
+    const { store, sent } = settledStore();
+    store.getState().sitOut();
+    expect(sent).toEqual([{ type: "sit_out" }]);
+    expect(store.getState().snapshot.phase).toBe("Betting");
+    expect(store.getState().snapshot.outcome).toBeNull();
+  });
+
+  test("calling for a new shoe from the settled felt does the same", () => {
+    const { store, sent } = settledStore();
+    store.getState().requestNewShoe();
+    expect(sent).toEqual([{ type: "propose_new_shoe" }]);
+    expect(store.getState().snapshot.phase).toBe("Betting");
+  });
+});

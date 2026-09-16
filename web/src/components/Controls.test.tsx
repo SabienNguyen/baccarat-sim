@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Controls } from "./Controls";
-import { bettingSnapshot, dealingSnapshot, shoeCutSnapshot } from "../test/fixtures";
+import { bettingSnapshot, dealingSnapshot, settledSnapshot, shoeCutSnapshot } from "../test/fixtures";
 
 test("Deal is enabled in Betting with at least one bet", async () => {
   const onDeal = vi.fn();
@@ -62,7 +62,7 @@ test("Reveal all is disabled outside Dealing and enabled (and fires) in Dealing"
   expect(onRevealAll).toHaveBeenCalledOnce();
 });
 
-test("Settle and Next hand render only when their handlers are given", () => {
+test("Settle renders only when its handler is given, and Next hand never does", () => {
   const { rerender } = render(
     <Controls
       snapshot={dealingSnapshot()}
@@ -186,7 +186,6 @@ test("everything but explain and audio is disabled in ShoeCut", () => {
       onDeal={vi.fn()}
       onRevealAll={vi.fn()}
       onSettle={vi.fn()}
-      onNewHand={vi.fn()}
       onNewShoe={vi.fn()}
       onSitOut={vi.fn()}
       onReady={vi.fn()}
@@ -196,7 +195,7 @@ test("everything but explain and audio is disabled in ShoeCut", () => {
       onToggleExplain={vi.fn()}
     />,
   );
-  for (const name of ["Ready", "Sit out", "Watch hand", "Reveal all", "Settle", "Next hand", "New shoe"]) {
+  for (const name of ["Ready", "Sit out", "Watch hand", "Reveal all", "Settle", "New shoe"]) {
     expect(screen.getByRole("button", { name })).toBeDisabled();
   }
   expect(screen.getByRole("button", { name: "Explain" })).toBeEnabled();
@@ -208,7 +207,6 @@ test("at the rail only Explain is offered — nothing there moves the game", () 
       snapshot={bettingSnapshot({ bets: [{ kind: { Main: "Player" }, amount: 500 }] })}
       onDeal={vi.fn()}
       onSettle={vi.fn()}
-      onNewHand={vi.fn()}
       onNewShoe={vi.fn()}
       onSitOut={vi.fn()}
       onToggleExplain={vi.fn()}
@@ -217,4 +215,35 @@ test("at the rail only Explain is offered — nothing there moves the game", () 
   );
   expect(screen.getByRole("button", { name: "Explain" })).toBeInTheDocument();
   expect(screen.getAllByRole("button")).toHaveLength(1);
+});
+
+test("at a live table the between-coups actions work straight from Settled — no Next hand", async () => {
+  const onSitOut = vi.fn();
+  const onNewShoe = vi.fn();
+  const onReady = vi.fn();
+  // a real settle clears the seat's bets; the fixture keeps them for the HUD
+  render(
+    <Controls
+      snapshot={{ ...settledSnapshot(), bets: [] }}
+      onDeal={vi.fn()}
+      onSettle={vi.fn()}
+      onNewShoe={onNewShoe}
+      onSitOut={onSitOut}
+      onReady={onReady}
+      onUnready={vi.fn()}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /Next/ })).toBeNull();
+  await userEvent.click(screen.getByRole("button", { name: "Sit out" }));
+  expect(onSitOut).toHaveBeenCalledOnce();
+  await userEvent.click(screen.getByRole("button", { name: "New shoe" }));
+  expect(onNewShoe).toHaveBeenCalledOnce();
+  // Ready still needs chips down — the settle cleared them
+  expect(screen.getByRole("button", { name: "Ready" })).toBeDisabled();
+});
+
+test("a solo table's Settled still waits for the auto-advance: Deal and New shoe stay off", () => {
+  render(<Controls snapshot={settledSnapshot()} onDeal={vi.fn()} onRevealAll={vi.fn()} onNewShoe={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Deal" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "New shoe" })).toBeDisabled();
 });

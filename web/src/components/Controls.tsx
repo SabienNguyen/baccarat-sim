@@ -26,7 +26,6 @@ interface ControlsProps {
   /** Flip everything (single player; live tables follow squeeze rights). */
   onRevealAll?: () => void;
   onSettle?: () => void;
-  onNewHand?: () => void;
   onNewShoe: () => void;
   explainOn?: boolean;
   onToggleExplain?: () => void;
@@ -49,7 +48,6 @@ export function Controls({
   onDeal,
   onRevealAll,
   onSettle,
-  onNewHand,
   onNewShoe,
   explainOn,
   onToggleExplain,
@@ -63,11 +61,17 @@ export function Controls({
   const betting = snapshot.phase === "Betting";
   const dealing = snapshot.phase === "Dealing";
   const settled = snapshot.phase === "Settled";
+  const live = onSitOut !== undefined; // a shared table, not a solo one
+  // At a live table "Settled" is the seat's own result still on the felt —
+  // the server's table is already open for the next coup — so every
+  // between-coups action works from it directly, and the reply sweeps the
+  // felt. There is no "Next hand" to press. Solo tables auto-advance instead.
+  const open = betting || (live && settled);
   const hasBets = snapshot.bets.length > 0;
-  // New shoe: only offered mid-Betting, and only when nobody's already
+  // New shoe: only offered between coups, and only when nobody's already
   // proposed one — every other phase (ShoeCut included) falls out of the
-  // same `betting` check every other control already uses.
-  const newShoeDisabled = !betting || snapshot.shoe.vote !== null;
+  // same `open` check every other control uses.
+  const newShoeDisabled = !open || snapshot.shoe.vote !== null;
 
   if (spectating) {
     return (
@@ -90,7 +94,7 @@ export function Controls({
         <button
           type="button"
           className="btn btn--primary"
-          disabled={!betting || !hasBets}
+          disabled={!open || !hasBets}
           onClick={myReady ? onUnready : onReady}
         >
           {myReady ? "Unready" : "Ready"}
@@ -101,7 +105,7 @@ export function Controls({
         </button>
       )}
       {onSitOut && (
-        <button type="button" className="btn btn--sitout" disabled={!betting} onClick={onSitOut}>
+        <button type="button" className="btn btn--sitout" disabled={!open} onClick={onSitOut}>
           Sit out
         </button>
       )}
@@ -120,11 +124,6 @@ export function Controls({
       {onSettle && (
         <button type="button" className="btn" disabled={!dealing} onClick={onSettle}>
           Settle
-        </button>
-      )}
-      {onNewHand && (
-        <button type="button" className="btn" disabled={!settled} onClick={onNewHand}>
-          <BtnLabel full="Next hand" short="Next" />
         </button>
       )}
       <button type="button" className="btn" disabled={newShoeDisabled} onClick={onNewShoe}>
