@@ -594,6 +594,16 @@ async fn handle_command(
                 ClientMsg::ClearBets => room.table.clear_bets(pid),
                 ClientMsg::Ready => room.table.ready(pid),
                 ClientMsg::Unready => room.table.unready(pid),
+                ClientMsg::Rebuy => {
+                    let (_, _, buy_in) = room.tier.stakes();
+                    match room.table.buy_back_in(pid, buy_in) {
+                        Ok(()) => {
+                            extra_lines.push(rooms::rebuy_announcement(&room.table, pid));
+                            Ok(())
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
                 ClientMsg::Deal => room.table.deal(),
                 ClientMsg::Peek { hand, index } => {
                     room.table.peek(pid, hand, index).map(|lifted| advances_coup = lifted)
@@ -1420,6 +1430,68 @@ mod ready_command_tests {
         assert!(
             states(&msgs_b).iter().all(|v| v.phase == PhaseTag::Betting),
             "carol hasn't decided — no deal yet: {msgs_b:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_broke_seat_can_rebuy() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let (tb, mut rb) = mpsc::channel(OUT_QUEUE);
+        let (a, b, buy_in) = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
+            let b = g.table.join("bob", 100).unwrap(); // below the Mid table minimum
+            g.seat(a, ta.clone());
+            g.seat(b, tb.clone());
+            (a, b, buy_in)
+        };
+        let mut seat_b = Some(At::Seat(Seat { room: room.clone(), pid: b }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Rebuy, &registry, &tb, &mut seat_b, &mut strikes).await);
+
+        let msgs_b = drain(&mut rb);
+        let lines = announcements(&msgs_b);
+        assert!(lines.iter().any(|m| m == "bob buys back in"), "{lines:?}");
+        let seat = states(&msgs_b)
+            .last()
+            .and_then(|v| v.seats.iter().find(|s| s.id == b).cloned())
+            .expect("bob's own state carries his seat");
+        assert_eq!(seat.bankroll, buy_in);
+        assert!(!seat.broke);
+
+        let msgs_a = drain(&mut ra);
+        assert!(
+            announcements(&msgs_a).iter().any(|m| m == "bob buys back in"),
+            "the whole table hears the rebuy: {msgs_a:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_seat_with_chips_cannot_rebuy() {
+        let registry = Registry::new();
+        let room = registry.create(Tier::Mid, false).await.unwrap();
+        let (ta, mut ra) = mpsc::channel(OUT_QUEUE);
+        let a = {
+            let mut g = room.lock().await;
+            let (.., buy_in) = g.tier.stakes();
+            let a = g.table.join("alice", buy_in).unwrap();
+            g.table.cut_shoe(a, 500).unwrap();
+            g.seat(a, ta.clone());
+            a
+        };
+        let mut seat_a = Some(At::Seat(Seat { room: room.clone(), pid: a }));
+        let mut strikes = 0;
+        assert!(handle_command(ClientMsg::Rebuy, &registry, &ta, &mut seat_a, &mut strikes).await);
+
+        let msgs_a = drain(&mut ra);
+        assert!(
+            matches!(msgs_a.as_slice(), [ServerMsg::Error { message }]
+                if message == "You've still got chips — play them."),
+            "{msgs_a:?}"
         );
     }
 

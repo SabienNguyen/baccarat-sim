@@ -132,13 +132,15 @@ interface GameTableProps {
   onLeave: () => void;
   /** Reset the buy-in (single player only). */
   onReset?: () => void;
+  /** Buy back in after a bust (multiplayer: the server resets the roll). */
+  onRebuy?: () => void;
   /** Single-player table tier, for the victory share link's deep link back. */
   tier?: TableTier;
   /** From the rail: sit down at the table being watched (multiplayer). */
   onTakeSeat?: () => void;
 }
 
-export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }: GameTableProps) {
+export function GameTable({ store: active, onLeave, onReset, onRebuy, tier, onTakeSeat }: GameTableProps) {
   // the MAIN/BONUS felt view, lifted so the nudge can fling it to BONUS
   const [betView, setBetView] = useState<BetView>("main");
   // the settle the player closed the bonus notice on, so it stays up otherwise
@@ -593,14 +595,15 @@ export function GameTable({ store: active, onLeave, onReset, tier, onTakeSeat }:
           }}
         />
       )}
-      {busted && onReset && (
+      {busted && (onReset || onRebuy) && (
         <BustModal
           bankroll={snapshot.bankroll}
           tableMin={snapshot.table_min}
-          onRebuy={onReset}
+          onRebuy={onRebuy ?? onReset!}
           onLeave={() => {
-            // clear the dead roll so the next visit re-buys fresh
-            onReset();
+            // clear the dead roll so the next visit re-buys fresh (single
+            // player); multiplayer just leaves — the server owns the money.
+            onReset?.();
             onLeave();
           }}
         />

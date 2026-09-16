@@ -63,6 +63,8 @@ export type ClientMsg =
   | { type: "ready" }
   /** Take back a ready declaration. */
   | { type: "unready" }
+  /** Buy back in at the table's starting buy-in — only a broke seat may. */
+  | { type: "rebuy" }
   | { type: "deal" }
   | { type: "peek"; hand: Side; index: number }
   | { type: "reveal"; hand: Side; index: number }

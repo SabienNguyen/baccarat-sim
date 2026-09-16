@@ -109,6 +109,53 @@ test("creating a table sends the choice and joining mounts the live table", asyn
   expect(screen.getByText("sabien")).toBeInTheDocument();
 });
 
+test("a broke seat sees the bust modal and can re-buy over the wire", async () => {
+  const { socket } = mount();
+  socket.open();
+  const scoreboard = {
+    bead_plate: { cells: [] },
+    big_road: { columns: [] },
+    big_eye_boy: { columns: [] },
+    small_road: { columns: [] },
+    cockroach_pig: { columns: [] },
+  };
+  const shoe = { number: 1, cut_card_out: false, cut_reason: null, cutter: null, last_cut: null, vote: null };
+  const view = (broke: boolean) => ({
+    phase: "Betting",
+    player: { cards: [], total: null },
+    banker: { cards: [], total: null },
+    bets: [],
+    bankroll: broke ? 0 : 50_000,
+    table_min: 2500,
+    table_max: 500_000,
+    outcome: null,
+    payouts: null,
+    events: [],
+    scoreboard,
+    explain: [],
+    shoe,
+    seats: [
+      { id: 0, name: "sabien", bankroll: broke ? 0 : 50_000, staked: 0, bets: [], sitting_out: false, ready: false, decided: true, broke, host: false },
+    ],
+    player_squeezer: null,
+    banker_squeezer: null,
+  });
+  // The store's `busted` only updates on a push through `handle`, not on the
+  // view a fresh `createRemoteStore` was seeded with — join with chips, then
+  // bust on the next push, same as a real hand going bad.
+  socket.push({ type: "joined", room: "ZZTOP2", player: 0, tier: "mid", view: view(false) });
+  socket.push({ type: "state", view: view(true) });
+
+  const dialog = screen.getByRole("dialog", { name: "Busted" });
+  expect(dialog).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: "Re-buy" }));
+  expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "rebuy" });
+
+  socket.push({ type: "state", view: view(false) });
+  expect(screen.queryByRole("dialog", { name: "Busted" })).not.toBeInTheDocument();
+});
+
 test("renaming at the table goes over the wire and sticks for next time", async () => {
   const { socket } = mount();
   socket.open();

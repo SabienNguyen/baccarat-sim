@@ -52,6 +52,8 @@ pub enum TableError {
     VoteOpen,
     /// No New Shoe vote is open to vote on.
     NoVote,
+    /// A rebuy is only for a seat that can no longer post the table minimum.
+    NotBroke,
     Command(CommandError),
 }
 
@@ -625,6 +627,41 @@ impl Table {
         player.bankroll = player.bankroll.saturating_add(amount.max(0));
         // a fresh stake clears the finished round's display, like place_bet does
         player.payouts = None;
+        Ok(())
+    }
+
+    /// Buy back in: a broke seat's bankroll becomes `amount`. Betting only,
+    /// and only while the seat can't cover the table minimum — a seat with
+    /// chips left plays them. The seat comes back undecided with no bets,
+    /// not sitting out, not ready, so the deal waits for its decision.
+    ///
+    /// Named `buy_back_in` rather than `rebuy` — the engine already has a
+    /// `rebuy` (top up any seat's bankroll, allowed outside a hand, used by
+    /// the single-player wasm binding and web client). That method's
+    /// semantics (additive, any seat, Betting+ShoeCut) are incompatible
+    /// with this one's (absolute, broke-only, Betting-only, resets the
+    /// seat's decision state), so it could not be reused or overloaded
+    /// under the same name in the same `impl Table`.
+    pub fn buy_back_in(&mut self, pid: PlayerId, amount: i64) -> Result<(), TableError> {
+        if !matches!(self.phase, Phase::Betting) {
+            return Err(CommandError::WrongPhase {
+                expected: PhaseTag::Betting,
+                found: self.phase_tag(),
+            }
+            .into());
+        }
+        let table_min = self.config.table_min;
+        let player = self.player_mut(pid)?;
+        if !player.broke(table_min) {
+            return Err(TableError::NotBroke);
+        }
+        debug_assert!(amount >= 0, "negative buy-back-in");
+        player.bankroll = amount;
+        player.bets.clear();
+        player.sitting_out = false;
+        player.ready = false;
+        player.payouts = None;
+        self.settled_on_felt = false;
         Ok(())
     }
 
@@ -2460,6 +2497,78 @@ mod broke_seat_tests {
         t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
         t.ready(a).unwrap();
         t.deal().expect("the busted seat must not hold the table hostage");
+    }
+}
+
+#[cfg(test)]
+mod rebuy_tests {
+    use super::*;
+    use crate::settle::BetSpot;
+
+    fn table() -> Table {
+        Table::new(
+            TableConfig { table_min: 100, table_max: 10_000, ruleset: Ruleset::Commission, max_seats: 7 },
+            7,
+        )
+    }
+
+    #[test]
+    fn a_broke_seat_buys_back_in() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
+        let b = t.join("b", 50).unwrap(); // below the 100 minimum
+
+        t.buy_back_in(b, 5_000).unwrap();
+
+        let seat = t.view_for(a).unwrap().seats.iter().find(|s| s.id == b).cloned().unwrap();
+        assert_eq!(seat.bankroll, 5_000);
+        assert!(!seat.broke, "the seat can cover the minimum again");
+        assert!(!seat.decided, "an undecided seat with no bet staged yet");
+        assert!(!t.all_ready(), "the table must wait on the fresh seat's decision");
+    }
+
+    #[test]
+    fn a_seat_with_chips_left_cannot_rebuy() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
+        let b = t.join("b", 200).unwrap(); // still covers the minimum
+
+        assert!(matches!(t.buy_back_in(b, 5_000), Err(TableError::NotBroke)));
+        let seat = t.view_for(a).unwrap().seats.iter().find(|s| s.id == b).cloned().unwrap();
+        assert_eq!(seat.bankroll, 200, "unchanged");
+    }
+
+    #[test]
+    fn rebuy_outside_betting_is_refused() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
+        let b = t.join("b", 50).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.ready(a).unwrap();
+        t.deal().unwrap(); // b is broke and decided, so the deal proceeds
+
+        assert!(matches!(
+            t.buy_back_in(b, 5_000),
+            Err(TableError::Command(CommandError::WrongPhase { .. }))
+        ));
+    }
+
+    #[test]
+    fn after_rebuy_the_seat_can_bet_ready_and_be_dealt() {
+        let mut t = table();
+        let a = t.join("a", 5_000).unwrap();
+        t.cut_shoe(a, 500).unwrap();
+        let b = t.join("b", 50).unwrap();
+
+        t.buy_back_in(b, 5_000).unwrap();
+        t.place_bet(a, BetKind::Main(BetSpot::Banker), 100).unwrap();
+        t.place_bet(b, BetKind::Main(BetSpot::Player), 100).unwrap();
+        t.ready(a).unwrap();
+        t.ready(b).unwrap();
+        t.deal().expect("the bought-back-in seat plays the coup");
     }
 }
 
