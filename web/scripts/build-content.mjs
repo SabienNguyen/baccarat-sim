@@ -84,6 +84,9 @@ function page({ slug, title, description, bodyHtml, jsonLd }) {
 <meta name="twitter:image" content="${OG_IMAGE}" />
 <style>${CSS}</style>
 ${ld}
+<!-- GoatCounter: privacy-friendly, cookie-less analytics (docs/GROWTH.md G4). -->
+<script data-goatcounter="https://baccarat-sim.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 <div class="wrap">
