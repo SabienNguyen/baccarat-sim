@@ -15,7 +15,7 @@
      `@media (max-width: 700px)` block below, alongside the button floor. */
   text-transform: uppercase;
   color: var(--accent-2);
-  text-shadow: 1px 1px 0 var(--ink);
+
 }
 .dealer-flip-buttons {
   display: flex;
@@ -28,9 +28,9 @@
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 9px 10px;
-  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.45), 3px 3px 0 var(--shadow);
+
   cursor: pointer;
   transition: transform 80ms ease;
 }
@@ -39,7 +39,7 @@
 }
 .dealer-flip-btn:active {
   transform: translateY(2px);
-  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+
 }
 .dealer-flip-btn:focus-visible {
   outline: 3px solid #fff;

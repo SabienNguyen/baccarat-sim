@@ -32,7 +32,6 @@ test("a squeezed face-down card shows the fold but reveals nothing", () => {
   const flap = container.querySelector<HTMLElement>(".card-peel-flap")!;
   expect(flap.style.transform).toBe("");
   expect(card.style.transformOrigin).toBe("50.0% 0.0%"); // pull-up: top edge rests
-  expect(card.style.filter).toContain("drop-shadow");
 });
 
 test("a peeked card folds back to show the real face under the corner", () => {

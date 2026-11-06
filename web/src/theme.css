@@ -43,7 +43,6 @@
   --panel-bevel-lo: #1a0a0e;
   /* structure */
   --ink: #180a0d;
-  --shadow: rgba(0, 0, 0, 0.5);
   /* soft secondary text/detail (was Balatro lavender #b9aee0) */
   --accent-2: #d8c39a;
   /* type — Silkscreen (chunky arcade pixel, unambiguous digits) for
@@ -81,24 +80,8 @@ body {
   color: #f4ecd8;
   /* No grey tap-flash on buttons (touch only; a no-op with a mouse). */
   -webkit-tap-highlight-color: transparent;
-  /* layered radial greens + a swirl that slowly drifts */
-  background-color: var(--felt-deep);
-  background-image:
-    radial-gradient(circle at 30% 20%, var(--felt-light), transparent 55%),
-    radial-gradient(circle at 75% 70%, var(--felt-light), transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04), transparent 60%);
-  background-attachment: fixed;
-  background-size: 140% 140%, 160% 160%, 200% 200%;
-}
-
-/* The drift is a fine-pointer, real-estate-to-spare treat: on a phone/tablet
- * (coarse pointer, or a narrow viewport) it re-rasterises three full-viewport
- * gradients every frame for no informational payoff, so the felt is static
- * there instead. */
-@media (pointer: fine) and (min-width: 701px) {
-  body {
-    animation: felt-swirl 40s ease-in-out infinite alternate;
-  }
+  /* flat felt: no gradients, no drift */
+  background: var(--felt-deep);
 }
 
 /* Touch devices only: kill the iOS rubber-band / pull-to-refresh bounce so the
@@ -108,22 +91,6 @@ body {
 @media (pointer: coarse) {
   body {
     overscroll-behavior: none;
-  }
-}
-
-@keyframes felt-swirl {
-  from {
-    background-position: 0% 0%, 100% 100%, 50% 50%;
-  }
-  to {
-    background-position: 20% 15%, 80% 85%, 55% 45%;
-  }
-}
-
-/* Hold the felt still for anyone who asked the OS to reduce motion. */
-@media (prefers-reduced-motion: reduce) {
-  body {
-    animation: none;
   }
 }
 
@@ -138,11 +105,8 @@ body {
 .panel {
   background: var(--panel-face);
   border: 3px solid var(--ink);
-  border-radius: 8px;
-  box-shadow:
-    inset 2px 2px 0 var(--panel-bevel-hi),
-    inset -2px -2px 0 var(--panel-bevel-lo),
-    4px 4px 0 var(--shadow);
+  border-radius: 0;
+
   padding: 12px;
 }
 
@@ -359,9 +323,9 @@ body {
     gap: 8px;
     padding: 8px max(10px, env(safe-area-inset-left))
       calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-right));
-    background: rgba(11, 61, 46, 0.94);
+    background: var(--felt-deep);
     border-top: 2px solid var(--ink);
-    box-shadow: 0 -3px 0 rgba(0, 0, 0, 0.35);
+
     /* The bar's own box only ever has buttons and gaps in it, but its
        bounding box always spans the full width — including the gaps
        between buttons and any margin the bar has over the felt below.
@@ -467,7 +431,7 @@ body {
     padding: 0;
     background: none;
     border-top: none;
-    box-shadow: none;
+
     pointer-events: auto;
   }
   /* cards.css reserves a tall `.card-stage` (196px in this width range) so a

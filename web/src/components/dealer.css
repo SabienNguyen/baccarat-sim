@@ -25,9 +25,9 @@
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 4px 8px;
-  box-shadow: 2px 2px 0 var(--shadow);
+
 }
 .dealer-line p {
   margin: 0;
@@ -45,11 +45,8 @@
   color: #f3eede;
   background: var(--panel-face);
   border: 3px solid var(--ink);
-  border-radius: 10px;
-  box-shadow:
-    inset 2px 2px 0 var(--panel-bevel-hi),
-    inset -2px -2px 0 var(--panel-bevel-lo),
-    4px 4px 0 var(--shadow);
+  border-radius: 0;
+
   padding: 16px 18px 12px;
 }
 /* speech-bubble tail pointing down at the table */

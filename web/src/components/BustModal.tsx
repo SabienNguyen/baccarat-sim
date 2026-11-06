@@ -50,7 +50,7 @@ export function BustModal({
         <p className="bust-amount">{formatCents(bankroll)}</p>
         <p className="bust-sub">
           The minimum here is {formatCents(tableMin)}. The pit boss offers his
-          condolences — and nothing else.
+          condolences, and nothing else.
         </p>
         {adState === "unavailable" && (
           <p className="bust-noad" role="status">

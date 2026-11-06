@@ -8,11 +8,11 @@ import "./thirdcard.css";
  */
 const BANKER_ROWS: { total: string; draws: string }[] = [
   { total: "0–2", draws: "always draws" },
-  { total: "3", draws: "draws — unless it's an 8" },
+  { total: "3", draws: "draws unless it's an 8" },
   { total: "4", draws: "draws on 2–7" },
   { total: "5", draws: "draws on 4–7" },
   { total: "6", draws: "draws on 6–7" },
-  { total: "7", draws: "never — stands" },
+  { total: "7", draws: "never; stands" },
 ];
 
 export function ThirdCardChart() {
@@ -21,7 +21,7 @@ export function ThirdCardChart() {
       <h4>Third-card rule</h4>
       <p className="tc-rule">Player draws on 0–5, stands on 6–7.</p>
       <p className="tc-rule tc-muted">
-        If the Player stands, the Banker draws on 0–5. A natural 8 or 9 ends it — no draws.
+        If the Player stands, the Banker draws on 0–5. A natural 8 or 9 ends it. No draws.
       </p>
       <table className="tc-table">
         <caption className="tc-caption">When the Player drew, the Banker…</caption>

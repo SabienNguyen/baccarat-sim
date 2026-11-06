@@ -24,16 +24,13 @@ function siteUrl(tier?: string): string {
 
 function shareText(s: RunShare): string {
   const headline = s.headline.replace(/!+$/, "");
-  return `${headline} — I ran it to ${formatCents(s.bankroll)} on Baccarat Simulator. Beat the table: ${siteUrl(s.tier)}`;
+  return `${headline}: I ran it to ${formatCents(s.bankroll)} on Baccarat Simulator. Beat the table: ${siteUrl(s.tier)}`;
 }
 
 function draw(ctx: CanvasRenderingContext2D, s: RunShare): void {
   const W = 1200,
     H = 630;
-  const g = ctx.createRadialGradient(W / 2, H * 0.38, 60, W / 2, H * 0.38, 760);
-  g.addColorStop(0, "#145c43");
-  g.addColorStop(1, "#0b3d2e");
-  ctx.fillStyle = g;
+  ctx.fillStyle = "#0b3d2e";
   ctx.fillRect(0, 0, W, H);
 
   ctx.strokeStyle = "rgba(240,213,138,0.55)";
@@ -55,7 +52,7 @@ function draw(ctx: CanvasRenderingContext2D, s: RunShare): void {
 
   ctx.font = "400 34px VT323, monospace";
   ctx.fillStyle = "#c9b98f";
-  ctx.fillText("baccarat simulator — learn & play free", W / 2, 560);
+  ctx.fillText("baccarat simulator: learn and play free", W / 2, 560);
 
   // chip accents
   const chips = ["#c0202a", "#1f6feb", "#f0d58a"];

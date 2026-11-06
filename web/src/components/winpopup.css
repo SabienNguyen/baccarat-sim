@@ -8,9 +8,9 @@
   font-size: 28px;
   padding: 10px 16px;
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--panel-face);
-  text-shadow: 2px 2px 0 var(--ink);
+
   pointer-events: none;
   z-index: 50;
   /* a lively pop that breathes then lifts away — never a frozen placard */

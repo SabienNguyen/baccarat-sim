@@ -5,12 +5,14 @@
 }
 .volume-mute,
 .volume-music {
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 9px;
   line-height: 1;
-  padding: 4px 6px;
+  letter-spacing: 1px;
+  padding: 6px 8px;
   background: var(--panel-bevel-hi);
   border: 2px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
 }
 .volume-music {

@@ -47,7 +47,7 @@ function winLine(
   }
   return [
     ...prefix,
-    { text: "Égalité — " },
+    { text: "Égalité: " },
     { text: "tie", term: "tie" },
     { text: ` at ${win.player}. Main bets push.${paidFlavor}` },
   ];
@@ -63,7 +63,7 @@ function eventLine(e: Event): NarrationSegment[] {
   if ("Natural" in e) {
     return [
       { text: "Natural", term: "natural" },
-      { text: ` ${e.Natural.total} — ${e.Natural.side}! Both hands stand.` },
+      { text: ` ${e.Natural.total}, ${e.Natural.side}! Both hands stand.` },
     ];
   }
   if ("Pair" in e) {
@@ -83,9 +83,9 @@ function eventLine(e: Event): NarrationSegment[] {
     const on = drawnOn(e.ThirdCard.reason);
     // the tableau's tightest spot: banker 6 only moves against a 6 or 7
     if (e.ThirdCard.side === "Banker" && on === "6") {
-      return [{ text: "Card for the Banker on six — only a six or seven makes him move." }];
+      return [{ text: "Card for the Banker on six. Only a six or seven makes him move." }];
     }
-    const why = on !== null ? ` — drawing on ${on}, the tableau calls for it.` : ".";
+    const why = on !== null ? `: drawing on ${on}, the tableau calls for it.` : ".";
     return [{ text: `Card for the ${e.ThirdCard.side}${why}` }];
   }
   return [];
@@ -113,7 +113,7 @@ function winSpecials(
     );
   }
   if (win.result === "Tie" && win.player === 6) {
-    out.push({ text: " Six–six — " }, { text: "Tiger", term: "tiger" }, { text: " tie!" });
+    out.push({ text: " Six–six: " }, { text: "Tiger", term: "tiger" }, { text: " tie!" });
   }
   const naturals =
     p.cards.length === 2 &&
@@ -124,7 +124,7 @@ function winSpecials(
     out.push(
       { text: " " },
       { text: "Le grand over le petit", term: "natural" },
-      { text: " — nine beats eight." },
+      { text: ": nine beats eight." },
     );
   }
   return out;
@@ -163,7 +163,7 @@ function bonusCalls(payouts: BetPayout[] | null): NarrationSegment[] {
     const key = sideKey(p.bet.kind);
     const call = key !== null ? SIDE_CALLS[key] : undefined;
     if (!call) continue;
-    out.push({ text: " " }, { text: call.label, term: call.term }, { text: ` — ${call.odds}!` });
+    out.push({ text: " " }, { text: call.label, term: call.term }, { text: `: ${call.odds}!` });
   }
   return out;
 }
@@ -197,23 +197,23 @@ export function narrateError(error: CommandError | { Message: string }): Narrati
     return [{ text: error.Message }];
   }
   if (error === "NoBetsPlaced") {
-    return [{ text: "Chips down first — then we deal." }];
+    return [{ text: "Chips down first, then we deal." }];
   }
   if ("BetAboveMaximum" in error) {
     return [
-      { text: `Too rich for this table — the max is ${formatCents(error.BetAboveMaximum.max)}.` },
+      { text: `Too rich for this table. The max is ${formatCents(error.BetAboveMaximum.max)}.` },
     ];
   }
   if ("BetBelowMinimum" in error) {
     return [
-      { text: `That's shy of the minimum — ${formatCents(error.BetBelowMinimum.min)} to play.` },
+      { text: `That's shy of the minimum: ${formatCents(error.BetBelowMinimum.min)} to play.` },
     ];
   }
   if ("InsufficientBankroll" in error) {
     return [{ text: "Your rack can't cover that one." }];
   }
   if ("WrongPhase" in error) {
-    return [{ text: "Not just now — let's finish this hand." }];
+    return [{ text: "Not just now. Let's finish this hand." }];
   }
   return [{ text: "Can't do that, friend." }];
 }
@@ -236,20 +236,20 @@ function flipLine(flip: Flip, snapshot: RoundSnapshot): NarrationSegment[] {
     third.FaceUp.suit === flip.card.suit;
   if (isThird && flip.card.rank === "Eight") {
     return [
-      { text: `${name} to the ${flip.side} — ` },
+      { text: `${name} to the ${flip.side}: ` },
       { text: "snowman", term: "snowman" },
       { text: "!" },
     ];
   }
   if (MONKEY_RANKS.includes(flip.card.rank)) {
     return [
-      { text: `${name} to the ${flip.side} — ` },
+      { text: `${name} to the ${flip.side}: ` },
       { text: "monkey", term: "monkey" },
       { text: "!" },
     ];
   }
   if (flip.card.rank === "Ace") {
-    return [{ text: `${name} to the ${flip.side} — counts one.` }];
+    return [{ text: `${name} to the ${flip.side}: counts one.` }];
   }
   return [{ text: `${name} to the ${flip.side}.` }];
 }
@@ -259,7 +259,7 @@ export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): 
   if (snapshot.phase === "ShoeCut") {
     return snapshot.shoe.cut_reason === "CutCardOut"
       ? [{ text: "That shoe's done. Cut the new one wherever you like." }]
-      : [{ text: "Fresh shoe — cut it wherever you like." }];
+      : [{ text: "Fresh shoe. Cut it wherever you like." }];
   }
 
   if (snapshot.phase === "Betting") {
@@ -274,15 +274,15 @@ export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): 
       ];
     }
     if (snapshot.shoe.cut_card_out) {
-      return [{ text: "Cut card's out — one more hand, then a fresh shoe." }];
+      return [{ text: "Cut card's out. One more hand, then a fresh shoe." }];
     }
     if (snapshot.bankroll < snapshot.table_min) {
-      return [{ text: "The cage thanks you for playing — reset the bank to buy back in." }];
+      return [{ text: "The cage thanks you for playing. Reset the bank to buy back in." }];
     }
     const staked = snapshot.bets.reduce((sum, b) => sum + b.amount, 0);
     if (staked > 0) {
       return [
-        { text: `Bets down — ${formatCents(staked)} riding. Call the deal when you're ready.` },
+        { text: `Bets down: ${formatCents(staked)} riding. Call the deal when you're ready.` },
       ];
     }
     return [{ text: "Place your bets." }];
@@ -321,13 +321,13 @@ export function narrate(snapshot: RoundSnapshot, lastFlip: Flip | null = null): 
   if (salient) return eventLine(salient);
 
   if (snapshot.phase === "Settled") {
-    return [{ text: "Hand's settled — chips down for the next one." }];
+    return [{ text: "Hand's settled. Chips down for the next one." }];
   }
   if (anyCardShowing(snapshot)) {
-    return [{ text: "Take your time — bend that corner." }];
+    return [{ text: "Take your time. Bend that corner." }];
   }
   return [
-    { text: "No more bets. Cards are out — " },
+    { text: "No more bets. Cards are out, " },
     { text: "squeeze", term: "squeeze" },
     { text: " 'em." },
   ];

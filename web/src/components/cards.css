@@ -6,21 +6,18 @@
   width: round(calc(100px * var(--ui-scale)), 1px);
   height: round(calc(143px * var(--ui-scale)), 1px);
   border: 3px solid var(--ink);
-  border-radius: 9px;
+  border-radius: 3px;
   margin: 4px;
   font-family: var(--font-display);
   user-select: none;
   position: relative;
-  box-shadow: 3px 3px 0 var(--shadow);
+
   transition: transform 90ms ease;
 }
 .card-back {
   background:
     repeating-linear-gradient(45deg, #3a1622, #3a1622 6px, #52222f 6px, #52222f 12px);
-  box-shadow:
-    inset 2px 2px 0 var(--panel-bevel-hi),
-    inset -2px -2px 0 var(--panel-bevel-lo),
-    3px 3px 0 var(--shadow);
+
 }
 .card-face {
   background: #ffffff;
@@ -29,7 +26,7 @@
 .card-slot {
   background: rgba(0, 0, 0, 0.14);
   border: 2px dashed rgba(243, 238, 222, 0.4);
-  box-shadow: none;
+
 }
 .card-face[data-color="red"],
 .card-peel-face[data-color="red"] {
@@ -120,19 +117,11 @@
 
 /* --- the squeeze peel: the card itself bending up off the table --- */
 /* The table showing through where the card has lifted away: the same
-   fixed-attachment felt layers as the body, so the hole's gradients line
-   up with the real table around the card, under the card's shadow. */
+   flat felt as the body. */
 .card-peel-under {
   position: absolute;
   inset: 0;
   background-color: var(--felt-deep);
-  background-image:
-    linear-gradient(rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.14)),
-    radial-gradient(circle at 30% 20%, var(--felt-light), transparent 55%),
-    radial-gradient(circle at 75% 70%, var(--felt-light), transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.04), transparent 60%);
-  background-attachment: scroll, fixed, fixed, fixed;
-  background-size: 100% 100%, 140% 140%, 160% 160%, 200% 200%;
 }
 /* the lifted card: stock-white underside, the face printed on it */
 .card-peel-flap {
@@ -140,7 +129,7 @@
   inset: 0;
   pointer-events: none;
   background: #ffffff;
-  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.4));
+
 }
 /* The printed face riding the flap, placed by left/top layout offsets.
    NO transform/animation/filter/will-change here EVER: a composited child
@@ -170,9 +159,9 @@
   margin-left: -13%;
   margin-top: -8.5%;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #f0c9a0, #d9a679 65%, #bb8157);
+  background: #d9a679;
   border: 2px solid var(--ink);
-  box-shadow: 1px 2px 2px rgba(0, 0, 0, 0.35);
+
 }
 
 /* --- the deal: cards slide in from the shoe, faces snap over --- */
@@ -284,7 +273,7 @@
   font-size: round(calc(13px * var(--ui-scale)), 1px);
   letter-spacing: 2px;
   color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink);
+
   text-transform: uppercase;
 }
 .hand-cards {
@@ -307,19 +296,14 @@
   font-size: round(calc(9px * var(--ui-scale)), 1px);
   letter-spacing: 2px;
   color: var(--accent-2);
-  text-shadow: 1px 1px 0 var(--ink);
+
 }
 .hand-total-num {
   font-family: var(--font-display);
   font-size: round(calc(38px * var(--ui-scale)), 1px);
   line-height: 1;
   color: #fff;
-  text-shadow:
-    -3px -3px 0 var(--ink),
-    3px -3px 0 var(--ink),
-    -3px 3px 0 var(--ink),
-    3px 3px 0 var(--ink),
-    6px 6px 0 rgba(0, 0, 0, 0.45);
+
 }
 /* mid-squeeze running total: slightly dimmed until it's final */
 .hand-total-num--running {
@@ -328,7 +312,6 @@
 }
 .hand-total-num--win {
   color: var(--gold);
-  animation: total-glow 900ms ease-in-out infinite alternate;
 }
 @keyframes total-slam {
   0% {
@@ -343,17 +326,8 @@
     transform: scale(1) rotate(0deg);
   }
 }
-@keyframes total-glow {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(1.12);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .hand-total-badge,
-  .hand-total-num--win {
+  .hand-total-badge {
     animation: none;
   }
 }

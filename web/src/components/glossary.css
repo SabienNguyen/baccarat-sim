@@ -27,8 +27,8 @@
   color: #f3eede;
   background: var(--panel-face);
   border: 3px solid var(--ink);
-  border-radius: 6px;
-  box-shadow: 3px 3px 0 var(--shadow);
+  border-radius: 0;
+
   padding: 8px 10px;
 }
 .term-popover strong {
@@ -46,7 +46,7 @@
 .road-info-btn {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: 0;
   font-family: var(--font-display);
   font-size: 9px;
   line-height: 1;

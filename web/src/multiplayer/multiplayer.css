@@ -77,7 +77,7 @@
   font-family: var(--font-display);
   font-size: 30px;
   color: var(--gold);
-  text-shadow: 3px 3px 0 var(--ink);
+
 }
 .mp-status {
   font-family: var(--font-text);
@@ -113,7 +113,7 @@
   color: #f3eede;
   background: var(--panel-bevel-lo);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px 12px;
   width: 100%;
 }
@@ -128,11 +128,8 @@
   width: 100%;
   background: var(--panel-face);
   border: 3px solid var(--ink);
-  border-radius: 10px;
-  box-shadow:
-    inset 2px 2px 0 var(--panel-bevel-hi),
-    inset -2px -2px 0 var(--panel-bevel-lo),
-    4px 4px 0 var(--shadow);
+  border-radius: 0;
+
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -161,7 +158,7 @@
   color: #f3eede;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px;
   cursor: pointer;
 }
@@ -172,7 +169,7 @@
 }
 .mp-tier.is-on {
   background: #1d7a3a;
-  box-shadow: 0 0 0 2px var(--gold);
+
 }
 .mp-check {
   display: flex;
@@ -189,7 +186,7 @@
   color: #1a1208;
   background: var(--gold);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 14px;
   cursor: pointer;
   align-self: flex-start;
@@ -217,7 +214,7 @@
   gap: 8px;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px 10px;
 }
 .mp-roomname {
@@ -245,7 +242,7 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 14px;
   cursor: pointer;
   align-self: flex-start;
@@ -276,9 +273,9 @@
   color: #f3eede;
   background: var(--panel-face);
   border: 2px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 4px 10px;
-  box-shadow: 2px 2px 0 var(--shadow);
+
   cursor: pointer;
 }
 .mp-roomtag:hover {
@@ -323,16 +320,14 @@
   background: var(--panel-face);
   /* the seat's own colour is the default border; holding overrides it below */
   border: 3px solid var(--seat-colour, var(--ink));
-  border-radius: 10px;
+  border-radius: 0;
   padding: 12px 18px;
-  box-shadow: 3px 3px 0 var(--shadow);
+
 }
 /* this player is holding a hand's cards */
 .seat-chip--holding {
   border-color: var(--gold);
-  box-shadow:
-    0 0 0 2px rgba(240, 213, 138, 0.35),
-    3px 3px 0 var(--shadow);
+
 }
 .seat-cards {
   position: absolute;
@@ -345,9 +340,9 @@
   color: #1a1208;
   background: var(--gold);
   border: 2px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 3px 8px;
-  box-shadow: 2px 2px 0 var(--shadow);
+
 }
 .seat-name {
   font-family: var(--font-display);
@@ -375,12 +370,12 @@
   outline: none;
 }
 .seat-name--mine:focus-visible {
-  box-shadow: 0 0 0 2px var(--gold);
-  border-radius: 3px;
+
+  border-radius: 0;
 }
 /* the pen lives in CSS so the button's text is just the name */
 .seat-name--mine::after {
-  content: "✎";
+  content: "EDIT";
   margin-left: 5px;
   font-size: 10px;
   opacity: 0.7;
@@ -390,7 +385,7 @@
   color: #f3eede;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--gold);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 2px 6px;
   text-overflow: clip;
 }
@@ -420,7 +415,7 @@
   font-size: 13px;
   color: #1a1208;
   background: var(--seat-colour, var(--gold));
-  border-radius: 5px;
+  border-radius: 0;
   padding: 1px 6px;
   white-space: nowrap;
 }
@@ -441,17 +436,9 @@
 }
 .seat-status--wait {
   color: var(--gold);
-  animation: seat-wait 1.2s ease-in-out infinite;
 }
 .seat-status--squeeze {
   color: #7ec8ff;
-}
-@keyframes seat-wait {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .seat-status--wait { animation: none; }
 }
 
 /* in-between widths and phones: the room tags join the flow, no overlap */
@@ -471,7 +458,7 @@
   font-size: 14px;
   line-height: 1;
   color: var(--gold);
-  text-shadow: 1px 1px 0 var(--ink);
+
 }
 
 /* a mark under a seat that's already voted on the open New Shoe proposal */
@@ -497,7 +484,7 @@
   justify-content: center;
   background: var(--panel-face);
   border: 2px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px 14px;
   position: relative;
   overflow: hidden;
@@ -520,16 +507,16 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 2px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
 }
 .vote-btn--yes[aria-pressed="true"] {
   background: #1d7a3a;
-  box-shadow: 0 0 0 2px var(--gold);
+
 }
 .vote-btn--no[aria-pressed="true"] {
   background: #7a1d2c;
-  box-shadow: 0 0 0 2px var(--gold);
+
 }
 /* a 30s bar that drains as the vote's window closes, restarted (via the
    element's key, keyed to the proposer) each time a new vote opens */
@@ -560,7 +547,7 @@
   min-height: 0;
   padding: 8px 14px;
   border-style: dashed;
-  box-shadow: none;
+
 }
 /* the lobby's second verb: watch a table, full or not */
 .mp-watch {
@@ -569,7 +556,7 @@
   color: #f3eede;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 12px;
   cursor: pointer;
 }

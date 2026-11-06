@@ -58,7 +58,7 @@ export interface GameSession {
 function unexpectedThrow(error: unknown): SessionError | null {
   if (error instanceof Error) {
     console.error("wasm engine threw unexpectedly:", error);
-    return { Message: "The table hit a snag — give that another try." };
+    return { Message: "The table hit a snag. Give that another try." };
   }
   return null;
 }
@@ -120,7 +120,7 @@ function tableErrorToSpeech(error: TableError): SessionError {
     return "NoBetsPlaced";
   }
   if (error === "TableFull") {
-    return { Message: "Table's full, friend — try another." };
+    return { Message: "Table's full, friend. Try another." };
   }
   if (error === "NoSuchPlayer") {
     return { Message: "You're not seated at this table." };
@@ -136,7 +136,7 @@ function tableErrorToSpeech(error: TableError): SessionError {
   if (error === "NothingToTurn") {
     return { Message: "Nothing for the dealer to turn just now." };
   }
-  return { Message: "Order, order — Player hand first, then Banker." };
+  return { Message: "Order, order. Player hand first, then Banker." };
 }
 
 /**

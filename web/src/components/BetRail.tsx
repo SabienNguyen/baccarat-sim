@@ -175,7 +175,7 @@ export function BetRail({
               className={`seg-half${active === "bonus" ? " seg-on" : ""}`}
               onClick={() => setActive("bonus")}
             >
-              ★ BONUS
+              BONUS
               {bonusCount > 0 && <span className="seg-badge">{bonusCount}</span>}
             </button>
           </div>
@@ -208,8 +208,8 @@ export function BetRail({
           {betting
             ? "Tap a chip, then tap a spot. Or drag a chip onto a spot."
             : snapshot.phase === "Settled"
-              ? "Hand over — tap a spot to play the next one."
-              : "Bets are locked — squeeze the cards."}
+              ? "Hand over. Tap a spot to play the next one."
+              : "Bets are locked. Squeeze the cards."}
         </p>
         <button
           type="button"

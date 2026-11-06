@@ -26,16 +26,14 @@
   font-family: var(--font-display);
   font-size: 28px;
   color: var(--chip-red);
-  text-shadow:
-    3px 3px 0 var(--ink),
-    6px 6px 0 rgba(0, 0, 0, 0.4);
+
 }
 .bust-amount {
   margin: 0;
   font-family: var(--font-display);
   font-size: 22px;
   color: #fff;
-  text-shadow: 2px 2px 0 var(--ink);
+
 }
 .bust-sub {
   margin: 0;
@@ -65,7 +63,7 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 12px 16px;
   cursor: pointer;
 }

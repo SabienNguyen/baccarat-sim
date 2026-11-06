@@ -67,7 +67,7 @@ export function SeatsStrip({
             className={`seat-chip ${holding ? "seat-chip--holding" : ""} ${mine ? "seat-chip--mine" : ""}`}
             style={{ "--seat-colour": seatColour(s.id) } as React.CSSProperties}
           >
-            {holding && <span className="seat-cards">🂠 {holding} cards</span>}
+            {holding && <span className="seat-cards">{holding} CARDS</span>}
             {s.host && (
               <span className="seat-host" title="Has the cut" aria-label="Has the cut">
                 ♛
@@ -106,7 +106,7 @@ export function SeatsStrip({
       })}
       {watchers !== null && watchers > 0 && (
         <div className="seat-chip seat-chip--rail" aria-label="Watching">
-          <span className="seat-name">👁 {watchers}</span>
+          <span className="seat-name">{watchers}</span>
           <span className="seat-status">watching</span>
         </div>
       )}

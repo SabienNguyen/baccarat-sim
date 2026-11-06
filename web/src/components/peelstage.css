@@ -28,13 +28,6 @@
   pointer-events: auto;
   transition: opacity 200ms ease;
 }
-/* A cheap blur only when motion is welcome — backdrop-filter is not free on
-   every phone GPU, and reduced-motion already asks for calmer chrome. */
-@media (prefers-reduced-motion: no-preference) {
-  .peel-backdrop {
-    backdrop-filter: blur(2px);
-  }
-}
 .peel-stage--visible .peel-backdrop {
   opacity: 1;
 }
@@ -70,7 +63,7 @@
      ends up under the bar. Falls back to 0 where the bar isn't fixed (the
      var is only set inside theme.css's phone/landscape-phone blocks).
      +24px on top of that (not the usual +12px): the Banker total's
-     `.hand-total-num` (cards.css) carries a 6px drop text-shadow and its
+     `.hand-total-num` (cards.css) carries a 6px drop-offset and its
      `.hand-total-badge` plays a `total-slam` keyframe that overshoots to
      scale(1.5) at its 55% mark — both push painted pixels well past the
      badge's own layout box, past what a flat 12px reserve covers. */
@@ -210,7 +203,7 @@
    1.5x at its 55% mark. cards.css doesn't set a transform-origin, so it
    defaults to the box's own center — meaning the overshoot pushes the
    badge's PAINTED bottom edge (already extended past its layout box by the
-   38px number's 6px drop text-shadow) further down again, past the extra
+   38px number's 6px drop-offset) further down again, past the extra
    reserve above on a short phone (measured via phone-probe-p14b.mjs: at
    390x664 the resting badge bottom was already only 5px above `.controls`,
    and the slam peak pushed it another ~20px past that). Anchoring the scale

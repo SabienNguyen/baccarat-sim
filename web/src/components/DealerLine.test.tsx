@@ -69,7 +69,7 @@ test("a refused bet overrides the narration with the dealer's explanation", () =
     />,
   );
   expect(screen.getByLabelText("Dealer")).toHaveTextContent(
-    "Too rich for this table — the max is $5,000.00.",
+    "Too rich for this table. The max is $5,000.00.",
   );
 });
 
