@@ -177,7 +177,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
           // the app mid-game.
           console.warn(`server speaks protocol v${msg.proto}, this build expects v${CLIENT_PROTOCOL_VERSION}`);
           storeRef.current = null;
-          setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
+          setStage({ at: "dead", why: "This page is out of date. Refresh to get the latest table." });
           return;
         }
         if (msg.token) saveSeatToken(msg.room, msg.token);
@@ -201,7 +201,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
         if (msg.proto !== undefined && msg.proto !== CLIENT_PROTOCOL_VERSION) {
           console.warn(`server speaks protocol v${msg.proto}, this build expects v${CLIENT_PROTOCOL_VERSION}`);
           storeRef.current = null;
-          setStage({ at: "dead", why: "This page is out of date — refresh to get the latest table." });
+          setStage({ at: "dead", why: "This page is out of date. Refresh to get the latest table." });
           return;
         }
         saveWatchRoom(msg.room);
@@ -322,8 +322,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       <div className="mp-screen">
         <p className="mp-status">Multiplayer is offline.</p>
         <p className="mp-substatus">
-          The table service isn't running right now. Single player works exactly the same —
-          same engine, same shoe, same roads — so you can keep playing.
+          The table service isn't running right now. Single player uses the same engine, shoe, and roads, so you can keep playing.
         </p>
         <div className="mp-offline-actions">
           <button type="button" className="mp-cta" onClick={onExit}>
@@ -389,16 +388,16 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
             onClick={() => void copyLink("room")}
           >
             Table <strong>{stage.room}</strong>
-            <span className="mp-copyhint">{copied === "room" ? "✓ copied" : "copy"}</span>
+            <span className="mp-copyhint">{copied === "room" ? "COPIED" : "copy"}</span>
           </button>
           <button
             type="button"
             className="mp-roomtag mp-roomtag--watch"
-            title="Copy a watch-only link — no seat, no chips"
+            title="Copy a watch-only link: no seat, no chips"
             onClick={() => void copyLink("watch")}
           >
             Watch link
-            <span className="mp-copyhint">{copied === "watch" ? "✓ copied" : "copy"}</span>
+            <span className="mp-copyhint">{copied === "watch" ? "COPIED" : "copy"}</span>
           </button>
         </div>
         <GameTable
@@ -442,7 +441,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
 
         <section className="mp-panel mp-panel--join">
           <h3>Join with a code</h3>
-          <p className="mp-help">Got a code from a friend? Punch it in — sit down, or just watch.</p>
+          <p className="mp-help">Got a code from a friend? Punch it in. Sit down, or just watch.</p>
           <div className="mp-joinrow">
             <input
               className="mp-input mp-code"
@@ -513,7 +512,7 @@ export function Multiplayer({ onExit, connect }: MultiplayerProps) {
       <section className="mp-panel mp-panel--rooms">
         <h3>Public tables{rooms.length > 0 ? ` (${rooms.length})` : ""}</h3>
         {rooms.length === 0 ? (
-          <p className="mp-empty">No tables open — start one.</p>
+          <p className="mp-empty">No tables open. Start one.</p>
         ) : (
           <ul className="mp-rooms">
             {rooms.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((r) => (

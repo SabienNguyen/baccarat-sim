@@ -36,7 +36,7 @@ const SLIVER_COUNT = 104;
 
 const REASON_COPY: Record<ShoeCutReason, string> = {
   NewTable: "A fresh shoe on the table.",
-  CutCardOut: "The cut card came out — that shoe is done.",
+  CutCardOut: "The cut card came out. That shoe is done.",
   Vote: "The table voted for a new shoe.",
   Requested: "You asked for a new shoe.",
 };

@@ -229,8 +229,8 @@ export function createGameStore(
         if (!result.ok) return;
         const line =
           count === "Both"
-            ? "As you like — the dealer turns both of the house's cards."
-            : "As you like — the dealer turns one of the house's cards.";
+            ? "As you like. The dealer turns both of the house's cards."
+            : "As you like. The dealer turns one of the house's cards.";
         set({ announcement: line });
         setTimeout(() => {
           if (get().announcement === line) set({ announcement: null });

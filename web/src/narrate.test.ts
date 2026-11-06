@@ -36,7 +36,7 @@ test("betting phase invites bets", () => {
 test("shoe cut prompts the cut", () => {
   const fresh = snap("ShoeCut");
   fresh.shoe = { ...fresh.shoe, cut_reason: "NewTable" };
-  expect(text(narrate(fresh))).toBe("Fresh shoe — cut it wherever you like.");
+  expect(text(narrate(fresh))).toBe("Fresh shoe. Cut it wherever you like.");
 
   const doneShoe = snap("ShoeCut");
   doneShoe.shoe = { ...doneShoe.shoe, cut_reason: "CutCardOut" };
@@ -59,30 +59,30 @@ test("after a cut it narrates the burn and the shoe number", () => {
 test("cut card out warns of the last hand", () => {
   const s = snap("Betting");
   s.shoe = { ...s.shoe, cut_card_out: true };
-  expect(text(narrate(s))).toBe("Cut card's out — one more hand, then a fresh shoe.");
+  expect(text(narrate(s))).toBe("Cut card's out. One more hand, then a fresh shoe.");
 });
 
 test("betting with chips down announces what's riding", () => {
   const s = { ...snap("Betting"), bets: [{ kind: { Main: "Player" } as const, amount: 12500 }] };
   expect(text(narrate(s))).toBe(
-    "Bets down — $125.00 riding. Call the deal when you're ready.",
+    "Bets down: $125.00 riding. Call the deal when you're ready.",
   );
 });
 
 test("a felted player is sent to the cage", () => {
   const s = { ...snap("Betting"), bankroll: 100, table_min: 500 };
-  expect(text(narrate(s))).toContain("reset the bank");
+  expect(text(narrate(s))).toContain("Reset the bank");
 });
 
 test("dealing with nothing showing calls no more bets", () => {
-  expect(text(narrate(snap("Dealing")))).toBe("No more bets. Cards are out — squeeze 'em.");
+  expect(text(narrate(snap("Dealing")))).toBe("No more bets. Cards are out, squeeze 'em.");
 });
 
 test("dealing mid-squeeze encourages the bend", () => {
   const s = snap("Dealing");
   s.player.cards = [{ FaceUp: { rank: "Nine", suit: "Hearts" } }, "FaceDown"];
   s.banker.cards = ["FaceDown", "FaceDown"];
-  expect(text(narrate(s))).toBe("Take your time — bend that corner.");
+  expect(text(narrate(s))).toBe("Take your time. Bend that corner.");
 });
 
 test("a monkey is called out with a glossary term", () => {
@@ -94,7 +94,7 @@ test("a monkey is called out with a glossary term", () => {
 test("a natural is announced with its total", () => {
   const segs = narrate(snap("Dealing", [{ Natural: { side: "Banker", total: 9 } }]));
   expect(segs[0]).toEqual({ text: "Natural", term: "natural" });
-  expect(text(segs)).toBe("Natural 9 — Banker! Both hands stand.");
+  expect(text(segs)).toBe("Natural 9, Banker! Both hands stand.");
 });
 
 test("a pair teaches its payout", () => {
@@ -114,7 +114,7 @@ test("a third card narrates the tableau reason", () => {
       },
     ]),
   );
-  expect(text(segs)).toBe("Card for the Player — drawing on 4, the tableau calls for it.");
+  expect(text(segs)).toBe("Card for the Player: drawing on 4, the tableau calls for it.");
 });
 
 test("an unparseable third-card reason still narrates", () => {
@@ -147,7 +147,7 @@ test("a natural win gets the natural call as a prefix", () => {
 
 test("a tie calls égalité", () => {
   const segs = narrate(snap("Dealing", [{ Win: { result: "Tie", player: 5, banker: 5 } }]));
-  expect(text(segs)).toBe("Égalité — tie at 5. Main bets push.");
+  expect(text(segs)).toBe("Égalité: tie at 5. Main bets push.");
 });
 
 test("a settled winning round pays the player", () => {
@@ -174,13 +174,13 @@ test("natural outranks a co-occurring monkey", () => {
 
 test("the dealer refuses oversized and undersized bets in plain speech", () => {
   expect(text(narrateError({ BetAboveMaximum: { max: 500_000, got: 600_000 } }))).toBe(
-    "Too rich for this table — the max is $5,000.00.",
+    "Too rich for this table. The max is $5,000.00.",
   );
   expect(text(narrateError({ BetBelowMinimum: { min: 2500, got: 500 } }))).toBe(
-    "That's shy of the minimum — $25.00 to play.",
+    "That's shy of the minimum: $25.00 to play.",
   );
   expect(text(narrateError("NoBetsPlaced"))).toBe(
-    "Chips down first — then we deal.",
+    "Chips down first, then we deal.",
   );
 });
 
@@ -192,14 +192,14 @@ test("the dealer calls each card as it turns", () => {
 test("a monkey gets named in the call", () => {
   const flip = { side: "Banker" as const, card: { rank: "King" as const, suit: "Spades" as const } };
   const segs = narrate(snap("Dealing"), flip);
-  expect(text(segs)).toBe("King of Spades to the Banker — monkey!");
+  expect(text(segs)).toBe("King of Spades to the Banker: monkey!");
   expect(segs[1]).toEqual({ text: "monkey", term: "monkey" });
 });
 
 test("a natural outranks the card call", () => {
   const flip = { side: "Player" as const, card: { rank: "Nine" as const, suit: "Hearts" as const } };
   const segs = narrate(snap("Dealing", [{ Natural: { side: "Player", total: 9 } }]), flip);
-  expect(text(segs)).toBe("Natural 9 — Player! Both hands stand.");
+  expect(text(segs)).toBe("Natural 9, Player! Both hands stand.");
 });
 
 test("the win line outranks the card call", () => {
@@ -214,7 +214,7 @@ test("the win line outranks the card call", () => {
 test("a settled table with no events talks about the next hand, not the squeeze", () => {
   // the multiplayer settled view: empty hands, no events, payouts retained
   const s = { ...snap("Settled"), payouts: [] };
-  expect(text(narrate(s))).toBe("Hand's settled — chips down for the next one.");
+  expect(text(narrate(s))).toBe("Hand's settled. Chips down for the next one.");
 });
 
 // --- the little moments: snowmen, frozen bankers, dragons, pandas, tigers ---
@@ -242,7 +242,7 @@ test("a third-card eight is a snowman", () => {
 
 test("the squeeze call links the glossary term", () => {
   const segs = narrate(snap("Dealing"));
-  expect(text(segs)).toBe("No more bets. Cards are out — squeeze 'em.");
+  expect(text(segs)).toBe("No more bets. Cards are out, squeeze 'em.");
   expect(segs).toContainEqual({ text: "squeeze", term: "squeeze" });
 });
 

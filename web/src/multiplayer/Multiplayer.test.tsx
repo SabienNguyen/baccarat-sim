@@ -259,7 +259,7 @@ test("the room code copies to the clipboard", async () => {
   await userEvent.click(screen.getByRole("button", { name: /COPYME/ }));
   // the invite is now a full deep link (?room=CODE), not the bare code
   expect(writeText).toHaveBeenCalledWith(expect.stringContaining("?room=COPYME"));
-  expect(await screen.findByText("✓ copied")).toBeInTheDocument();
+  expect(await screen.findByText("COPIED")).toBeInTheDocument();
 });
 
 test("the public list paginates past eight tables", async () => {
@@ -320,7 +320,7 @@ test("a server that never answers reads as offline once retries are spent", asyn
   exhaustRetries(sockets);
 
   expect(screen.getByText(/Multiplayer is offline/)).toBeInTheDocument();
-  expect(screen.getByText(/Single player works/)).toBeInTheDocument();
+  expect(screen.getByText(/Single player uses the same engine/)).toBeInTheDocument();
   // "dropped" would claim a session that never existed
   expect(screen.queryByText(/dropped/i)).toBeNull();
   vi.useRealTimers();
@@ -676,6 +676,6 @@ describe("the rail (spectator mode)", () => {
     socket.push(watching({ room: "COPYME" }));
     await userEvent.click(screen.getByRole("button", { name: /Watch link/ }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("?watch=COPYME"));
-    expect(await screen.findByText("✓ copied")).toBeInTheDocument();
+    expect(await screen.findByText("COPIED")).toBeInTheDocument();
   });
 });

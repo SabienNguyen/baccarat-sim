@@ -32,7 +32,7 @@ import("./App")
         <h1>The casino didn&apos;t open</h1>
         <p>
           The game engine failed to load. Your browser may not support
-          WebAssembly, or the download was interrupted — a refresh usually
+          WebAssembly, or the download was interrupted. A refresh usually
           fixes it.
         </p>
       </div>,

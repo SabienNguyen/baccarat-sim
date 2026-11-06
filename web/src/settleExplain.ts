@@ -21,18 +21,18 @@ export function pushNote(payouts: BetPayout[] | null): string | null {
     );
   });
   if (!pushed) return null;
-  return "Tie — the hands finished level, so Player and Banker bets push: your stake comes back, nothing won or lost. (Tie and pair bets settle on their own.)";
+  return "Tie: the hands finished level, so Player and Banker bets push. Your stake comes back, nothing won or lost. (Tie and pair bets settle on their own.)";
 }
 
 /** What each currently-offered side bet means when it hits, `m` = the multiplier. */
 const SIDE_DESC: Record<string, (m: number) => string> = {
-  PlayerPair: (m) => `Player Pair — the Player's first two cards matched, paid ${m}:1.`,
-  BankerPair: (m) => `Banker Pair — the Banker's first two cards matched, paid ${m}:1.`,
-  Dragon7: (m) => `Dragon 7 — the Banker won with a three-card 7, paid ${m}:1.`,
-  Panda8: (m) => `Panda 8 — the Player won with a three-card 8, paid ${m}:1.`,
-  DragonBonusPlayer: (m) => `Player Dragon Bonus — paid ${m}:1 on the Player's winning margin.`,
-  DragonBonusBanker: (m) => `Banker Dragon Bonus — paid ${m}:1 on the Banker's winning margin.`,
-  Tiger: (m) => `Tiger — the Banker won on a 6, paid ${m}:1.`,
+  PlayerPair: (m) => `Player Pair: the Player's first two cards matched, paid ${m}:1.`,
+  BankerPair: (m) => `Banker Pair: the Banker's first two cards matched, paid ${m}:1.`,
+  Dragon7: (m) => `Dragon 7: the Banker won with a three-card 7, paid ${m}:1.`,
+  Panda8: (m) => `Panda 8: the Player won with a three-card 8, paid ${m}:1.`,
+  DragonBonusPlayer: (m) => `Player Dragon Bonus: paid ${m}:1 on the Player's winning margin.`,
+  DragonBonusBanker: (m) => `Banker Dragon Bonus: paid ${m}:1 on the Banker's winning margin.`,
+  Tiger: (m) => `Tiger: the Banker won on a 6, paid ${m}:1.`,
 };
 
 /**
@@ -49,7 +49,7 @@ export function sideBetNotes(payouts: BetPayout[] | null): string[] {
     if (key === null) continue;
     const mult = Math.round(p.net / p.bet.amount);
     const desc = SIDE_DESC[key];
-    notes.push(desc ? desc(mult) : `${key} — paid ${mult}:1.`);
+    notes.push(desc ? desc(mult) : `${key}: paid ${mult}:1.`);
   }
   return notes;
 }
@@ -74,7 +74,7 @@ export function commissionNote(payouts: BetPayout[] | null): string | null {
   if (stake === 0) return null;
   const commission = stake - paid;
   if (commission <= 0) return null;
-  return `Banker pays 0.95:1 — your ${formatCents(stake)} wins ${formatCents(
+  return `Banker pays 0.95:1. Your ${formatCents(stake)} wins ${formatCents(
     paid,
-  )}, not ${formatCents(stake)}: the house keeps a 5% commission (${formatCents(commission)}).`;
+  )}, not ${formatCents(stake)}; the house keeps a 5% commission (${formatCents(commission)}).`;
 }

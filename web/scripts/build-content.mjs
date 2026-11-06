@@ -22,30 +22,36 @@ const esc = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const CSS = `
+  @font-face { font-family: "Silkscreen"; font-style: normal; font-weight: 700; font-display: swap;
+    src: url("../fonts/silkscreen-700.woff2") format("woff2"); }
+  @font-face { font-family: "VT323"; font-style: normal; font-weight: 400; font-display: swap;
+    src: url("../fonts/vt323.woff2") format("woff2"); }
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: #0b3d2e; color: #eae3d2;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    line-height: 1.65; font-size: 17px;
+    font-family: "VT323", ui-monospace, monospace;
+    line-height: 1.5; font-size: 21px;
   }
   .wrap { max-width: 820px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
   header { border-bottom: 1px solid rgba(240,213,138,0.3); padding-bottom: 1rem; margin-bottom: 2rem; }
-  header a.brand { color: #f0d58a; text-decoration: none; font-weight: 700; font-size: 1.15rem; letter-spacing: 0.04em; }
+  header a.brand { color: #f0d58a; text-decoration: none; font-family: "Silkscreen", ui-monospace, monospace; font-weight: 700; font-size: 1rem; letter-spacing: 0.04em; }
   nav { margin-top: 0.6rem; display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.95rem; }
   nav a { color: #d8c39a; text-decoration: none; }
   nav a:hover { color: #fff; text-decoration: underline; }
-  h1 { color: #f0d58a; font-size: 1.9rem; line-height: 1.25; margin: 0 0 0.6rem; }
-  h2 { color: #f0d58a; font-size: 1.3rem; margin: 2.2rem 0 0.6rem; }
-  h3 { color: #f4c430; font-size: 1.05rem; margin: 1.6rem 0 0.4rem; }
-  a { color: #9ad; }
-  code { background: rgba(0,0,0,0.3); padding: 0.05em 0.35em; border-radius: 3px; }
+  h1, h2, h3 { font-family: "Silkscreen", ui-monospace, monospace; font-weight: 700; }
+  h1 { color: #f0d58a; font-size: 1.4rem; line-height: 1.35; margin: 0 0 0.6rem; }
+  h2 { color: #f0d58a; font-size: 1.05rem; line-height: 1.4; margin: 2.2rem 0 0.6rem; }
+  h3 { color: #f4c430; font-size: 0.9rem; line-height: 1.4; margin: 1.6rem 0 0.4rem; }
+  a { color: #f0d58a; }
+  code { background: rgba(0,0,0,0.3); padding: 0.05em 0.35em; border-radius: 0; }
   table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9rem; overflow-x: auto; display: block; }
   th, td { border: 1px solid rgba(240,213,138,0.25); padding: 0.4rem 0.55rem; text-align: center; }
   th { background: rgba(240,213,138,0.1); color: #f0d58a; }
   td.draw { color: #7fd6a3; } td.stand { color: #e0a0a0; }
   .cta { display: inline-block; margin: 1.5rem 0; background: #f0d58a; color: #15110f;
-    padding: 0.7rem 1.4rem; border-radius: 6px; text-decoration: none; font-weight: 700; }
+    padding: 0.7rem 1.4rem; border: 3px solid #180a0d; border-radius: 0;
+    font-family: "Silkscreen", ui-monospace, monospace; font-size: 0.85rem; text-decoration: none; font-weight: 700; }
   .cta:hover { background: #f4c430; }
   dl dt { color: #f4c430; font-weight: 700; margin-top: 1rem; }
   dl dd { margin: 0.2rem 0 0; }
@@ -91,21 +97,21 @@ ${ld}
 <body>
 <div class="wrap">
 <header>
-<a class="brand" href="../">♠ Baccarat Simulator</a>
+<a class="brand" href="../">Baccarat Simulator</a>
 <nav>
   <a href="../how-to-play/">How to play</a>
   <a href="../glossary/">Glossary</a>
   <a href="../baccarat-odds/">Odds &amp; house edge</a>
   <a href="../baccarat-roads/">Scoreboard roads</a>
   <a href="../license/">License the engine</a>
-  <a href="../">Play free ↗</a>
+  <a href="../">Play free</a>
 </nav>
 </header>
 <main>
 ${bodyHtml}
 </main>
 <footer>
-A free, browser-based baccarat (punto banco) simulator — learn the game by
+A free, browser-based baccarat (punto banco) simulator. Learn the game by
 playing it, then <a href="../">try a hand free</a>. No sign-up, no real money.
 </footer>
 </div>
@@ -151,14 +157,14 @@ function bankerTableau() {
 const howToPlay = `
 <h1>How to Play Baccarat (Punto Banco)</h1>
 <p class="lede">Baccarat is the simplest card game in the casino: you bet on which
-of two hands — <strong>Player</strong> or <strong>Banker</strong> — will land
+of two hands, <strong>Player</strong> or <strong>Banker</strong>, will land
 closest to a total of 9. You don't play a hand yourself; you bet on one. Here are
 the full rules, including the one part everyone finds confusing: when a third
 card is drawn.</p>
 <a class="cta" href="../">▶ Play free in your browser</a>
 
 <h2>The goal</h2>
-<p>Two hands are dealt — the Player hand and the Banker hand. Each gets two cards
+<p>Two hands are dealt: the Player hand and the Banker hand. Each gets two cards
 to start. Whichever hand totals closest to <strong>9</strong> wins. You bet,
 before the deal, on <strong>Player</strong>, <strong>Banker</strong>, or a
 <strong>Tie</strong>.</p>
@@ -172,7 +178,7 @@ before the deal, on <strong>Player</strong>, <strong>Banker</strong>, or a
   <li>10, Jack, Queen, King = <strong>0</strong> (a "monkey")</li>
 </ul>
 <p>So a 7 and an 8 total 15, which counts as <strong>5</strong>. A King and a 9
-total <strong>9</strong> — the best possible two-card hand.</p>
+total <strong>9</strong>. That's the best possible two-card hand.</p>
 
 <h2>Naturals</h2>
 <p>If either hand totals <strong>8 or 9</strong> on its first two cards, that's a
@@ -190,7 +196,7 @@ choice involved):</p>
 <h2>The Banker third-card rule (the tableau)</h2>
 <p>The Banker's decision is the famously fiddly part. It depends on the Banker's
 two-card total <em>and</em> the value of the card the Player drew (or whether the
-Player stood). This is the complete tableau — the exact rule this simulator's
+Player stood). This is the complete tableau: the exact rule this simulator's
 engine uses:</p>
 ${bankerTableau()}
 <p>Read a row by the Banker's two-card total, then the column for the Player's
@@ -202,7 +208,7 @@ when the Player's third card is a 6 or 7).</p>
 <ul>
   <li><strong>Player</strong> win pays <strong>1 : 1</strong> (even money).</li>
   <li><strong>Banker</strong> win pays <strong>1 : 1</strong> minus a
-  <strong>5% commission</strong> — because the Banker hand wins slightly more
+  <strong>5% commission</strong>, because the Banker hand wins slightly more
   often, the house takes a cut to balance it.</li>
   <li><strong>Tie</strong> pays <strong>8 : 1</strong>; Player and Banker bets
   push (are returned) on a tie.</li>
@@ -211,7 +217,7 @@ when the Player's third card is a 6 or 7).</p>
 (~1.24%), and the Tie is a sucker bet (~14%). "Bet Banker, avoid the Tie" is the
 whole of basic baccarat strategy.</p>
 
-<a class="cta" href="../">▶ Try a hand — squeeze the cards yourself</a>
+<a class="cta" href="../">Try a hand</a>
 
 <h2>Next</h2>
 <p>Learn the table talk in the <a href="../glossary/">baccarat glossary</a>, or
@@ -221,24 +227,24 @@ baccarat roads</a>.</p>
 
 // ---------- 2. Glossary ----------
 const terms = [
-  ["natural", "A two-card total of 8 or 9. It wins immediately — no third card is drawn by either hand."],
+  ["natural", "A two-card total of 8 or 9. It wins immediately. No third card is drawn by either hand."],
   ["punto-banco", "The most common form of baccarat, where the drawing rules are fixed and no one makes playing decisions. \"Punto\" is the Player, \"Banco\" the Banker."],
-  ["monkey", "A card worth zero — any 10, Jack, Queen, or King. \"Monkey for the Player, counts for nothing.\""],
+  ["monkey", "A card worth zero: any 10, Jack, Queen, or King. \"Monkey for the Player, counts for nothing.\""],
   ["snowman", "Table slang for an 8, from its shape."],
-  ["le-grand", "\"The big one\" — a natural 9, the best hand in baccarat. A natural 8 is \"le petit.\""],
+  ["le-grand", "\"The big one\": a natural 9, the best hand in baccarat. A natural 8 is \"le petit.\""],
   ["squeeze", "The ritual of slowly bending up the corner of a face-down card to reveal it a sliver at a time, drawing out the suspense before the value is known. This simulator lets you do it with your mouse or finger."],
   ["commission", "The 5% the house takes from a winning Banker bet. The Banker wins slightly more often than the Player, and the commission is what makes the bet fair for the casino."],
-  ["tie", "A bet that the Player and Banker hands finish on the same total. It pays 8:1 but carries a ~14% house edge — the worst bet on the table."],
+  ["tie", "A bet that the Player and Banker hands finish on the same total. It pays 8:1 but carries a ~14% house edge, the worst bet on the table."],
   ["player-pair", "A side bet that the Player's first two cards are the same rank. Pays 11:1."],
   ["banker-pair", "A side bet that the Banker's first two cards are the same rank. Pays 11:1."],
   ["dragon-7", "In EZ Baccarat, a Banker win with a three-card total of 7. The Banker main bet pushes, and the Dragon 7 side bet pays 40:1."],
   ["panda-8", "In EZ Baccarat, a Player win with a three-card total of 8. The Panda 8 side bet pays 25:1."],
-  ["dragon-bonus", "A side bet that your hand wins by a large margin, or with a natural. The bigger the winning margin, the bigger the payout — up to 30:1 for a non-natural win by 9."],
+  ["dragon-bonus", "A side bet that your hand wins by a large margin, or with a natural. The bigger the winning margin, the bigger the payout, up to 30:1 for a non-natural win by 9."],
   ["shoe", "The box that holds and dispenses the cards. Baccarat is dealt from an 8-deck shoe (416 cards), reshuffled when a cut card near the back is reached."],
   ["cut-card", "A colored card placed near the back of the shoe. When it appears in play, the current shoe is finishing and a shuffle is coming."],
 ];
 const glossaryBody = `
-<h1>Baccarat Glossary — Terms, Slang &amp; Side Bets</h1>
+<h1>Baccarat Glossary: Terms, Slang &amp; Side Bets</h1>
 <p class="lede">The dealer's patter and the bet menu are full of jargon. Here's
 what the words mean, from "monkey" to "Dragon 7."</p>
 <a class="cta" href="../">▶ Play free and hear the dealer call them</a>
@@ -268,7 +274,7 @@ const glossaryLd = {
 const roadsBody = `
 <h1>Baccarat Scoreboard Roads Explained</h1>
 <p class="lede">The grids of red and blue dots beside a baccarat table are the
-"roads" — a running record of results that players use to spot streaks and
+"roads": a running record of results that players use to spot streaks and
 patterns. There are five of them. Here's what each one tracks.</p>
 <a class="cta" href="../">▶ Watch the roads fill in as you play</a>
 
@@ -287,12 +293,12 @@ small slash on the current cell rather than taking a space of their own.</p>
 <h2>The derived roads</h2>
 <p>Three smaller roads are <em>derived</em> from the Big Road. Instead of
 tracking who won, they track whether the Big Road is <strong>repetitive</strong>
-(patterns holding) or <strong>choppy</strong> (patterns breaking) — each looking
+(patterns holding) or <strong>choppy</strong> (patterns breaking), each looking
 a different distance back. A red mark means "the pattern is regular," a blue mark
 means "the pattern just broke."</p>
 <h3>Big Eye Boy</h3>
 <p>Starts from the second column of the Big Road and compares the two most recent
-columns. It's the most sensitive of the three — it reacts to the shortest
+columns. It's the most sensitive of the three. It reacts to the shortest
 patterns.</p>
 <h3>Small Road</h3>
 <p>Looks one column further back than the Big Eye Boy, skipping the column
@@ -300,7 +306,7 @@ immediately to the left. It smooths out some of the noise.</p>
 <h3>Cockroach Pig</h3>
 <p>Looks back further still. The three derived roads together let pattern
 players see, at a glance, how "stable" the current shoe's trend is.</p>
-<p>Note that the roads are a <em>record</em>, not a predictor — each coup is
+<p>Note that the roads are a <em>record</em>, not a predictor. Each coup is
 independent, and no pattern changes the odds. They're part of the ritual and the
 fun, and reading them is a genuine baccarat skill.</p>
 
@@ -329,18 +335,18 @@ const licenseBody = `
   and you can re-run it yourself in about three seconds.</p>
   <ul>
     <li><strong>Every reachable coup, enumerated.</strong> All <strong>1,659,001</strong>
-      of them, from a fresh 8-deck shoe, each with its exact hypergeometric weight — no
+      of them, from a fresh 8-deck shoe, each with its exact hypergeometric weight. No
       Monte Carlo, no error bars.</li>
     <li><strong>Self-checking.</strong> Leaf probabilities sum to 0.999999999978, and the
       outcome frequencies reproduce the canonical 8-deck figures to six decimals:
       Player 44.624661%, Banker 45.859742%, Tie 9.515597%.</li>
-    <li><strong>Eleven side bets, all within 0.0033pp of published analysis</strong> —
+    <li><strong>Eleven side bets, all within 0.0033pp of published analysis</strong>:
       pairs, Dragon 7, Panda 8, both Dragon Bonus sides, and the full Tiger family.</li>
     <li><strong>Cross-checked against regulator sources</strong> (Nevada GCB Rules of
       Play, NJAC 13:69F). That check is what caught a retired 35:1 Tiger Tie paytable and
       corrected it to 45:1.</li>
     <li><strong>Reproducible hands.</strong> The shoe RNG is pinned by name, so a seeded
-      shoe is bit-identical across dependency updates — an auditor can replay any hand.</li>
+      shoe is bit-identical across dependency updates. An auditor can replay any hand.</li>
     <li><strong>149 engine tests</strong> plus a seeded statistical suite.</li>
   </ul>
 
@@ -348,7 +354,7 @@ const licenseBody = `
   <ul>
     <li>The rules engine: full third-card tableau, naturals, commission and
       commission-free (EZ) settlement, and eleven side bets.</li>
-    <li>All five pit scoreboards — Bead Plate, Big Road, Big Eye Boy, Small Road,
+    <li>All five pit scoreboards: Bead Plate, Big Road, Big Eye Boy, Small Road,
       Cockroach Pig.</li>
     <li>Optional presentation layer: the card squeeze, and a teaching dealer that explains
       each drawing decision by rule.</li>
@@ -356,9 +362,9 @@ const licenseBody = `
       module.</li>
   </ul>
 
-  <h2>The code is MIT — here's what you'd actually be paying for</h2>
-  <p>The engine is MIT licensed, so you can ship it commercially today, for free, with no
-  permission needed. What teams pay for is the work around it:</p>
+  <h2>The code is MIT. Here's what teams pay for</h2>
+  <p>The engine is MIT licensed, so you can ship it commercially with no
+  permission needed. Paid work covers the rest:</p>
   <ul>
     <li><strong>Rule variants and integration.</strong> Super 6, no-commission toggles,
       alternate paytables, a different settlement model, or wiring the engine into your
@@ -372,14 +378,12 @@ const licenseBody = `
     <li><strong>Custom builds.</strong> Additional side bets, other games built to the
       same standard of proof, or a branded reskin of the whole table.</li>
   </ul>
-  <p>MIT means you never have to ask. It also means nobody else is going to answer your
-  auditor's questions.</p>
 
   <h2>Get in touch</h2>
   <p>Open an issue or start a discussion on
   <a href="https://github.com/SabienNguyen/baccarat-sim">the GitHub repository</a> with
-  what you're building and which tier fits, and you'll get a reply.</p>
-  <p><a href="../">Play the live demo →</a></p>
+  what you're building and which tier fits.</p>
+  <p><a href="../">Play the demo</a></p>
 `;
 
 // The one page here that carries data nobody else has: house edges derived from
@@ -390,7 +394,7 @@ const oddsBody = `
   <h1>Baccarat Odds &amp; House Edge</h1>
   <p class="lede">Every figure below was computed by enumerating <strong>all 1,659,001
   reachable coups</strong> of a fresh 8-deck shoe, each weighted by its exact probability.
-  No simulation, no rounding up from someone else's table — and you can re-run it
+  No simulation, no rounding up from someone else's table. You can re-run it
   yourself.</p>
 
   <h2>How often each side wins</h2>
@@ -439,11 +443,11 @@ const oddsBody = `
     </tbody>
   </table>
   <p>Two things worth noticing. The <strong>Player Dragon Bonus at 2.65% is the only side
-  bet that is anywhere near the main bets</strong> — everything else is several times
+  bet that is anywhere near the main bets</strong>. Everything else is several times
   worse than simply betting Banker. And the Banker side of the same bet costs 9.37%,
   because the Banker hand reaches big winning margins far less often.</p>
 
-  <h2>Paytables vary — check the felt</h2>
+  <h2>Paytables vary: check the felt</h2>
   <p>The same bet name can carry different odds from one casino to the next, and the
   difference is not small:</p>
   <table>
@@ -519,7 +523,7 @@ const oddsFaq = {
 const written = [
   page({
     slug: "how-to-play",
-    title: "How to Play Baccarat — Rules, Third-Card Tableau & Payouts",
+    title: "How to Play Baccarat: Rules, Third-Card Tableau & Payouts",
     description:
       "Learn baccarat (punto banco): the objective, card values, naturals, the full Player and Banker third-card drawing rules, and how payouts and the 5% commission work.",
     bodyHtml: howToPlay,
@@ -535,7 +539,7 @@ const written = [
   }),
   page({
     slug: "glossary",
-    title: "Baccarat Glossary — Terms, Slang & Side Bets Explained",
+    title: "Baccarat Glossary: Terms, Slang & Side Bets Explained",
     description:
       "A plain-English baccarat glossary: monkey, natural, squeeze, commission, Dragon 7, Panda 8, Dragon Bonus, pairs, the shoe, and more.",
     bodyHtml: glossaryBody,
@@ -543,7 +547,7 @@ const written = [
   }),
   page({
     slug: "baccarat-roads",
-    title: "Baccarat Roads Explained — Big Road, Big Eye Boy, Small Road, Cockroach Pig",
+    title: "Baccarat Roads Explained: Big Road, Big Eye Boy, Small Road, Cockroach Pig",
     description:
       "How to read the baccarat scoreboard: the Bead Plate, Big Road, and the three derived roads (Big Eye Boy, Small Road, Cockroach Pig) that track whether the shoe is choppy or streaky.",
     bodyHtml: roadsBody,
@@ -551,7 +555,7 @@ const written = [
   }),
   page({
     slug: "license",
-    title: "License the Baccarat Engine — Proven-Correct Rust/WASM Punto Banco",
+    title: "License the Baccarat Engine: Proven-Correct Rust/WASM Punto Banco",
     description:
       "A punto banco engine with correctness proven by exhaustive enumeration of all 1,659,001 reachable coups: every paytable within 0.0033pp of published analysis, cross-checked against Nevada GCB and New Jersey regulator sources. Commercial, single-title and white-label licensing.",
     bodyHtml: licenseBody,
@@ -568,7 +572,7 @@ const written = [
   }),
   page({
     slug: "baccarat-odds",
-    title: "Baccarat Odds & House Edge — Exact Figures for Every Bet",
+    title: "Baccarat Odds & House Edge: Exact Figures for Every Bet",
     description:
       "Exact baccarat house edges computed by enumerating all 1,659,001 reachable coups of an 8-deck shoe: Banker 1.06%, Player 1.24%, Tie 14.36%, plus every side bet from Dragon Bonus to the Tiger family.",
     bodyHtml: oddsBody,

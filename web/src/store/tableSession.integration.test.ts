@@ -52,7 +52,7 @@ test("bet Banker only: the dealer announces and turns the Player hand one card p
   // Stage order: my Banker cards stay down until the Player hand is exposed.
   store.getState().reveal("Banker", 0);
   expect(store.getState().lastError).toEqual({
-    Message: "Order, order — Player hand first, then Banker.",
+    Message: "Order, order. Player hand first, then Banker.",
   });
 
   // One card per 1100ms beat, announcement clearing as each card turns.

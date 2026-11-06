@@ -23,17 +23,14 @@
   font-family: var(--font-display);
   font-size: 28px;
   color: var(--gold);
-  text-shadow:
-    3px 3px 0 var(--ink),
-    6px 6px 0 rgba(0, 0, 0, 0.4);
-  animation: victory-glow 900ms ease-in-out infinite alternate;
+
 }
 .victory-amount {
   margin: 0;
   font-family: var(--font-display);
   font-size: 22px;
   color: #fff;
-  text-shadow: 2px 2px 0 var(--ink);
+
 }
 .victory-sub {
   margin: 0;
@@ -53,7 +50,7 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 12px 16px;
   cursor: pointer;
 }
@@ -75,17 +72,8 @@
     transform: scale(1);
   }
 }
-@keyframes victory-glow {
-  from {
-    transform: scale(1);
-  }
-  to {
-    transform: scale(1.06);
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .victory-modal,
-  .victory-title {
+  .victory-modal {
     animation: none;
   }
 }

@@ -34,7 +34,7 @@
   color: #fff;
   background: var(--chip-red);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px 10px;
   cursor: pointer;
 }
@@ -57,7 +57,7 @@
   gap: 10px;
   background: var(--panel-bevel-lo);
   border: 2px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 6px 10px;
 }
 .exchange-chip {

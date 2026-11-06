@@ -17,11 +17,6 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
 }
-@media (prefers-reduced-motion: no-preference) {
-  .shoe-backdrop {
-    backdrop-filter: blur(2px);
-  }
-}
 
 .shoe-stage-content {
   position: relative;
@@ -44,7 +39,7 @@
   font-size: 18px;
   text-align: center;
   color: var(--gold);
-  text-shadow: 2px 2px 0 var(--ink);
+
 }
 
 .shoe-subline {
@@ -73,9 +68,9 @@
 .shoe-body {
   position: relative;
   border: 3px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--ink);
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+
   /* the gold inner lip along the top edge */
   padding: 4px 0 0;
 }
@@ -96,7 +91,7 @@
   width: 10px;
   border: 2px solid var(--gold);
   border-left: none;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -156,25 +151,6 @@
   }
 }
 
-/* Non-cutters (and spectators): a slow shimmer says the shoe is alive
-   without implying anyone but the cutter can touch it. */
-@keyframes shoe-idle {
-  0%,
-  100% {
-    opacity: 0.85;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.shoe-stack--idle .sliver {
-  animation: shoe-idle 2.4s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .shoe-stack--idle .sliver {
-    animation: none;
-  }
-}
 
 /* --- the cut card: a pixel card standing edge-up in the well --- */
 .cut-card {
@@ -184,7 +160,7 @@
   width: 32px;
   margin-left: -16px;
   border: 3px solid var(--ink);
-  border-radius: 4px;
+  border-radius: 0;
   background: #f2c230;
   color: var(--ink);
   font-family: var(--font-display, inherit);
@@ -192,8 +168,8 @@
   font-size: 11px;
   letter-spacing: 0.08em;
   cursor: grab;
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
-  transition: transform 90ms ease, box-shadow 90ms ease;
+
+  transition: transform 90ms ease;
   /* a subtle lighter highlight strip down the left edge */
   background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.45) 0, rgba(255, 255, 255, 0.45) 3px, transparent 3px);
 }
@@ -206,7 +182,7 @@
 .cut-card.cut-card--dragging {
   cursor: grabbing;
   transform: translateY(-6px);
-  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.45);
+
 }
 
 .shoe-cut-confirm {
@@ -223,10 +199,10 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 18px;
   min-height: 44px;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.4);
+
   cursor: pointer;
 }
 .shoe-leave.btn:hover {
@@ -243,9 +219,9 @@
   color: var(--ink);
   background: var(--gold);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 12px 20px;
-  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.3), 4px 4px 0 rgba(0, 0, 0, 0.45);
+
   cursor: pointer;
   transition: transform 80ms ease;
 }
@@ -254,7 +230,7 @@
 }
 .shoe-cut-confirm.btn:active:not(:disabled) {
   transform: translateY(2px);
-  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.3);
+
 }
 .shoe-cut-confirm.btn:disabled {
   filter: grayscale(0.7) brightness(0.7);
@@ -311,7 +287,7 @@
   z-index: 2;
   perspective: 600px;
   animation: shoe-turn 600ms ease-out both;
-  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.45));
+
 }
 .turned-card .card {
   width: 96px;
@@ -363,9 +339,9 @@
   width: 96px;
   height: 64px;
   border: 3px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--ink);
-  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45), inset 0 3px 0 var(--gold);
+
   overflow: visible;
 }
 .discard .sliver--burned {
@@ -376,9 +352,9 @@
   height: 44px;
   margin-left: -16px;
   border: 2px solid var(--ink);
-  border-radius: 3px;
+  border-radius: 0;
   background: repeating-linear-gradient(45deg, #3a1622, #3a1622 4px, #52222f 4px, #52222f 8px);
-  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.4);
+
   animation: shoe-burn-slide 420ms ease-in both;
 }
 /* each landed card lands a couple of px offset from the last, like a real
@@ -433,12 +409,7 @@
   font-size: 40px;
   font-weight: 700;
   color: #fff;
-  text-shadow:
-    -3px -3px 0 var(--ink),
-    3px -3px 0 var(--ink),
-    -3px 3px 0 var(--ink),
-    3px 3px 0 var(--ink),
-    6px 6px 0 rgba(0, 0, 0, 0.45);
+
   animation: shoe-banner-slam 480ms cubic-bezier(0.2, 1.7, 0.4, 1);
 }
 @keyframes shoe-banner-slam {

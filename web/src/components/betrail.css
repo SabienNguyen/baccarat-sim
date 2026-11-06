@@ -5,13 +5,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: linear-gradient(180deg, #1f7c49, #115530 75%);
+  background: var(--felt-light);
   border: 5px solid #6b4423; /* wood rail */
-  border-radius: 18px;
-  box-shadow:
-    inset 0 0 0 3px rgba(240, 213, 138, 0.55),
-    inset 0 0 36px rgba(0, 0, 0, 0.4),
-    5px 5px 0 var(--shadow);
+  border-radius: 0;
+
   padding: 18px;
 }
 
@@ -34,15 +31,12 @@
   justify-content: center;
   color: #fff;
   border: 3px solid var(--ink);
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 255, 255, 0.35),
-    inset 0 0 0 5px rgba(0, 0, 0, 0.18),
-    2px 3px 0 var(--shadow);
+
   cursor: grab;
-  transition: transform 80ms ease;
+  transition: border-color 80ms ease;
 }
 .chip:hover:not(:disabled) {
-  transform: translateY(-3px);
+  border-color: var(--gold);
 }
 .chip:active:not(:disabled) {
   cursor: grabbing;
@@ -59,18 +53,18 @@
   font-family: var(--font-display);
   font-size: round(calc(10px * var(--ui-scale)), 1px);
   color: #fff;
-  text-shadow: 1px 1px 0 var(--ink);
+
 }
 
 /* Real casino colors: $1 white, $5 red, $25 green, $100 black, $500 purple, $1k gold. */
 .chip--white { background: #e9e4d6; }
-.chip--white .chip-face { color: #1a1208; text-shadow: none; }
+.chip--white .chip-face { color: #1a1208; }
 .chip--red { background: var(--chip-red); }
 .chip--green { background: #1d7a3a; }
 .chip--black { background: #26262e; }
 .chip--purple { background: #7a3b8f; }
 .chip--gold { background: var(--gold); }
-.chip--gold .chip-face { color: #1a1208; text-shadow: none; }
+.chip--gold .chip-face { color: #1a1208; }
 
 /* Tiny read-only chips for spot stacks and the hand tray. */
 /* A chip in a felt stack. Each one is a flattened disc rather than a circle —
@@ -86,10 +80,7 @@
   height: var(--chip-h);
   border-radius: 50%;
   border: 2px solid var(--ink);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.32),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
-    0 1px 0 rgba(0, 0, 0, 0.4);
+
 }
 .mini-chip.chip--white { background: #e9e4d6; }
 .mini-chip.chip--red { background: var(--chip-red); }
@@ -116,7 +107,7 @@
   margin: 0;
   font-size: round(calc(19px * var(--ui-scale)), 1px);
   color: #f0ead6;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+
 }
 .clear-bets {
   font-family: var(--font-display);
@@ -124,7 +115,7 @@
   color: #fff;
   background: var(--panel-bevel-hi);
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 10px 12px;
   cursor: pointer;
 }
@@ -137,7 +128,7 @@
 .felt {
   position: relative;
   border: 3px solid rgba(243, 238, 222, 0.7);
-  border-radius: 14px;
+  border-radius: 0;
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -170,7 +161,7 @@
      column past its 1fr share and run the felt off-screen. Nothing in a spot
      should ever do that again. */
   min-width: 0;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+
 }
 .spot:disabled {
   opacity: 0.55;
@@ -184,7 +175,7 @@
   font-size: round(calc(9px * var(--ui-scale)), 1px);
   color: #ffe9a8;
   background: rgba(0, 0, 0, 0.45);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 2px 6px;
 }
 /* The chip tower. Absolutely positioned on purpose: a spot is a grid item, and
@@ -214,7 +205,6 @@
   height: var(--chip-h);
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.4);
-  filter: blur(2px);
   z-index: 0;
 }
 /* A compact pill that hugs its number, but capped at the spot's width so a big
@@ -229,7 +219,7 @@
   font-size: round(calc(16px * var(--ui-scale)), 1px);
   color: var(--gold);
   background: rgba(0, 0, 0, 0.55);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 0 5px;
   white-space: nowrap;
   overflow: hidden;
@@ -244,28 +234,28 @@
 .spot--player,
 .spot--banker {
   min-height: 112px;
-  border-radius: 50% 50% 12px 12px / 70% 70% 12px 12px;
+  border-radius: 0;
 }
 .spot--player {
-  background: radial-gradient(circle at 50% 30%, rgba(31, 111, 235, 0.45), rgba(0, 0, 0, 0.15));
+  background: #1f4a8a;
   border-color: #bcd6ff;
 }
 .spot--banker {
-  background: radial-gradient(circle at 50% 30%, rgba(192, 32, 42, 0.45), rgba(0, 0, 0, 0.15));
+  background: #6e1c24;
   border-color: #ffc6ca;
 }
 .spot--tie {
   min-height: 112px;
-  border-radius: 12px;
-  background: radial-gradient(circle at 50% 30%, rgba(240, 213, 138, 0.4), rgba(0, 0, 0, 0.15));
+  border-radius: 0;
+  background: #4e4118;
   border-color: var(--gold);
 }
 /* Side bets: small circles. */
 .spot--side {
   aspect-ratio: 1 / 1;
-  border-radius: 50%;
+  border-radius: 0;
   padding: 4px;
-  background: radial-gradient(circle at 50% 35%, rgba(240, 213, 138, 0.3), rgba(0, 0, 0, 0.4));
+  background: #2e2a1c;
   border: 3px solid var(--gold);
 }
 .spot--side .spot-name {
@@ -374,7 +364,7 @@
 .mini-chip.chip--orange { background: #d2691e; }
 .mini-chip.chip--teal { background: #0f7c74; }
 .chip--platinum { background: #cfd2d6; }
-.chip--platinum .chip-face { color: #1a1208; text-shadow: none; }
+.chip--platinum .chip-face { color: #1a1208; }
 .mini-chip.chip--platinum { background: #cfd2d6; }
 
 /* --- phones --- */
@@ -470,9 +460,9 @@
 .seg {
   display: flex;
   border: 3px solid var(--ink);
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: 2px 2px 0 var(--shadow);
+
 }
 .seg-half {
   position: relative;
@@ -481,21 +471,21 @@
   letter-spacing: 1px;
   color: #cfc7b0;
   background: var(--panel-bevel-lo);
+  border: 2px solid transparent;
   padding: 11px 20px;
   cursor: pointer;
-  border: none;
 }
 .seg-half.seg-on {
   color: #fff7e6;
   background: #1f7c49;
-  box-shadow: inset 0 0 0 2px rgba(240, 213, 138, 0.5);
+  border-color: rgba(240, 213, 138, 0.5);
 }
 .seg-badge {
   display: inline-block;
   min-width: 16px;
   margin-left: 6px;
   padding: 0 4px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--gold);
   color: #1a1208;
   font-size: round(calc(9px * var(--ui-scale)), 1px);

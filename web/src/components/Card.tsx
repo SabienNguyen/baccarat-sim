@@ -99,7 +99,7 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
         <span
           className="card-peel-shade"
           style={{
-            background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(40, 30, 15, 0.5) 3%, transparent 45%, rgba(255, 252, 240, 0.3) 97%)`,
+            background: `linear-gradient(${fold.angle.toFixed(1)}deg, rgba(40, 30, 15, 0.35) 50%, transparent 50%)`,
           }}
         />
         {/* the squeezer's thumb pressing where the rank index would read —
@@ -125,7 +125,7 @@ function Peel({ fold, children }: { fold: Fold; children?: ReactNode }) {
 export function Card({ card, fold = null, restFlat = false }: CardProps) {
   // While squeezed, the card comes off the table: it tips up around the
   // edge opposite the pull (which stays resting on the felt), grows
-  // slightly toward the camera, and its shadow separates beneath it.
+  // slightly toward the camera.
   let squeeze;
   if (fold) {
     const phi = (fold.angle * Math.PI) / 180;
@@ -136,7 +136,6 @@ export function Card({ card, fold = null, restFlat = false }: CardProps) {
     squeeze = {
       transform: `perspective(640px) rotate3d(${ax}, ${ay}, 0, ${(16 * p).toFixed(1)}deg) scale(${(1 + 0.02 * p).toFixed(3)})`,
       transformOrigin: `${(50 + 50 * Math.sin(phi)).toFixed(1)}% ${(50 - 50 * Math.cos(phi)).toFixed(1)}%`,
-      filter: `drop-shadow(0 ${(3 + 9 * p).toFixed(1)}px ${(2 + 6 * p).toFixed(1)}px rgba(0, 0, 0, ${(0.4 - 0.18 * p).toFixed(2)}))`,
       zIndex: 3,
     };
   }

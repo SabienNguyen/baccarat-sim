@@ -60,7 +60,7 @@ export function HomeScreen({ onPlay, onMultiplayer }: HomeScreenProps) {
       {mode === "menu" && (
         <nav className="home-support" aria-label="Support this project">
           <a href={SPONSOR_URL} target="_blank" rel="noopener noreferrer">
-            ♥ Support the project
+            Support the project
           </a>
           <a href="license/">Using the engine commercially?</a>
         </nav>
@@ -92,8 +92,7 @@ export function HomeScreen({ onPlay, onMultiplayer }: HomeScreenProps) {
       {mode === "multi" && (
         <div className="home-multi" aria-label="Multiplayer">
           <p className="multi-pitch">
-            Live tables are on the way: join public tables, host private ones for
-            friends, and sweat the squeeze together — biggest bet gets the cards.
+            Join a public table, or host a private one for friends. The biggest bet gets the cards.
           </p>
           <div className="home-tables home-tables--preview">
             <div className="table-card table-card--disabled">

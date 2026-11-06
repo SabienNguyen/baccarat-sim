@@ -29,7 +29,7 @@ export function VolumeControl() {
         aria-pressed={settings.muted}
         onClick={() => update({ ...settings, muted: !settings.muted })}
       >
-        {silent ? "🔇" : "🔊"}
+        {silent ? "MUTE" : "SOUND"}
       </button>
       <button
         type="button"
@@ -39,7 +39,7 @@ export function VolumeControl() {
         aria-pressed={settings.music}
         onClick={() => update({ ...settings, music: !settings.music })}
       >
-        ♪
+        MUSIC
       </button>
       <input
         type="range"
